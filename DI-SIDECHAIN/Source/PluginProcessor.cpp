@@ -38,7 +38,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  float env=phase>=1?1:curve(phase);phase=juce::jmin(1.0,phase+step);
  float target=1-depth*(1-env);smoothGain=coeff*smoothGain+(1-coeff)*target;
  for(int ch=0;ch<2;++ch){float dry=main.getSample(ch,i),wet=dry*smoothGain;
- if(mode!=0){auto& f=filters[ch];float low=f.low.processSample(dry),high=f.high.processSample(dry);float affected=mode==1?low:mode==2?high:dry-low-high;wet=dry+affected*(smoothGain-1);}
+ if(mode!=0){auto& f=filters[ch];float low=f.low.processSample(0,dry),high=f.high.processSample(0,dry);float affected=mode==1?low:mode==2?high:dry-low-high;wet=dry+affected*(smoothGain-1);}
  float out=dry+(wet-dry)*mix;main.setSample(ch,i,out);peak=juce::jmax(peak,std::abs(out));}
  }
  meter.store(peak);midi.clear();
