@@ -3,6 +3,7 @@
 class DISidechainEditor : public juce::AudioProcessorEditor,private juce::Timer {
 public:
  explicit DISidechainEditor(DISidechainProcessor&);
+ ~DISidechainEditor() override;
  void paint(juce::Graphics&) override;
  void resized() override;
  void mouseDown(const juce::MouseEvent&) override;

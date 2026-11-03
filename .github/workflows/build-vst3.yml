@@ -1,5 +1,6 @@
 name: Build DI SIDECHAIN VST3
 on:
+  pull_request:
   push:
     branches: [main]
   workflow_dispatch:
@@ -10,9 +11,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: lukka/get-cmake@latest
       - name: Configure
-        run: cmake -S DI-SIDECHAIN -B build -G "Visual Studio 18 2026" -A x64 -DCMAKE_BUILD_TYPE=Release
+        run: cmake -S DI-SIDECHAIN -B build -G "Visual Studio 18 2026" -A x64 -DBUILD_TESTING=ON
       - name: Build
         run: cmake --build build --config Release --parallel 2
+      - name: Regression tests
+        run: ctest --test-dir build -C Release --output-on-failure
       - name: Validate VST3 with pluginval
         shell: pwsh
         run: |
@@ -22,8 +25,16 @@ jobs:
           if (-not $exe) { throw "pluginval.exe not found" }
           $vst = Get-ChildItem "build/DISidechain_artefacts/Release/VST3" -Filter "*.vst3" | Select-Object -First 1 -ExpandProperty FullName
           if (-not $vst) { throw "VST3 not found" }
-          & $exe --strictness-level 5 --validate-in-process --timeout-ms 120000 --validate $vst
-          if ($LASTEXITCODE -ne 0) { throw "pluginval failed with exit code $LASTEXITCODE" }
+          # Windows GUI executables may return control before exiting when invoked
+          # directly from PowerShell. Wait and inspect this process's exit code.
+          $arguments = '--strictness-level 5 --validate-in-process --timeout-ms 120000 --validate "{0}"' -f $vst
+          $process = Start-Process -FilePath $exe -ArgumentList $arguments -PassThru -NoNewWindow
+          if (-not $process.WaitForExit(180000)) {
+            Stop-Process -Id $process.Id -Force
+            throw "pluginval exceeded the 180 second watchdog"
+          }
+          $process.WaitForExit()
+          if ($process.ExitCode -ne 0) { throw "pluginval failed with exit code $($process.ExitCode)" }
       - name: Upload VST3
         uses: actions/upload-artifact@v4
         with:
