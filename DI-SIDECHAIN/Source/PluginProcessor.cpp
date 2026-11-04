@@ -188,7 +188,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
   if(auto pos=ph->getPosition()){
    if(auto b=pos->getBpm())bpm=*b;
    if(auto beats=pos->getPpqPosition()){hostPpq=*beats;hostPpqAvailable=std::isfinite(hostPpq);}
-   if(auto playing=pos->getIsPlaying())hostRunning=*playing;
+   hostRunning=pos->getIsPlaying();
   }
  }
  if(!std::isfinite(bpm)||bpm<=0)bpm=120;
