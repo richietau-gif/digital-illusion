@@ -35,14 +35,14 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  for(int i=0;i<n;++i){bool fire=false;
  while(hasEvent&&midiPos<=i){if(msg.isNoteOn()&&msg.getVelocity()>0&&trig!=1)fire=true;hasEvent=it.getNextEvent(msg,midiPos);}
  if(hasSide&&trig!=2&&side.getNumSamples()>=n){float v=0;for(int ch=0;ch<side.getNumChannels();++ch)v=juce::jmax(v,std::abs(side.getSample(ch,i)));detector=std::max((double)v,detector*.995);if(detector<threshold*.65)armed=true;if(armed&&detector>=threshold&&refractory==0){fire=true;armed=false;}}
- if(refractory>0)--refractory;if(fire){phase=0;refractory=holdoff;}
+ if(refractory>0)--refractory;if(fire){phase=0;refractory=holdoff;triggerSequence.fetch_add(1,std::memory_order_relaxed);}
  float env=phase>=1?1:evaluateEnvelope(phase);phase=juce::jmin(1.0,phase+step);
  float target=1-depth*(1-env);smoothGain=coeff*smoothGain+(1-coeff)*target;
  for(int ch=0;ch<2;++ch){float dry=main.getSample(ch,i),wet=dry*smoothGain;
  if(mode!=0){auto& f=filters[ch];float low=f.low.processSample(0,dry),high=f.high.processSample(0,dry);float affected=mode==1?low:mode==2?high:dry-low-high;wet=dry+affected*(smoothGain-1);}
  float out=dry+(wet-dry)*mix;if(!std::isfinite(out))out=dry;main.setSample(ch,i,out);peak=juce::jmax(peak,std::abs(out));}
  }
- meter.store(peak);midi.clear();
+ meter.store(peak);visualPhase.store((float)phase,std::memory_order_relaxed);visualGainReductionDb.store(juce::Decibels::gainToDecibels(juce::jmax(0.000001f,smoothGain),-120.f),std::memory_order_relaxed);midi.clear();
 }
 void DISidechainProcessor::getStateInformation(juce::MemoryBlock& dest){auto tree=state.copyState();for(int i=0;i<8;++i)tree.setProperty("point"+juce::String(i),points[i].load(),nullptr);if(auto xml=tree.createXml())copyXmlToBinary(*xml,dest);}
 void DISidechainProcessor::setStateInformation(const void* data,int bytes){if(auto xml=getXmlFromBinary(data,bytes)){auto tree=juce::ValueTree::fromXml(*xml);if(tree.isValid()){for(int i=0;i<8;++i)points[i]=(float)tree.getProperty("point"+juce::String(i),points[i].load());state.replaceState(tree);}}}
