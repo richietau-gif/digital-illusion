@@ -101,18 +101,15 @@ void DISidechainEditor::paint(juce::Graphics& g){
         auto y=graph.getY()+graph.getHeight()*i/4.f;
         g.setColour(juce::Colour(0xff374253));g.drawHorizontalLine(juce::roundToInt(y),graph.getX(),graph.getRight());
     }
-    // Match the reference's dominant coral envelope; all displayed nodes are DSP-backed.
+    // The plotted curve is sampled from the SAME smoothstep interpolator as DSP.
+    // Unlike a decorative Bezier approximation, this matches the actual gain shape.
     juce::Path line;
-    for(int i=0;i<8;++i){
-        float x=graph.getX()+graph.getWidth()*i/7.f;
-        float y=graph.getBottom()-juce::jlimit(0.f,1.f,proc.points[i].load())*graph.getHeight();
-        if(i==0)line.startNewSubPath(x,y);
-        else {
-            float prevX=graph.getX()+graph.getWidth()*(i-1)/7.f;
-            float prevY=graph.getBottom()-juce::jlimit(0.f,1.f,proc.points[i-1].load())*graph.getHeight();
-            float d=(x-prevX)*0.38f;
-            line.cubicTo(prevX+d,prevY,x-d,y,x,y);
-        }
+    constexpr int plotSamples = 256;
+    for(int i=0;i<=plotSamples;++i){
+        const double t=(double)i/plotSamples;
+        const float x=graph.getX()+(float)t*graph.getWidth();
+        const float y=graph.getBottom()-juce::jlimit(0.f,1.f,proc.evaluateEnvelope(t))*graph.getHeight();
+        if(i==0)line.startNewSubPath(x,y);else line.lineTo(x,y);
     }
     juce::Path shaded(line);
     shaded.lineTo(graph.getRight(),graph.getBottom());
