@@ -16,7 +16,21 @@ DISidechainProcessor::DISidechainProcessor():AudioProcessor(BusesProperties().wi
  const float defaults[8]={1,0.92f,0.08f,0.02f,0.32f,0.75f,0.95f,1};for(int i=0;i<8;++i)points[i]=defaults[i];
 }
 bool DISidechainProcessor::isBusesLayoutSupported(const BusesLayout& b) const {return b.getMainInputChannelSet()==juce::AudioChannelSet::stereo()&&b.getMainOutputChannelSet()==juce::AudioChannelSet::stereo()&&(b.inputBuses.size()<2||b.inputBuses[1].isDisabled()||b.inputBuses[1]==juce::AudioChannelSet::mono()||b.inputBuses[1]==juce::AudioChannelSet::stereo());}
-void DISidechainProcessor::prepareToPlay(double sampleRate,int maxBlock){sr=sampleRate;phase=1;detector=0;armed=true;refractory=0;smoothGain=1;juce::dsp::ProcessSpec spec{sampleRate,(juce::uint32)juce::jmax(1,maxBlock),1};for(auto& c:filters){c.low.prepare(spec);c.high.prepare(spec);c.low.setType(juce::dsp::LinkwitzRileyFilterType::lowpass);c.high.setType(juce::dsp::LinkwitzRileyFilterType::highpass);c.low.reset();c.high.reset();}}
+void DISidechainProcessor::prepareToPlay(double sampleRate,int maxBlock){
+ sr=sampleRate;phase=1;detector=0;armed=true;refractory=0;smoothGain=1;
+ juce::dsp::ProcessSpec spec{sampleRate,(juce::uint32)juce::jmax(1,maxBlock),1};
+ for(auto& channel:filters){
+  channel.low.prepare(spec);
+  channel.high.prepare(spec);
+  channel.bandLowPass.prepare(spec);
+  channel.low.setType(juce::dsp::LinkwitzRileyFilterType::lowpass);
+  channel.high.setType(juce::dsp::LinkwitzRileyFilterType::highpass);
+  channel.bandLowPass.setType(juce::dsp::LinkwitzRileyFilterType::lowpass);
+  channel.low.reset();
+  channel.high.reset();
+  channel.bandLowPass.reset();
+ }
+}
 int DISidechainProcessor::getEnvelopeNodeCount() const noexcept {
     const int n=activeNodeCount.load(std::memory_order_acquire);
     return n >= 2 ? juce::jlimit(2,maxEnvelopeNodes,n) : 8;
@@ -147,8 +161,17 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  // Keep sidechain as a non-owning view; never allocate or copy a buffer on the audio thread.
  juce::AudioBuffer<float> side; if(hasSide){auto view=getBusBuffer(buffer,true,1);side.setDataToReferTo(view.getArrayOfWritePointers(),view.getNumChannels(),view.getNumSamples());}
  auto get=[&](const char* id){return state.getRawParameterValue(id)->load();};
- int mode=(int)get("mode"),trig=(int)get("trigger");float depth=get("depth"),mix=get("mix"),lo=get("low"),hi=juce::jmax(lo+10,get("high"));
- for(auto& c:filters){c.low.setCutoffFrequency(lo);c.high.setCutoffFrequency(mode==3?hi:lo);}
+ int mode=(int)get("mode"),trig=(int)get("trigger");float depth=get("depth"),mix=get("mix");
+ // Set both crossovers independently. BAND is HP(low) -> LP(high), not a
+ // subtraction of two unrelated filters, which leaked incorrect frequencies.
+ const float maxCutoff=juce::jmax(100.f,(float)(sr*.5-100.));
+ const float lo=juce::jlimit(25.f,maxCutoff-20.f,get("low"));
+ const float hi=juce::jlimit(lo+10.f,maxCutoff,juce::jmax(lo+10.f,get("high")));
+ for(auto& c:filters){
+  c.low.setCutoffFrequency(lo);
+  c.high.setCutoffFrequency(lo);
+  c.bandLowPass.setCutoffFrequency(hi);
+ }
  double bpm=120; if(auto* ph=getPlayHead()){if(auto pos=ph->getPosition()){if(auto b=pos->getBpm())bpm=*b;}}
  const double divisions[]={0.125,0.25,0.5,1,2,4,8};
  envelopeLength=get("sync")>0.5?60.0/juce::jmax(1.0,bpm)*divisions[juce::jlimit(0,6,(int)get("division"))]:get("length")/1000.0;
@@ -166,7 +189,16 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  float env=phase>=1?1:evaluateEnvelope(phase);phase=juce::jmin(1.0,phase+step);
  float target=1-depth*(1-env);smoothGain=coeff*smoothGain+(1-coeff)*target;
  for(int ch=0;ch<2;++ch){float dry=main.getSample(ch,i),wet=dry*smoothGain;
- if(mode!=0){auto& f=filters[ch];float low=f.low.processSample(0,dry),high=f.high.processSample(0,dry);float affected=mode==1?low:mode==2?high:dry-low-high;wet=dry+affected*(smoothGain-1);}
+ if(mode!=0){
+  auto& f=filters[ch];
+  // Keep all filters warm so changing modes doesn't resurrect stale buffers.
+  const float low=f.low.processSample(0,dry);
+  const float high=f.high.processSample(0,dry);
+  const float band=f.bandLowPass.processSample(0,high);
+  const float affected=mode==1?low:mode==2?high:band;
+  // Additive wet/dry reconstruction is EXACTLY dry at zero ducking.
+  wet=dry+(smoothGain-1.f)*affected;
+ }
  float out=dry+(wet-dry)*mix;if(!std::isfinite(out))out=dry;main.setSample(ch,i,out);peak=juce::jmax(peak,std::abs(out));}
  }
  analyzerWritten.store(analyzerStart+(uint64_t)n,std::memory_order_release);
