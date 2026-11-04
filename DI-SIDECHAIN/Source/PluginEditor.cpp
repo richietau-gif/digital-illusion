@@ -75,6 +75,12 @@ DISidechainEditor::~DISidechainEditor(){
     stopTimer();ba.reset();ca.clear();sa.clear();
     setLookAndFeel(nullptr);
 }
+void DISidechainEditor::timerCallback(){
+    const auto sequence=proc.triggerSequence.load(std::memory_order_relaxed);
+    if(sequence!=lastTriggerSequence){lastTriggerSequence=sequence;triggerFlashTicks=3;}
+    else if(triggerFlashTicks>0)--triggerFlashTicks;
+    repaint();
+}
 void DISidechainEditor::paint(juce::Graphics& g){
     g.fillAll(bg);
     const float sc=(float)getWidth()/designWidth;
@@ -84,8 +90,8 @@ void DISidechainEditor::paint(juce::Graphics& g){
     text(g,"DI",19,{12,12,28,23},pale);
     text(g,"SIDECHAIN",19,{40,12,160,23},accent);
     text(g,"DIGITAL ILLUSION · AUDIO FX",9,{12,37,250,14},muted);
-    box(g,{604,18,84,19},juce::Colour(0xff123e26),11);
-    text(g,"EXT TRIGGER",10,{607,18,77,19},juce::Colour(0xff4fe58e),juce::Justification::centred);
+    box(g,{586,18,102,19},triggerFlashTicks>0?juce::Colour(0xff256c3e):juce::Colour(0xff253447),11);
+    text(g,triggerFlashTicks>0?"TRIGGERED":"TRIGGER READY",9,{590,18,94,19},triggerFlashTicks>0?juce::Colour(0xff76f3a5):muted,juce::Justification::centred);
 
     for(int i=0;i<3;++i) box(g,{11.f+i*226.f,57,219,40},juce::Colour(0xff242b37),7);
     const char* top[]={"TRIGGER","FREQUENCY MODE","LENGTH"};
@@ -116,6 +122,15 @@ void DISidechainEditor::paint(juce::Graphics& g){
     shaded.lineTo(graph.getX(),graph.getBottom());shaded.closeSubPath();
     g.setColour(accent.withAlpha(.11f));g.fillPath(shaded);
     g.setColour(accent);g.strokePath(line,juce::PathStrokeType(4.f));
+    const float phase=juce::jlimit(0.f,1.f,proc.visualPhase.load(std::memory_order_relaxed));
+    if(phase<1.f){
+        const float cursorX=graph.getX()+phase*graph.getWidth();
+        g.setColour(pale.withAlpha(.55f));
+        g.drawLine(cursorX,graph.getY(),cursorX,graph.getBottom(),1.5f);
+    }
+    const float grDb=proc.visualGainReductionDb.load(std::memory_order_relaxed);
+    text(g,"GR "+juce::String(juce::jlimit(-120.f,0.f,grDb),1)+" dB",11,
+         {550,142,126,17},accent,juce::Justification::centredRight);
     for(int i=0;i<8;++i){
         float x=graph.getX()+graph.getWidth()*i/7.f;
         float y=graph.getBottom()-juce::jlimit(0.f,1.f,proc.points[i].load())*graph.getHeight();
