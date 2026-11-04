@@ -17,7 +17,7 @@ DISidechainProcessor::DISidechainProcessor():AudioProcessor(BusesProperties().wi
 }
 bool DISidechainProcessor::isBusesLayoutSupported(const BusesLayout& b) const {return b.getMainInputChannelSet()==juce::AudioChannelSet::stereo()&&b.getMainOutputChannelSet()==juce::AudioChannelSet::stereo()&&(b.inputBuses.size()<2||b.inputBuses[1].isDisabled()||b.inputBuses[1]==juce::AudioChannelSet::mono()||b.inputBuses[1]==juce::AudioChannelSet::stereo());}
 void DISidechainProcessor::prepareToPlay(double sampleRate,int maxBlock){sr=sampleRate;phase=1;detector=0;armed=true;refractory=0;smoothGain=1;juce::dsp::ProcessSpec spec{sampleRate,(juce::uint32)juce::jmax(1,maxBlock),1};for(auto& c:filters){c.low.prepare(spec);c.high.prepare(spec);c.low.setType(juce::dsp::LinkwitzRileyFilterType::lowpass);c.high.setType(juce::dsp::LinkwitzRileyFilterType::highpass);c.low.reset();c.high.reset();}}
-float DISidechainProcessor::curve(double t) const {t=juce::jlimit(0.0,1.0,t);double x=t*7;int i=juce::jmin(6,(int)x);float a=points[i].load(),b=points[i+1].load();float u=(float)(x-i);u=u*u*(3-2*u);return a+(b-a)*u;}
+float DISidechainProcessor::evaluateEnvelope(double t) const {t=juce::jlimit(0.0,1.0,t);double x=t*7;int i=juce::jmin(6,(int)x);float a=points[i].load(),b=points[i+1].load();float u=(float)(x-i);u=u*u*(3-2*u);return a+(b-a)*u;}
 void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::MidiBuffer& midi){
  juce::ScopedNoDenormals noDenormals;
  auto main=getBusBuffer(buffer,true,0);int n=main.getNumSamples();if(n<=0||main.getNumChannels()<2||!std::isfinite(sr)||sr<=0)return;
@@ -36,7 +36,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  while(hasEvent&&midiPos<=i){if(msg.isNoteOn()&&msg.getVelocity()>0&&trig!=1)fire=true;hasEvent=it.getNextEvent(msg,midiPos);}
  if(hasSide&&trig!=2&&side.getNumSamples()>=n){float v=0;for(int ch=0;ch<side.getNumChannels();++ch)v=juce::jmax(v,std::abs(side.getSample(ch,i)));detector=std::max((double)v,detector*.995);if(detector<threshold*.65)armed=true;if(armed&&detector>=threshold&&refractory==0){fire=true;armed=false;}}
  if(refractory>0)--refractory;if(fire){phase=0;refractory=holdoff;}
- float env=phase>=1?1:curve(phase);phase=juce::jmin(1.0,phase+step);
+ float env=phase>=1?1:evaluateEnvelope(phase);phase=juce::jmin(1.0,phase+step);
  float target=1-depth*(1-env);smoothGain=coeff*smoothGain+(1-coeff)*target;
  for(int ch=0;ch<2;++ch){float dry=main.getSample(ch,i),wet=dry*smoothGain;
  if(mode!=0){auto& f=filters[ch];float low=f.low.processSample(0,dry),high=f.high.processSample(0,dry);float affected=mode==1?low:mode==2?high:dry-low-high;wet=dry+affected*(smoothGain-1);}
