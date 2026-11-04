@@ -22,7 +22,7 @@ static void editorLifecycle(DISidechainProcessor& p)
     {
         std::unique_ptr<juce::AudioProcessorEditor> editor(p.createEditor());
         require(editor != nullptr, "Editor creation failed");
-        require(editor->getWidth() == 850 && editor->getHeight() == 550, "Initial editor size");
+        require(editor->getWidth() == 700 && editor->getHeight() == 760, "Initial editor size");
         require(editor->getNumChildComponents() == 20, "Missing editor controls");
         int sliders = 0, combos = 0, buttons = 0;
         for (auto* child : editor->getChildren())
@@ -34,7 +34,7 @@ static void editorLifecycle(DISidechainProcessor& p)
         }
         require(sliders == 8 && combos == 3 && buttons == 1, "Control types changed");
         editor->setSize(900, 600);
-        editor->setSize(850, 550);
+        editor->setSize(700, 760);
         require(editor->createComponentSnapshot(editor->getLocalBounds()).isValid(), "Editor paint failed");
         // Exercise attachments from a host automation thread while the editor exists.
         std::thread automation([&] {
