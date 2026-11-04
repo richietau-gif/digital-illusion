@@ -33,6 +33,5 @@ private:
  std::array<FilterChannel,2> filters;
  double sr=44100, phase=1, envelopeLength=0.25, detector=0;
  int refractory=0; bool armed=true; float smoothGain=1;
- float curve(double) const;
  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DISidechainProcessor)
 };
