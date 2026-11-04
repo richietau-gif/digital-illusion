@@ -28,7 +28,11 @@ are intentionally preserved.
   gain reduction. Bars decay when no new input arrives.
 - **Bottom:** active DSP Depth, Smooth, and Mix parameter sliders.
 - **Advanced Controls:** expand to reveal Threshold, Length in milliseconds,
-  cutoff frequencies, and Retrigger/Holdoff.
+  cutoff frequencies, Retrigger/Holdoff, MIDI note and MIDI channel.
+  MIDI note -1 = all notes, 0–127 = specific note number; MIDI channel 0 =
+  all channels, 1–16 = one channel. These parameters are automatable and saved
+  with the host project. Incoming MIDI note-on triggers use host sample offsets
+  and can retrigger at irregular breakbeat intervals.
 
 ## Not implemented yet
 
