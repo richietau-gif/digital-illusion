@@ -15,7 +15,7 @@ public:
     void mouseDoubleClick(const juce::MouseEvent&) override;
     bool keyPressed(const juce::KeyPress&) override;
 private:
-    void timerCallback() override { repaint(); }
+    void timerCallback() override;
     void updatePoint(const juce::MouseEvent&);
     void updateBand(const juce::MouseEvent&);
     void setParameter(const char*, float);
@@ -34,6 +34,8 @@ private:
     int bandHandle = -1;
     int selectedPoint = -1;
     bool snapToGrid = false;
+    uint32_t lastTriggerSequence = 0;
+    int triggerFlashTicks = 0;
     static constexpr float designWidth = 700.f;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DISidechainEditor)
 };
