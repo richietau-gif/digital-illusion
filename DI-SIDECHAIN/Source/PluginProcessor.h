@@ -47,7 +47,9 @@ public:
  float evaluateEnvelope(double normalizedPhase) const noexcept;
 private:
  static juce::AudioProcessorValueTreeState::ParameterLayout makeParams();
- struct FilterChannel {juce::dsp::LinkwitzRileyFilter<float> low, high;};
+ struct FilterChannel {
+  juce::dsp::LinkwitzRileyFilter<float> low, high, bandLowPass;
+ };
  std::array<FilterChannel,2> filters;
  std::array<std::atomic<float>,maxEnvelopeNodes> nodeX {};
  std::array<std::atomic<float>,maxEnvelopeNodes> nodeY {};
