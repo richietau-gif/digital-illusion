@@ -218,6 +218,77 @@ static void liveSpectrumInputCapture()
     processor.releaseResources();
 }
 
+static float measureFrequencyMode(int mode,float hz,float depth)
+{
+    DISidechainProcessor processor;
+    processor.prepareToPlay(48000.,256);
+    set(processor,"trigger",2);
+    set(processor,"mode",(float)mode);
+    set(processor,"depth",depth);
+    set(processor,"mix",1.f);
+    set(processor,"sync",0.f);
+    set(processor,"length",2000.f);
+    set(processor,"smooth",.1f);
+    set(processor,"low",120.f);
+    set(processor,"high",1500.f);
+    for(auto& node:processor.points)node.store(0.f);
+    juce::AudioBuffer<float> buffer(2,256);
+    juce::MidiBuffer midi;
+    double energy=0.;
+    int samples=0;
+    for(int block=0;block<24;++block)
+    {
+        for(int i=0;i<256;++i)
+        {
+            const float v=.3f*std::sin(juce::MathConstants<float>::twoPi*
+                                hz*(block*256+i)/48000.f);
+            buffer.setSample(0,i,v);buffer.setSample(1,i,v);
+        }
+        midi.clear();
+        if(block==0)midi.addEvent(juce::MidiMessage::noteOn(1,60,(juce::uint8)110),0);
+        processor.processBlock(buffer,midi);
+        // Ignore the first 12 buffers to measure steady-state crossover.
+        if(block>=12)for(int i=0;i<256;++i)
+        {
+            const float v=buffer.getSample(0,i);
+            require(std::isfinite(v),"Frequency filter produced invalid sample");
+            energy+=(double)v*v;++samples;
+        }
+    }
+    return (float)std::sqrt(energy/juce::jmax(1,samples));
+}
+
+static void frequencyTargetRegression()
+{
+    // The selected filter must never color dry audio when depth is zero.
+    for(int mode=0;mode<4;++mode)
+        for(float freq:{65.f,430.f,6400.f})
+        {
+            const float dry=measureFrequencyMode(mode,freq,0.f);
+            const float baseline=measureFrequencyMode(0,freq,0.f);
+            require(std::abs(dry-baseline)<.0001f,
+                    "Frequency target altered bypassed depth-zero signal");
+        }
+
+    const float lowDry=measureFrequencyMode(0,65.f,0.f);
+    const float highDry=measureFrequencyMode(0,6400.f,0.f);
+    const float midDry=measureFrequencyMode(0,430.f,0.f);
+    const float lowModeBass=measureFrequencyMode(1,65.f,1.f);
+    const float lowModeTreble=measureFrequencyMode(1,6400.f,1.f);
+    require(lowModeBass<lowDry*.83f,"LOW mode did not reduce low-frequency audio");
+    require(lowModeTreble>highDry*.82f,"LOW mode incorrectly reduced treble");
+
+    const float highModeBass=measureFrequencyMode(2,65.f,1.f);
+    const float highModeTreble=measureFrequencyMode(2,6400.f,1.f);
+    require(highModeBass>lowDry*.82f,"HIGH mode incorrectly reduced bass");
+    require(highModeTreble<highDry*.83f,"HIGH mode did not reduce treble");
+
+    const float bandModeMid=measureFrequencyMode(3,430.f,1.f);
+    const float bandModeTreble=measureFrequencyMode(3,6400.f,1.f);
+    require(bandModeMid<midDry*.9f,"BAND mode failed to reduce target frequencies");
+    require(bandModeTreble>highDry*.82f,"BAND mode incorrectly reduced treble");
+}
+
 static void audioSidechainTrigger()
 {
     DISidechainProcessor p;
@@ -353,6 +424,7 @@ int main()
         editableEnvelopeRoundtrip();
         concurrentEnvelopeEditingStress();
         liveSpectrumInputCapture();
+        frequencyTargetRegression();
         std::cout << "Editor lifecycle, attachments, MIDI, bus layouts and state: PASS\n";
         return 0;
     }
