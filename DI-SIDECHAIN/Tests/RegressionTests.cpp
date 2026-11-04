@@ -289,6 +289,37 @@ static void frequencyTargetRegression()
     require(bandModeTreble>highDry*.82f,"BAND mode incorrectly reduced treble");
 }
 
+static void rhythmicDivisionRegression()
+{
+    // No playhead: engine must use its documented 120 BPM fallback.
+    // Legacy parameter indices remain unchanged; new divisions are appended.
+    struct Case { int choice; double beats; };
+    const Case cases[] = {
+        {0,.125}, {1,.25}, {2,.5}, {3,1.}, {4,2.}, {5,4.}, {6,8.},
+        {7,1./6.}, {8,1./3.}, {9,2./3.},
+        {10,.375}, {11,.75}, {12,1.5}
+    };
+    for (const auto& test : cases)
+    {
+        DISidechainProcessor p;
+        set(p,"trigger",2);
+        set(p,"sync",1);
+        set(p,"playbackMode",0);
+        set(p,"division",(float)test.choice);
+        p.prepareToPlay(48000.,256);
+        juce::AudioBuffer<float> buffer(2,256);
+        buffer.clear();
+        juce::MidiBuffer midi;
+        midi.addEvent(juce::MidiMessage::noteOn(1,60,(juce::uint8)100),0);
+        p.processBlock(buffer,midi);
+        const double expected=256./(48000.*(.5*test.beats));
+        const auto actual=p.visualPhase.load();
+        require(std::isfinite(actual) && std::abs(actual-expected)<.0001,
+                "Tempo-synced division length differs from 120 BPM reference");
+        p.releaseResources();
+    }
+}
+
 static void playbackModeRegression()
 {
     DISidechainProcessor processor;
@@ -501,6 +532,7 @@ int main()
         frequencyTargetRegression();
         midiBreakbeatNoteFilter();
         playbackModeRegression();
+        rhythmicDivisionRegression();
         std::cout << "Editor lifecycle, attachments, MIDI, bus layouts and state: PASS\n";
         return 0;
     }
