@@ -82,6 +82,24 @@ static void editableEnvelopeRoundtrip()
     require(inserted>0 && inserted<8, "Envelope point insertion failed");
     require(p.getEnvelopeNodeCount()==9, "Envelope point count not updated");
     p.setEnvelopeNode(inserted,.48f,.22f);
+    // Per-segment cubic controls must change the true DSP evaluation,
+    // remain bounded, and survive serialized host state.
+    p.setEnvelopeSegmentCurve(inserted, .7f);
+    require(std::abs(p.getEnvelopeSegmentCurve(inserted)-.7f)<.0001f,
+            "Cubic segment curvature was not applied");
+    const auto a=p.getEnvelopeNode(inserted);
+    const auto b=p.getEnvelopeNode(inserted+1);
+    const double halfway=((double)a.x+b.x)*.5;
+    const float bent=p.evaluateEnvelope(halfway);
+    p.setEnvelopeSegmentCurve(inserted, 0.f);
+    const float neutral=p.evaluateEnvelope(halfway);
+    require(std::abs(bent-neutral)>0.001f,
+            "Cubic curvature did not change the processed envelope");
+    p.setEnvelopeSegmentCurve(inserted, .7f);
+    for(int i=0;i<=100;++i){
+        const float v=p.evaluateEnvelope((double)i/100.0);
+        require(std::isfinite(v)&&v>=0.f&&v<=1.f,"Cubic envelope overshoot");
+    }
     const auto edited=p.getEnvelopeNode(inserted);
     require(std::abs(edited.x-.48f)<.0001f &&
             std::abs(edited.y-.22f)<.0001f, "Time and gain edits not applied");
@@ -92,6 +110,8 @@ static void editableEnvelopeRoundtrip()
     DISidechainProcessor restored;
     restored.setStateInformation(saved.getData(),(int)saved.getSize());
     require(restored.getEnvelopeNodeCount()==9, "New envelope node count not restored");
+    require(std::abs(restored.getEnvelopeSegmentCurve(inserted)-.7f)<.0001f,
+            "Cubic envelope curvature lost during state restoration");
     const auto after=restored.getEnvelopeNode(inserted);
     require(std::abs(after.x-.48f)<.0001f &&
             std::abs(after.y-.22f)<.0001f, "Envelope node state not restored");
