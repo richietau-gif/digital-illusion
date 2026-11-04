@@ -136,6 +136,17 @@ void DISidechainEditor::paint(juce::Graphics& g){
     for(int i=0;i<3;++i) text(g,top[i],10,{17.f+i*226.f,60,207,16},pale,juce::Justification::centred);
     box(g,{11,108,678,365},panel,10);
     text(g,"VOLUME ENVELOPE",11,{19,119,260,20},pale);
+    // Surface the active timing and playback mode without covering the curve.
+    const bool synced=proc.state.getRawParameterValue("sync")->load()>.5f;
+    const int playback=(int)proc.state.getRawParameterValue("playbackMode")->load();
+    const int division=juce::jlimit(0,12,
+        juce::roundToInt(proc.state.getRawParameterValue("division")->load()));
+    const juce::String names[]={"1/32","1/16","1/8","1/4","1/2","1 BAR",
+        "2 BARS","1/16T","1/8T","1/4T","1/16D","1/8D","1/4D"};
+    const auto lengthDisplay=synced?names[division]:
+        juce::String(juce::roundToInt(proc.state.getRawParameterValue("length")->load()))+" ms";
+    text(g,(playback==1?"LOOP  ·  ":"ONE SHOT  ·  ")+lengthDisplay,10,
+         {235,120,213,18},muted,juce::Justification::centred);
     text(g,snapToGrid ? "SNAP: ON · CLICK TO TOGGLE" : "SNAP: OFF · CLICK TO TOGGLE",9,{460,119,220,20},accent,juce::Justification::centredRight);
     for(int i=0;i<=8;++i){
         auto x=graph.getX()+graph.getWidth()*i/8.f;
@@ -200,6 +211,32 @@ void DISidechainEditor::paint(juce::Graphics& g){
         box(g,rect,accent.withAlpha(.22f),3);
         g.setColour(accent);g.drawVerticalLine(juce::roundToInt(x1),528,623);
         g.drawVerticalLine(juce::roundToInt(x2),528,623);
+    }
+    // Selected cutoffs are always readable, even when the advanced panel
+    // is collapsed. Labels are aligned to their draggable boundaries.
+    if(mode!=0){
+        auto hzLabel=[](float hz){
+            return hz>=1000.f ? juce::String(hz/1000.f,2)+" kHz"
+                              : juce::String(juce::roundToInt(hz))+" Hz";
+        };
+        const auto lowLabel=hzLabel(low);
+        const auto highLabel=hzLabel(high);
+        const auto cutoffText=[&](float x,const juce::String& s){
+            const float cx=juce::jlimit(78.f,610.f,x);
+            box(g,{cx-44.f,510.f,88.f,20.f},juce::Colour(0xff334055),5.f);
+            text(g,s,10,{cx-42.f,510.f,84.f,20.f},pale,
+                 juce::Justification::centred);
+            g.setColour(accent);
+            g.fillEllipse(x-4.f,615.f,8.f,8.f);
+        };
+        if(mode==1||mode==2){
+            cutoffText(xFromHz(low),lowLabel);
+        }else{
+            cutoffText(xFromHz(low),lowLabel);
+            // Avoid overlapping Hz labels for close cutoff boundaries.
+            if(std::abs(xFromHz(high)-xFromHz(low))>95.f)
+                cutoffText(xFromHz(high),highLabel);
+        }
     }
     text(g,"20 Hz",12,{27,621,90,20},muted);
     text(g,"20 kHz",12,{572,621,99,20},muted,juce::Justification::centredRight);
@@ -307,13 +344,20 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
         if(index>=0&&index<4){setParameter("mode",(float)index);repaint();}
         return;
     }
-    if(q.y>=533&&q.y<=619){
-        int mode=(int)proc.state.getRawParameterValue("mode")->load();
+    if(q.y>=507&&q.y<=624&&q.x>=27&&q.x<=673){
+        const int mode=(int)proc.state.getRawParameterValue("mode")->load();
         if(mode!=0){
-            float lo=xFromHz(proc.state.getRawParameterValue("low")->load());
-            float hi=xFromHz(proc.state.getRawParameterValue("high")->load());
-            bandHandle=(mode==1||mode==2)?(mode==1?0:0):(std::abs(q.x-lo)<std::abs(q.x-hi)?0:1);
-            updateBand(e);
+            const float lo=xFromHz(proc.state.getRawParameterValue("low")->load());
+            const float hi=xFromHz(proc.state.getRawParameterValue("high")->load());
+            constexpr float grabRadius=23.f;
+            const float distLow=std::abs(q.x-lo),distHigh=std::abs(q.x-hi);
+            // Only grab an actual handle: clicking anywhere in the spectrum
+            // must not accidentally jump the cutoff to the mouse.
+            if(distLow<=grabRadius&&(mode!=3||distLow<=distHigh))
+                bandHandle=0;
+            else if(mode==3&&distHigh<=grabRadius)
+                bandHandle=1;
+            if(bandHandle>=0)updateBand(e);
         }
         return;
     }
