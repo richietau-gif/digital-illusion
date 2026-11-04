@@ -50,6 +50,29 @@ static void editorLifecycle(DISidechainProcessor& p)
     }
 }
 
+static void envelopeInterpolationRegression()
+{
+    DISidechainProcessor processor;
+    const float keys[8] = {1.f, .9f, .1f, 0.f, .4f, .75f, .95f, 1.f};
+    for (int i=0; i<8; ++i)
+    {
+        processor.points[i] = keys[i];
+        auto exact = processor.evaluateEnvelope((double)i/7.0);
+        require(std::abs(exact - keys[i]) < 0.0001f,
+                "Envelope evaluator does not match an edited node");
+    }
+    for (int i=0; i<=256; ++i)
+    {
+        float gain = processor.evaluateEnvelope(i/256.0);
+        require(std::isfinite(gain) && gain >= 0.f && gain <= 1.f,
+                "Envelope evaluator returned invalid gain");
+    }
+    require(std::abs(processor.evaluateEnvelope(-1.0) - keys[0]) < 0.0001f,
+            "Envelope negative phase is not clamped");
+    require(std::abs(processor.evaluateEnvelope(3.0) - keys[7]) < 0.0001f,
+            "Envelope phase greater than one is not clamped");
+}
+
 static void audioSidechainTrigger()
 {
     DISidechainProcessor p;
@@ -150,6 +173,7 @@ int main()
         processor.releaseResources();
         processingAndState();
         audioSidechainTrigger();
+        envelopeInterpolationRegression();
         std::cout << "Editor lifecycle, attachments, MIDI, bus layouts and state: PASS\n";
         return 0;
     }
