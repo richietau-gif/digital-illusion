@@ -35,11 +35,12 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p) : AudioProcessorEd
     setLookAndFeel(&skin);
     setWantsKeyboardFocus(true);
 
-    const char* ids[] = {"depth","mix","threshold","length","smooth","low","high","retrigger"};
-    const char* titles[] = {"DEPTH","MIX","THRESHOLD dB","LENGTH ms","SMOOTH","LOW Hz","HIGH Hz","HOLDOFF"};
-    for (int i=0;i<8;++i) {
+    const char* ids[] = {"depth","mix","threshold","length","smooth","low","high","retrigger","midiNote","midiChannel"};
+    const char* titles[] = {"DEPTH","MIX","THRESHOLD dB","LENGTH ms","SMOOTH","LOW Hz","HIGH Hz","HOLDOFF","MIDI NOTE (-1 ANY)","MIDI CH (0 ANY)"};
+    for (int i=0;i<10;++i) {
         auto s=std::make_unique<juce::Slider>();
         s->setSliderStyle(juce::Slider::LinearHorizontal);
+        if(i>=8)s->setNumDecimalPlacesToDisplay(0);
         s->setTextBoxStyle(juce::Slider::TextBoxRight,false,67,23);
         s->setColour(juce::Slider::textBoxTextColourId,pale);
         auto l=std::make_unique<juce::Label>();
@@ -214,9 +215,9 @@ void DISidechainEditor::paint(juce::Graphics& g){
     text(g,"MIX",10,{463,688,219,15},muted,juce::Justification::centred);
     text(g,advanced?"HIDE ADVANCED ↑":"ADVANCED CONTROLS ↓",10,{13,744,675,16},accent,juce::Justification::centred);
     if(advanced){
-        box(g,{11,767,678,196},panelDark,9);
+        box(g,{11,767,678,282},panelDark,9);
         text(g,"ADDITIONAL DSP SETTINGS",12,{25,774,420,20},pale);
-        text(g,"THRESHOLD · LENGTH · LOW / HIGH CUTOFF · RETRIGGER",9,{25,941,620,15},muted);
+        text(g,"THRESHOLD · LENGTH · CUTOFFS · HOLDOFF · MIDI NOTE / CHANNEL",9,{25,1025,620,15},muted);
     }
     g.restoreState();
 }
@@ -225,7 +226,7 @@ void DISidechainEditor::resized(){
     const auto bounds=[sc](float x,float y,float w,float h){
         return juce::Rectangle<int>(juce::roundToInt(x*sc),juce::roundToInt(y*sc),
             juce::jmax(1,juce::roundToInt(w*sc)),juce::jmax(1,juce::roundToInt(h*sc)));};
-    if(sliders.size()!=8||labels.size()!=8||combos.size()!=3||sync==nullptr)return;
+    if(sliders.size()!=10||labels.size()!=10||combos.size()!=3||sync==nullptr)return;
     for(int i=0;i<3;++i)combos[i]->setBounds(bounds(18.f+i*226.f,76,203,19));
     sync->setBounds(bounds(558,105,115,23));
     const int indices[]={0,4,1};
@@ -234,8 +235,8 @@ void DISidechainEditor::resized(){
         labels[i]->setBounds(bounds(11+j*226.f,684,219,18));
         labels[i]->setVisible(false);sliders[i]->setVisible(true);
     }
-    const int extra[]={2,3,5,6,7};
-    for(int k=0;k<5;++k){
+    const int extra[]={2,3,5,6,7,8,9};
+    for(int k=0;k<7;++k){
         int i=extra[k], row=k/2,col=k%2;
         float x=29.f+col*335.f, y=803.f+row*46.f;
         labels[i]->setBounds(bounds(x,y,114,20));
@@ -317,7 +318,7 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
         return;
     }
     if(q.y>=740&&q.y<=764){
-        advanced=!advanced;setSize(700,advanced?975:760);repaint();
+        advanced=!advanced;setSize(700,advanced?1065:760);repaint();
     }
 }
 void DISidechainEditor::mouseDrag(const juce::MouseEvent& e){
