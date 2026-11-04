@@ -10,11 +10,14 @@ are intentionally preserved.
   (Full, Low, High, Band), rhythmic division.
 - **SYNC:** toggles tempo-synced envelope length. Switch it off to use the
   milliseconds LENGTH parameter in Advanced Controls.
-- **Volume envelope:** eight DSP-backed control points. Click/drag a point
-  along the vertical axis (points are evenly spaced in time). Click
-  **SNAP: OFF/ON** to quantize gain to 1/16 steps. Double-click a node to
-  restore 100% gain. After selecting a node, left/right arrows select adjacent
-  points and up/down arrows adjust gain.
+- **Volume envelope:** between 2 and 32 freely positioned DSP-backed nodes.
+  Drag a node horizontally (time) or vertically (gain). Double-click empty
+  plot space to insert one, right-click an interior node or press Delete to
+  remove it. First and last nodes are fixed at normalized time 0 and 1.
+  **SNAP: OFF/ON** quantizes time and gain to 1/16 steps. Left/right arrows
+  choose nodes, Shift+left/right moves their time, up/down adjusts gain.
+  Existing presets with eight evenly spaced nodes remain loadable.
+  Envelope transitions use the same smoothstep evaluator in DSP and GUI.
 - **Frequency Target:** choose FULL, LOW, HIGH or BAND. In LOW/BAND, drag a
   handle to change crossover frequency; the selected region updates live.
 - **Bottom:** active DSP Depth, Smooth, and Mix parameter sliders.
@@ -25,11 +28,10 @@ are intentionally preserved.
 
 - The bars in Frequency Target are an **illustration**, not a live FFT.
 - **MULTI** mode is visibly disabled; no multiband DSP yet.
-- Eight fixed, evenly spaced nodes are retained for compatibility with the
-  current processor. Arbitrary node insertion and Bézier tension handles are
-  future work in Issue #5.
-- UI envelopes use a visually smoothed path; DSP still uses the existing
-  interpolation. Matching the displayed curve to exact DSP gain is future work.
+- Curves currently use smoothstep interpolation, not individual editable
+  Bézier tension handles. This remains future work in Issue #5.
+- The GUI curve and DSP now use the same evaluator; no merely decorative
+  Bézier approximation is used.
 - Ableton Live 12 Suite integration has **not** been verified automatically.
   Follow `Tests/AbletonSmokeTest.md` in a disposable session.
 
