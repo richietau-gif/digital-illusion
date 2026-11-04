@@ -11,7 +11,7 @@ static juce::AudioProcessorValueTreeState::ParameterLayout layoutParams(){
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"trigger",1},"Trigger mode",juce::StringArray{"Audio + MIDI","Audio only","MIDI only"},0));
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"playbackMode",1},"Envelope playback",juce::StringArray{"One Shot","Loop"},0));
  p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"sync",1},"Tempo sync",true));
- p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"division",1},"Beat division",juce::StringArray{"1/32","1/16","1/8","1/4","1/2","1 bar","2 bars"},2));
+ p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"division",1},"Beat division",juce::StringArray{"1/32","1/16","1/8","1/4","1/2","1 bar","2 bars","1/16T","1/8T","1/4T","1/16D","1/8D","1/4D"},2));
  return {p.begin(),p.end()};
 }
 juce::AudioProcessorValueTreeState::ParameterLayout DISidechainProcessor::makeParams(){return layoutParams();}
@@ -192,8 +192,8 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
   }
  }
  if(!std::isfinite(bpm)||bpm<=0)bpm=120;
- const double divisions[]={0.125,0.25,0.5,1,2,4,8};
- envelopeLength=get("sync")>0.5?60.0/juce::jmax(1.0,bpm)*divisions[juce::jlimit(0,6,(int)get("division"))]:get("length")/1000.0;
+ const double divisions[]={0.125,0.25,0.5,1,2,4,8,1.0/6.0,1.0/3.0,2.0/3.0,0.375,0.75,1.5};
+ envelopeLength=get("sync")>0.5?60.0/juce::jmax(1.0,bpm)*divisions[juce::jlimit(0,12,(int)get("division"))]:get("length")/1000.0;
  double step=1.0/juce::jmax(1.0,envelopeLength*sr);int holdoff=(int)(get("retrigger")*.001*sr);float threshold=juce::Decibels::decibelsToGain(get("threshold"));float coeff=std::exp(-1.f/(float)(juce::jmax(.1f,get("smooth"))*.001*sr));
  juce::MidiBuffer::Iterator it(midi);juce::MidiMessage msg;int midiPos=0;bool hasEvent=it.getNextEvent(msg,midiPos);float peak=0;
  const uint64_t analyzerStart=analyzerWritten.load(std::memory_order_relaxed);
