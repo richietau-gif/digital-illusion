@@ -33,6 +33,7 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p) : AudioProcessorEd
     skin.setColour(juce::Slider::textBoxBackgroundColourId, panel);
     skin.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
     setLookAndFeel(&skin);
+    setWantsKeyboardFocus(true);
 
     const char* ids[] = {"depth","mix","threshold","length","smooth","low","high","retrigger"};
     const char* titles[] = {"DEPTH","MIX","THRESHOLD dB","LENGTH ms","SMOOTH","LOW Hz","HIGH Hz","HOLDOFF"};
@@ -91,7 +92,7 @@ void DISidechainEditor::paint(juce::Graphics& g){
     for(int i=0;i<3;++i) text(g,top[i],10,{17.f+i*226.f,60,207,16},pale,juce::Justification::centred);
     box(g,{11,108,678,365},panel,10);
     text(g,"VOLUME ENVELOPE",11,{19,119,260,20},pale);
-    text(g,"8 POINTS · DRAG TO EDIT",9,{477,119,203,20},muted,juce::Justification::centredRight);
+    text(g,snapToGrid ? "SNAP: ON · CLICK TO TOGGLE" : "SNAP: OFF · CLICK TO TOGGLE",9,{460,119,220,20},accent,juce::Justification::centredRight);
     for(int i=0;i<=8;++i){
         auto x=graph.getX()+graph.getWidth()*i/8.f;
         g.setColour(juce::Colour(0xff374253));g.drawVerticalLine(juce::roundToInt(x),graph.getY(),graph.getBottom());
@@ -121,7 +122,7 @@ void DISidechainEditor::paint(juce::Graphics& g){
     for(int i=0;i<8;++i){
         float x=graph.getX()+graph.getWidth()*i/7.f;
         float y=graph.getBottom()-juce::jlimit(0.f,1.f,proc.points[i].load())*graph.getHeight();
-        g.setColour(accent);g.fillEllipse(x-9,y-9,18,18);
+        g.setColour(accent);g.fillEllipse(x-(i==selectedPoint?11.f:9.f),y-(i==selectedPoint?11.f:9.f),i==selectedPoint?22.f:18.f,i==selectedPoint?22.f:18.f);
         g.setColour(pale);g.fillEllipse(x-5,y-5,10,10);
     }
     text(g,"0",12,{36,421,50,20},muted);
@@ -206,8 +207,10 @@ void DISidechainEditor::setParameter(const char* id,float value){
 void DISidechainEditor::updatePoint(const juce::MouseEvent& e){
     auto q=localDesignPoint(e);
     if(!graph.contains(q))return;
-    const int i=juce::jlimit(0,7,juce::roundToInt((q.x-graph.getX())/graph.getWidth()*7.f));
-    proc.points[i].store(juce::jlimit(0.f,1.f,(graph.getBottom()-q.y)/graph.getHeight()));
+    const int i=selectedPoint>=0?selectedPoint:juce::jlimit(0,7,juce::roundToInt((q.x-graph.getX())/graph.getWidth()*7.f));
+    float gain=juce::jlimit(0.f,1.f,(graph.getBottom()-q.y)/graph.getHeight());
+    if(snapToGrid) gain=std::round(gain*16.f)/16.f;
+    proc.points[i].store(gain);
     repaint();
 }
 void DISidechainEditor::updateBand(const juce::MouseEvent& e){
@@ -220,7 +223,11 @@ void DISidechainEditor::updateBand(const juce::MouseEvent& e){
 }
 void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
     auto q=localDesignPoint(e);
-    if(graph.contains(q)){updatePoint(e);return;}
+    if(q.x>=460&&q.x<=680&&q.y>=119&&q.y<=144){snapToGrid=!snapToGrid;repaint();return;}
+    if(graph.contains(q)){
+        selectedPoint=juce::jlimit(0,7,juce::roundToInt((q.x-graph.getX())/graph.getWidth()*7.f));
+        grabKeyboardFocus();updatePoint(e);return;
+    }
     if(q.y>=647 && q.y<=674){
         int index=(int)((q.x-11.f)/135.5f);
         if(index>=0&&index<4){setParameter("mode",(float)index);repaint();}
@@ -244,3 +251,21 @@ void DISidechainEditor::mouseDrag(const juce::MouseEvent& e){
     if(bandHandle>=0)updateBand(e);else updatePoint(e);
 }
 void DISidechainEditor::mouseUp(const juce::MouseEvent&){bandHandle=-1;}
+void DISidechainEditor::mouseDoubleClick(const juce::MouseEvent& e){
+    const auto q=localDesignPoint(e);
+    if(!graph.contains(q))return;
+    selectedPoint=juce::jlimit(0,7,juce::roundToInt((q.x-graph.getX())/graph.getWidth()*7.f));
+    // Double-click restores unity gain at the selected time node.
+    proc.points[selectedPoint].store(1.f);
+    repaint();
+}
+bool DISidechainEditor::keyPressed(const juce::KeyPress& key){
+    if(selectedPoint<0||selectedPoint>7)return false;
+    if(key.getKeyCode()==juce::KeyPress::leftKey){selectedPoint=juce::jmax(0,selectedPoint-1);repaint();return true;}
+    if(key.getKeyCode()==juce::KeyPress::rightKey){selectedPoint=juce::jmin(7,selectedPoint+1);repaint();return true;}
+    const int direction=key.getKeyCode()==juce::KeyPress::upKey?1:key.getKeyCode()==juce::KeyPress::downKey?-1:0;
+    if(direction==0)return false;
+    float step=snapToGrid?1.f/16.f:0.01f;
+    proc.points[selectedPoint].store(juce::jlimit(0.f,1.f,proc.points[selectedPoint].load()+direction*step));
+    repaint();return true;
+}
