@@ -289,6 +289,44 @@ static void frequencyTargetRegression()
     require(bandModeTreble>highDry*.82f,"BAND mode incorrectly reduced treble");
 }
 
+static void playbackModeRegression()
+{
+    DISidechainProcessor processor;
+    processor.prepareToPlay(48000., 256);
+    set(processor,"trigger",2); // MIDI only
+    set(processor,"sync",0);
+    set(processor,"length",20);
+    set(processor,"smooth",.1f);
+    set(processor,"depth",1.f);
+    set(processor,"playbackMode",1); // Loop without host position: free-running fallback
+    juce::AudioBuffer<float> buffer(2,256);
+    juce::MidiBuffer midi;
+    float minimum=1.f,maximum=0.f;
+    for(int block=0;block<25;++block)
+    {
+        for(int ch=0;ch<2;++ch)for(int i=0;i<256;++i)buffer.setSample(ch,i,.5f);
+        midi.clear();
+        processor.processBlock(buffer,midi);
+        for(int i=0;i<256;++i)
+        {
+            const float v=buffer.getSample(0,i);
+            require(std::isfinite(v),"LOOP produced invalid audio");
+            minimum=juce::jmin(minimum,v);
+            maximum=juce::jmax(maximum,v);
+        }
+    }
+    require(minimum<.20f,"LOOP mode did not periodically duck without MIDI");
+    require(maximum>.35f,"LOOP mode did not release to unity");
+
+    set(processor,"playbackMode",0); // One Shot should end at unity
+    processor.prepareToPlay(48000., 256);
+    for(int ch=0;ch<2;++ch)for(int i=0;i<256;++i)buffer.setSample(ch,i,.5f);
+    midi.clear();processor.processBlock(buffer,midi);
+    require(std::abs(buffer.getSample(0,255)-.5f)<.001f,
+            "ONE SHOT produced unexpected reduction without a trigger");
+    processor.releaseResources();
+}
+
 static void midiBreakbeatNoteFilter()
 {
     DISidechainProcessor p;
@@ -462,6 +500,7 @@ int main()
         liveSpectrumInputCapture();
         frequencyTargetRegression();
         midiBreakbeatNoteFilter();
+        playbackModeRegression();
         std::cout << "Editor lifecycle, attachments, MIDI, bus layouts and state: PASS\n";
         return 0;
     }
