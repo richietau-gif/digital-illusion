@@ -25,6 +25,10 @@ public:
  juce::AudioProcessorValueTreeState state;
  std::array<std::atomic<float>,8> points;
  std::atomic<float> meter {0};
+ // Realtime-safe observability: written from the audio callback, read by the editor.
+ std::atomic<float> visualPhase {1.f};
+ std::atomic<float> visualGainReductionDb {0.f};
+ std::atomic<uint32_t> triggerSequence {0};
  // Same gain envelope evaluator is used by DSP and GUI rendering.
  float evaluateEnvelope(double normalizedPhase) const;
 private:
