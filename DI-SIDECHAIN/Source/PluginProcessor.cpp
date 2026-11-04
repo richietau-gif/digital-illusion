@@ -19,16 +19,16 @@ bool DISidechainProcessor::isBusesLayoutSupported(const BusesLayout& b) const {r
 void DISidechainProcessor::prepareToPlay(double sampleRate,int maxBlock){
  sr=sampleRate;phase=1;detector=0;armed=true;refractory=0;smoothGain=1;
  juce::dsp::ProcessSpec spec{sampleRate,(juce::uint32)juce::jmax(1,maxBlock),1};
- for(auto& channel:filters){
-  channel.low.prepare(spec);
-  channel.high.prepare(spec);
-  channel.bandLowPass.prepare(spec);
-  channel.low.setType(juce::dsp::LinkwitzRileyFilterType::lowpass);
-  channel.high.setType(juce::dsp::LinkwitzRileyFilterType::highpass);
-  channel.bandLowPass.setType(juce::dsp::LinkwitzRileyFilterType::lowpass);
-  channel.low.reset();
-  channel.high.reset();
-  channel.bandLowPass.reset();
+ for(auto& c:filters){
+  auto init=[&](juce::dsp::LinkwitzRileyFilter<float>& filter,
+                juce::dsp::LinkwitzRileyFilterType type){
+   filter.prepare(spec);filter.setType(type);filter.reset();
+  };
+  const auto lp=juce::dsp::LinkwitzRileyFilterType::lowpass;
+  const auto hp=juce::dsp::LinkwitzRileyFilterType::highpass;
+  init(c.low,lp);init(c.high,hp);
+  init(c.bandLowPass,lp);init(c.bandHighPass,hp);
+  init(c.phaseLowPass,lp);init(c.phaseHighPass,hp);
  }
 }
 int DISidechainProcessor::getEnvelopeNodeCount() const noexcept {
@@ -171,6 +171,9 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
   c.low.setCutoffFrequency(lo);
   c.high.setCutoffFrequency(lo);
   c.bandLowPass.setCutoffFrequency(hi);
+  c.bandHighPass.setCutoffFrequency(hi);
+  c.phaseLowPass.setCutoffFrequency(hi);
+  c.phaseHighPass.setCutoffFrequency(hi);
  }
  double bpm=120; if(auto* ph=getPlayHead()){if(auto pos=ph->getPosition()){if(auto b=pos->getBpm())bpm=*b;}}
  const double divisions[]={0.125,0.25,0.5,1,2,4,8};
@@ -188,18 +191,29 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  if(refractory>0)--refractory;if(fire){phase=0;refractory=holdoff;triggerSequence.fetch_add(1,std::memory_order_relaxed);}
  float env=phase>=1?1:evaluateEnvelope(phase);phase=juce::jmin(1.0,phase+step);
  float target=1-depth*(1-env);smoothGain=coeff*smoothGain+(1-coeff)*target;
- for(int ch=0;ch<2;++ch){float dry=main.getSample(ch,i),wet=dry*smoothGain;
- if(mode!=0){
+ for(int ch=0;ch<2;++ch){
+  const float dry=main.getSample(ch,i);
   auto& f=filters[ch];
-  // Keep all filters warm so changing modes doesn't resurrect stale buffers.
+  // Complementary Linkwitz-Riley outputs have matching phase. Never
+  // subtract unrelated low/high filter phases from the dry signal.
   const float low=f.low.processSample(0,dry);
   const float high=f.high.processSample(0,dry);
-  const float band=f.bandLowPass.processSample(0,high);
-  const float affected=mode==1?low:mode==2?high:band;
-  // Additive wet/dry reconstruction is EXACTLY dry at zero ducking.
-  wet=dry+(smoothGain-1.f)*affected;
+  const float mid=f.bandLowPass.processSample(0,high);
+  const float upper=f.bandHighPass.processSample(0,high);
+  // Apply the second crossover's allpass response to the low branch,
+  // matching the phase of the mid+upper branches.
+  const float lowAligned=f.phaseLowPass.processSample(0,low)
+                         +f.phaseHighPass.processSample(0,low);
+  const float keep=mode==1?high:mode==2?low:lowAligned+upper;
+  // Interpolate from EXACT dry at no gain reduction to the
+  // phase-aligned, frequency-selected output at full reduction.
+  const float wet=mode==0?dry*smoothGain:
+                  dry+(1.f-smoothGain)*(keep-dry);
+  const float outUnclamped=dry+(wet-dry)*mix;
+  const float out=std::isfinite(outUnclamped)?outUnclamped:dry;
+  main.setSample(ch,i,out);
+  peak=juce::jmax(peak,std::abs(out));
  }
- float out=dry+(wet-dry)*mix;if(!std::isfinite(out))out=dry;main.setSample(ch,i,out);peak=juce::jmax(peak,std::abs(out));}
  }
  analyzerWritten.store(analyzerStart+(uint64_t)n,std::memory_order_release);
  meter.store(peak);visualPhase.store((float)phase,std::memory_order_relaxed);visualGainReductionDb.store(juce::Decibels::gainToDecibels(juce::jmax(0.000001f,smoothGain),-120.f),std::memory_order_relaxed);midi.clear();
