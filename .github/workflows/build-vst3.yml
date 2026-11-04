@@ -2,7 +2,7 @@ name: Build DI SIDECHAIN VST3
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, feature/di-sidechain-v1-gui]
   workflow_dispatch:
 # Only validate the newest commit per branch; previous GUI revisions are superseded.
 concurrency:
