@@ -50,6 +50,41 @@ static void editorLifecycle(DISidechainProcessor& p)
     }
 }
 
+static void audioSidechainTrigger()
+{
+    DISidechainProcessor p;
+    set(p, "trigger", 1); // Audio only
+    set(p, "mode", 0);    // Full spectrum
+    set(p, "sync", 0);
+    set(p, "length", 120);
+    set(p, "smooth", 0.1f);
+    set(p, "threshold", -25.0f);
+
+    auto layout = p.getBusesLayout();
+    layout.inputBuses.set(1, juce::AudioChannelSet::mono());
+    require(p.setBusesLayout(layout), "Mono external sidechain layout rejected");
+    p.prepareToPlay(48000, 256);
+    juce::AudioBuffer<float> buffer(3, 256);
+    buffer.clear();
+    for (int i = 0; i < 256; ++i)
+    {
+        buffer.setSample(0, i, 0.5f);
+        buffer.setSample(1, i, 0.5f);
+        if (i >= 32 && i < 48)
+            buffer.setSample(2, i, 0.8f);
+    }
+    juce::MidiBuffer midi;
+    p.processBlock(buffer, midi);
+    require(std::abs(buffer.getSample(0, 0) - 0.5f) < 0.001f,
+            "Audio sidechain altered output before trigger");
+    require(buffer.getSample(0, 40) < 0.4f,
+            "External audio transient did not trigger gain reduction");
+    for (int i = 0; i < 256; ++i)
+        require(std::isfinite(buffer.getSample(0, i)), "Invalid audio output after trigger");
+
+    p.releaseResources();
+}
+
 static void processingAndState()
 {
     DISidechainProcessor p;
@@ -114,6 +149,7 @@ int main()
         editorLifecycle(processor);
         processor.releaseResources();
         processingAndState();
+        audioSidechainTrigger();
         std::cout << "Editor lifecycle, attachments, MIDI, bus layouts and state: PASS\n";
         return 0;
     }
