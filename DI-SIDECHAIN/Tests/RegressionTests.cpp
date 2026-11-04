@@ -23,7 +23,7 @@ static void editorLifecycle(DISidechainProcessor& p)
         std::unique_ptr<juce::AudioProcessorEditor> editor(p.createEditor());
         require(editor != nullptr, "Editor creation failed");
         require(editor->getWidth() == 700 && editor->getHeight() == 760, "Initial editor size");
-        require(editor->getNumChildComponents() == 20, "Missing editor controls");
+        require(editor->getNumChildComponents() == 24, "Missing editor controls");
         int sliders = 0, combos = 0, buttons = 0;
         for (auto* child : editor->getChildren())
         {
@@ -32,7 +32,7 @@ static void editorLifecycle(DISidechainProcessor& p)
             combos += dynamic_cast<juce::ComboBox*>(child) != nullptr;
             buttons += dynamic_cast<juce::ToggleButton*>(child) != nullptr;
         }
-        require(sliders == 8 && combos == 3 && buttons == 1, "Control types changed");
+        require(sliders == 10 && combos == 3 && buttons == 1, "Control types changed");
         editor->setSize(900, 600);
         editor->setSize(700, 760);
         require(editor->createComponentSnapshot(editor->getLocalBounds()).isValid(), "Editor paint failed");
@@ -289,6 +289,42 @@ static void frequencyTargetRegression()
     require(bandModeTreble>highDry*.82f,"BAND mode incorrectly reduced treble");
 }
 
+static void midiBreakbeatNoteFilter()
+{
+    DISidechainProcessor p;
+    p.prepareToPlay(48000.,256);
+    set(p,"trigger",2); // MIDI only
+    set(p,"sync",0);
+    set(p,"length",250);
+    set(p,"smooth",.1f);
+    set(p,"midiNote",36);
+    set(p,"midiChannel",10);
+    juce::AudioBuffer<float> buffer(2,256);
+    auto process=[&](juce::MidiBuffer& events){
+        for(int ch=0;ch<2;++ch)for(int i=0;i<256;++i)
+            buffer.setSample(ch,i,.25f);
+        p.processBlock(buffer,events);
+    };
+    juce::MidiBuffer events;
+    const auto begin=p.triggerSequence.load();
+    events.addEvent(juce::MidiMessage::noteOn(10,38,(juce::uint8)110),11);
+    events.addEvent(juce::MidiMessage::noteOn(9,36,(juce::uint8)110),17);
+    process(events);
+    require(p.triggerSequence.load()==begin,"Unexpected note or channel triggered");
+    events.addEvent(juce::MidiMessage::noteOn(10,36,(juce::uint8)110),37);
+    events.addEvent(juce::MidiMessage::noteOn(10,36,(juce::uint8)110),171);
+    process(events);
+    require(p.triggerSequence.load()==begin+2,"Irregular MIDI note-on triggers were skipped");
+    require(p.visualPhase.load()>0.f&&p.visualPhase.load()<1.f,
+            "Envelope phase did not advance from the last MIDI trigger");
+    set(p,"midiNote",-1);
+    set(p,"midiChannel",0);
+    events.addEvent(juce::MidiMessage::noteOn(3,45,(juce::uint8)100),92);
+    process(events);
+    require(p.triggerSequence.load()==begin+3,"Any-note/any-channel mode did not trigger");
+    p.releaseResources();
+}
+
 static void audioSidechainTrigger()
 {
     DISidechainProcessor p;
@@ -425,6 +461,7 @@ int main()
         concurrentEnvelopeEditingStress();
         liveSpectrumInputCapture();
         frequencyTargetRegression();
+        midiBreakbeatNoteFilter();
         std::cout << "Editor lifecycle, attachments, MIDI, bus layouts and state: PASS\n";
         return 0;
     }
