@@ -131,16 +131,17 @@ void DISidechainEditor::paint(juce::Graphics& g){
     const float grDb=proc.visualGainReductionDb.load(std::memory_order_relaxed);
     text(g,"GR "+juce::String(juce::jlimit(-120.f,0.f,grDb),1)+" dB",11,
          {550,142,126,17},accent,juce::Justification::centredRight);
-    for(int i=0;i<8;++i){
-        float x=graph.getX()+graph.getWidth()*i/7.f;
-        float y=graph.getBottom()-juce::jlimit(0.f,1.f,proc.points[i].load())*graph.getHeight();
+    for(int i=0;i<proc.getEnvelopeNodeCount();++i){
+        const auto node=proc.getEnvelopeNode(i);
+        float x=graph.getX()+graph.getWidth()*node.x;
+        float y=graph.getBottom()-node.y*graph.getHeight();
         g.setColour(accent);g.fillEllipse(x-(i==selectedPoint?11.f:9.f),y-(i==selectedPoint?11.f:9.f),i==selectedPoint?22.f:18.f,i==selectedPoint?22.f:18.f);
         g.setColour(pale);g.fillEllipse(x-5,y-5,10,10);
     }
     text(g,"0",12,{36,421,50,20},muted);
     text(g,"100%",12,{598,421,57,20},muted,juce::Justification::centredRight);
     text(g,"0 dB",10,{19,445,90,18},muted);
-    text(g,"DRAG POINTS TO EDIT",9,{241,445,218,18},accent,juce::Justification::centred);
+    text(g,"DOUBLE-CLICK: ADD · DELETE: REMOVE",9,{219,445,265,18},accent,juce::Justification::centred);
     text(g,"-inf dB",10,{581,445,95,18},muted,juce::Justification::centredRight);
     text(g,"FREQUENCY TARGET",11,{11,488,255,22},pale);
     text(g,"ILLUSTRATIVE BARS · DSP CUTOFFS BELOW",9,{406,488,276,22},muted,juce::Justification::centredRight);
@@ -217,12 +218,12 @@ void DISidechainEditor::setParameter(const char* id,float value){
     }
 }
 void DISidechainEditor::updatePoint(const juce::MouseEvent& e){
-    auto q=localDesignPoint(e);
-    if(!graph.contains(q))return;
-    const int i=selectedPoint>=0?selectedPoint:juce::jlimit(0,7,juce::roundToInt((q.x-graph.getX())/graph.getWidth()*7.f));
-    float gain=juce::jlimit(0.f,1.f,(graph.getBottom()-q.y)/graph.getHeight());
-    if(snapToGrid) gain=std::round(gain*16.f)/16.f;
-    proc.points[i].store(gain);
+    if(selectedPoint<0||selectedPoint>=proc.getEnvelopeNodeCount())return;
+    const auto q=localDesignPoint(e);
+    float x=juce::jlimit(0.f,1.f,(q.x-graph.getX())/graph.getWidth());
+    float y=juce::jlimit(0.f,1.f,(graph.getBottom()-q.y)/graph.getHeight());
+    if(snapToGrid){x=std::round(x*16.f)/16.f;y=std::round(y*16.f)/16.f;}
+    proc.setEnvelopeNode(selectedPoint,x,y);
     repaint();
 }
 void DISidechainEditor::updateBand(const juce::MouseEvent& e){
@@ -237,8 +238,22 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
     auto q=localDesignPoint(e);
     if(q.x>=460&&q.x<=680&&q.y>=119&&q.y<=144){snapToGrid=!snapToGrid;repaint();return;}
     if(graph.contains(q)){
-        selectedPoint=juce::jlimit(0,7,juce::roundToInt((q.x-graph.getX())/graph.getWidth()*7.f));
-        grabKeyboardFocus();updatePoint(e);return;
+        // Only a node grabs the mouse. Clicking an empty part of the plot
+        // does not alter a possibly distant node.
+        selectedPoint=-1;
+        float distanceSquared=14.f*14.f;
+        for(int i=0;i<proc.getEnvelopeNodeCount();++i){
+            const auto node=proc.getEnvelopeNode(i);
+            const float dx=q.x-(graph.getX()+node.x*graph.getWidth());
+            const float dy=q.y-(graph.getBottom()-node.y*graph.getHeight());
+            const float d2=dx*dx+dy*dy;
+            if(d2<distanceSquared){distanceSquared=d2;selectedPoint=i;}
+        }
+        if(e.mods.isRightButtonDown()&&selectedPoint>0&&selectedPoint<proc.getEnvelopeNodeCount()-1){
+            proc.removeEnvelopeNode(selectedPoint);selectedPoint=-1;repaint();return;
+        }
+        if(selectedPoint>=0){grabKeyboardFocus();updatePoint(e);}
+        return;
     }
     if(q.y>=647 && q.y<=674){
         int index=(int)((q.x-11.f)/135.5f);
@@ -266,18 +281,39 @@ void DISidechainEditor::mouseUp(const juce::MouseEvent&){bandHandle=-1;}
 void DISidechainEditor::mouseDoubleClick(const juce::MouseEvent& e){
     const auto q=localDesignPoint(e);
     if(!graph.contains(q))return;
-    selectedPoint=juce::jlimit(0,7,juce::roundToInt((q.x-graph.getX())/graph.getWidth()*7.f));
-    // Double-click restores unity gain at the selected time node.
-    proc.points[selectedPoint].store(1.f);
+    float x=juce::jlimit(0.f,1.f,(q.x-graph.getX())/graph.getWidth());
+    float y=juce::jlimit(0.f,1.f,(graph.getBottom()-q.y)/graph.getHeight());
+    if(snapToGrid){x=std::round(x*16.f)/16.f;y=std::round(y*16.f)/16.f;}
+    selectedPoint=proc.insertEnvelopeNode(x,y);
+    if(selectedPoint>=0)grabKeyboardFocus();
     repaint();
 }
 bool DISidechainEditor::keyPressed(const juce::KeyPress& key){
-    if(selectedPoint<0||selectedPoint>7)return false;
+    const int n=proc.getEnvelopeNodeCount();
+    if(selectedPoint<0||selectedPoint>=n)return false;
+    if(key.getKeyCode()==juce::KeyPress::deleteKey||
+       key.getKeyCode()==juce::KeyPress::backspaceKey){
+        if(proc.removeEnvelopeNode(selectedPoint)){
+            selectedPoint=juce::jmin(selectedPoint,proc.getEnvelopeNodeCount()-1);
+            repaint();
+        }
+        return true;
+    }
+    if(key.getKeyCode()==juce::KeyPress::leftKey&&key.getModifiers().isShiftDown()){
+        const auto node=proc.getEnvelopeNode(selectedPoint);
+        proc.setEnvelopeNode(selectedPoint,node.x-(snapToGrid?1.f/16.f:.005f),node.y);
+        repaint();return true;
+    }
+    if(key.getKeyCode()==juce::KeyPress::rightKey&&key.getModifiers().isShiftDown()){
+        const auto node=proc.getEnvelopeNode(selectedPoint);
+        proc.setEnvelopeNode(selectedPoint,node.x+(snapToGrid?1.f/16.f:.005f),node.y);
+        repaint();return true;
+    }
     if(key.getKeyCode()==juce::KeyPress::leftKey){selectedPoint=juce::jmax(0,selectedPoint-1);repaint();return true;}
-    if(key.getKeyCode()==juce::KeyPress::rightKey){selectedPoint=juce::jmin(7,selectedPoint+1);repaint();return true;}
+    if(key.getKeyCode()==juce::KeyPress::rightKey){selectedPoint=juce::jmin(n-1,selectedPoint+1);repaint();return true;}
     const int direction=key.getKeyCode()==juce::KeyPress::upKey?1:key.getKeyCode()==juce::KeyPress::downKey?-1:0;
     if(direction==0)return false;
-    float step=snapToGrid?1.f/16.f:0.01f;
-    proc.points[selectedPoint].store(juce::jlimit(0.f,1.f,proc.points[selectedPoint].load()+direction*step));
+    const auto node=proc.getEnvelopeNode(selectedPoint);
+    proc.setEnvelopeNode(selectedPoint,node.x,node.y+direction*(snapToGrid?1.f/16.f:.01f));
     repaint();return true;
 }
