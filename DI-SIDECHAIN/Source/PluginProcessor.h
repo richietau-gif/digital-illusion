@@ -29,6 +29,11 @@ public:
  std::atomic<float> visualPhase {1.f};
  std::atomic<float> visualGainReductionDb {0.f};
  std::atomic<uint32_t> triggerSequence {0};
+ // Pre-ducking mono audio history for the GUI FFT. Audio thread only writes
+ // atomic samples; the UI does FFT off the realtime thread.
+ static constexpr int analyzerSize = 2048;
+ std::array<std::atomic<float>,analyzerSize> analyzerHistory {};
+ std::atomic<uint64_t> analyzerWritten {0};
  // Variable-time nodes use atomic storage; default legacy eight-node sessions remain readable.
  static constexpr int maxEnvelopeNodes = 32;
  struct EnvelopeNode { float x=0.f, y=1.f; };
