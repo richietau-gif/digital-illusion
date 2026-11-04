@@ -17,7 +17,9 @@ are intentionally preserved.
   **SNAP: OFF/ON** quantizes time and gain to 1/16 steps. Left/right arrows
   choose nodes, Shift+left/right moves their time, up/down adjusts gain.
   Existing presets with eight evenly spaced nodes remain loadable.
-  Envelope transitions use the same smoothstep evaluator in DSP and GUI.
+  **Alt+drag** a graph segment vertically to shape its cubic Bezier easing;
+  each segment has an independent curvature and saves with the Ableton Set.
+  The plotted curve uses the exact same DSP evaluator.
 - **Frequency Target:** choose FULL, LOW, HIGH or BAND. In LOW/BAND, drag a
   handle to change crossover frequency; the selected region updates live.
 - **Bottom:** active DSP Depth, Smooth, and Mix parameter sliders.
@@ -28,8 +30,8 @@ are intentionally preserved.
 
 - The bars in Frequency Target are an **illustration**, not a live FFT.
 - **MULTI** mode is visibly disabled; no multiband DSP yet.
-- Curves currently use smoothstep interpolation, not individual editable
-  Bézier tension handles. This remains future work in Issue #5.
+- Curves now support per-segment cubic shaping via Alt-drag, but do not
+  yet expose independent two-handle bezier controls or segment presets.
 - The GUI curve and DSP now use the same evaluator; no merely decorative
   Bézier approximation is used.
 - Ableton Live 12 Suite integration has **not** been verified automatically.
