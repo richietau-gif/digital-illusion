@@ -48,7 +48,9 @@ public:
 private:
  static juce::AudioProcessorValueTreeState::ParameterLayout makeParams();
  struct FilterChannel {
-  juce::dsp::LinkwitzRileyFilter<float> low, high, bandLowPass;
+  juce::dsp::LinkwitzRileyFilter<float> low, high;
+  juce::dsp::LinkwitzRileyFilter<float> bandLowPass, bandHighPass;
+  juce::dsp::LinkwitzRileyFilter<float> phaseLowPass, phaseHighPass;
  };
  std::array<FilterChannel,2> filters;
  std::array<std::atomic<float>,maxEnvelopeNodes> nodeX {};
