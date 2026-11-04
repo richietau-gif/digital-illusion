@@ -5,6 +5,8 @@ static juce::AudioProcessorValueTreeState::ParameterLayout layoutParams(){
  std::vector<std::unique_ptr<juce::RangedAudioParameter>> p;
  auto f=[&](const char* id,const char* name,float lo,float hi,float def){p.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{id,1},name,juce::NormalisableRange<float>(lo,hi),def));};
  f("depth","Depth",0,1,1); f("mix","Mix",0,1,1);f("threshold","Trigger threshold dB",-60,0,-22);f("length","Envelope milliseconds",10,2000,250);f("smooth","Smoothing milliseconds",0.1,20,2);f("low","Low cutoff",25,1500,120);f("high","High cutoff",60,18000,400);f("retrigger","Trigger holdoff milliseconds",1,250,35);
+ f("midiNote","MIDI trigger note (-1 = any)",-1,127,-1);
+ f("midiChannel","MIDI trigger channel (0 = any)",0,16,0);
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"mode",1},"Frequency mode",juce::StringArray{"Full","Low","High","Band"},0));
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"trigger",1},"Trigger mode",juce::StringArray{"Audio + MIDI","Audio only","MIDI only"},0));
  p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"sync",1},"Tempo sync",true));
@@ -162,6 +164,8 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  juce::AudioBuffer<float> side; if(hasSide){auto view=getBusBuffer(buffer,true,1);side.setDataToReferTo(view.getArrayOfWritePointers(),view.getNumChannels(),view.getNumSamples());}
  auto get=[&](const char* id){return state.getRawParameterValue(id)->load();};
  int mode=(int)get("mode"),trig=(int)get("trigger");float depth=get("depth"),mix=get("mix");
+ const int midiNote=juce::jlimit(-1,127,juce::roundToInt(get("midiNote")));
+ const int midiChannel=juce::jlimit(0,16,juce::roundToInt(get("midiChannel")));
  // Set both crossovers independently. BAND is HP(low) -> LP(high), not a
  // subtraction of two unrelated filters, which leaked incorrect frequencies.
  const float maxCutoff=juce::jmax(100.f,(float)(sr*.5-100.));
@@ -186,7 +190,13 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  const float inputMono=.5f*(main.getSample(0,i)+main.getSample(1,i));
  analyzerHistory[(analyzerStart+(uint64_t)i)%analyzerSize].store(
      std::isfinite(inputMono)?inputMono:0.f,std::memory_order_relaxed);
- while(hasEvent&&midiPos<=i){if(msg.isNoteOn()&&msg.getVelocity()>0&&trig!=1)fire=true;hasEvent=it.getNextEvent(msg,midiPos);}
+ while(hasEvent&&midiPos<=i){
+  if(msg.isNoteOn()&&msg.getVelocity()>0&&trig!=1
+     &&(midiNote<0||msg.getNoteNumber()==midiNote)
+     &&(midiChannel==0||msg.getChannel()==midiChannel))
+    fire=true; // Exact host-provided sample offset, including irregular patterns.
+  hasEvent=it.getNextEvent(msg,midiPos);
+ }
  if(hasSide&&trig!=2&&side.getNumSamples()>=n){float v=0;for(int ch=0;ch<side.getNumChannels();++ch)v=juce::jmax(v,std::abs(side.getSample(ch,i)));detector=std::max((double)v,detector*.995);if(detector<threshold*.65)armed=true;if(armed&&detector>=threshold&&refractory==0){fire=true;armed=false;}}
  if(refractory>0)--refractory;if(fire){phase=0;refractory=holdoff;triggerSequence.fetch_add(1,std::memory_order_relaxed);}
  float env=phase>=1?1:evaluateEnvelope(phase);phase=juce::jmin(1.0,phase+step);
