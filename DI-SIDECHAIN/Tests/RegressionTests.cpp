@@ -186,6 +186,38 @@ static void concurrentEnvelopeEditingStress()
     processor.releaseResources();
 }
 
+static void liveSpectrumInputCapture()
+{
+    DISidechainProcessor processor;
+    processor.prepareToPlay(48000.,256);
+    set(processor,"trigger",2); // MIDI only — no external trigger needed.
+    juce::AudioBuffer<float> input(2,256);
+    juce::MidiBuffer midi;
+    for(int block=0;block<16;++block)
+    {
+        for(int i=0;i<256;++i)
+        {
+            const float sample=.4f*std::sin(juce::MathConstants<float>::twoPi*
+                                           440.f*(block*256+i)/48000.f);
+            input.setSample(0,i,sample);
+            input.setSample(1,i,sample);
+        }
+        midi.clear();
+        processor.processBlock(input,midi);
+    }
+    require(processor.analyzerWritten.load()==4096,
+            "Audio spectrum sample history was not published");
+    float maxAbs=0.f;
+    for(int i=0;i<DISidechainProcessor::analyzerSize;++i)
+    {
+        const float v=processor.analyzerHistory[i].load();
+        require(std::isfinite(v),"Audio spectrum history contains nonfinite samples");
+        maxAbs=juce::jmax(maxAbs,std::abs(v));
+    }
+    require(maxAbs>.3f,"Audio spectrum history did not capture the input signal");
+    processor.releaseResources();
+}
+
 static void audioSidechainTrigger()
 {
     DISidechainProcessor p;
@@ -320,6 +352,7 @@ int main()
         envelopeInterpolationRegression();
         editableEnvelopeRoundtrip();
         concurrentEnvelopeEditingStress();
+        liveSpectrumInputCapture();
         std::cout << "Editor lifecycle, attachments, MIDI, bus layouts and state: PASS\n";
         return 0;
     }
