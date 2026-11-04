@@ -51,10 +51,10 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p) : AudioProcessorEd
         sa.push_back(std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(p.state,ids[i],*s));
         sliders.push_back(std::move(s));labels.push_back(std::move(l));
     }
-    const char* cids[]={"trigger","mode","division"};
+    const char* cids[]={"trigger","playbackMode","division"};
     const juce::StringArray choices[]={
         {"Audio + MIDI","Audio only","MIDI only"},
-        {"Full","Low","High","Band"},
+        {"One Shot","Loop"},
         {"1/32","1/16","1/8","1/4","1/2","1 bar","2 bars"}};
     for(int i=0;i<3;++i) {
         auto c=std::make_unique<juce::ComboBox>();
@@ -132,7 +132,7 @@ void DISidechainEditor::paint(juce::Graphics& g){
     text(g,triggerFlashTicks>0?"TRIGGERED":"TRIGGER READY",9,{590,18,94,19},triggerFlashTicks>0?juce::Colour(0xff76f3a5):muted,juce::Justification::centred);
 
     for(int i=0;i<3;++i) box(g,{11.f+i*226.f,57,219,40},juce::Colour(0xff242b37),7);
-    const char* top[]={"TRIGGER","FREQUENCY MODE","LENGTH"};
+    const char* top[]={"TRIGGER","MODE","LENGTH"};
     for(int i=0;i<3;++i) text(g,top[i],10,{17.f+i*226.f,60,207,16},pale,juce::Justification::centred);
     box(g,{11,108,678,365},panel,10);
     text(g,"VOLUME ENVELOPE",11,{19,119,260,20},pale);
