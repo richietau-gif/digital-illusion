@@ -135,6 +135,57 @@ static void editableEnvelopeRoundtrip()
     require(std::abs(loadedLegacy.evaluateEnvelope(.5)-preserved)<.0001f, "Legacy state migration changed envelope");
 }
 
+static void concurrentEnvelopeEditingStress()
+{
+    DISidechainProcessor processor;
+    processor.prepareToPlay(48000., 128);
+    set(processor, "trigger", 2); // MIDI only
+
+    std::atomic<bool> editsDone {false};
+    std::thread editorThread([&] {
+        for (int pass=0;pass<300;++pass)
+        {
+            const float position=.15f+((pass%65)/100.f);
+            const int inserted=processor.insertEnvelopeNode(position,.2f+(pass%6)*.1f);
+            if(inserted>0)
+            {
+                processor.setEnvelopeSegmentCurve(inserted,((pass%11)-5)/5.f);
+                processor.setEnvelopeNode(inserted,position,.15f+(pass%8)*.1f);
+                processor.removeEnvelopeNode(inserted);
+            }
+            // Modifying the curve while audio is processing must remain
+            // bounded, finite, and free of data races / invalid indices.
+            processor.setEnvelopeNode(1,.1f,.15f+(pass%7)*.1f);
+        }
+        editsDone.store(true,std::memory_order_release);
+    });
+
+    bool valid=true;
+    for (int pass=0;pass<400;++pass)
+    {
+        juce::AudioBuffer<float> buffer(2,128);
+        buffer.clear();
+        for (int ch=0;ch<2;++ch)
+            for (int sample=0;sample<128;++sample)
+                buffer.setSample(ch,sample,.3f);
+        juce::MidiBuffer midi;
+        if(pass%4==0)midi.addEvent(juce::MidiMessage::noteOn(1,60,(juce::uint8)100),0);
+        processor.processBlock(buffer,midi);
+        for(int sample=0;sample<128;++sample)
+        {
+            const float result=buffer.getSample(0,sample);
+            if(!std::isfinite(result)||std::abs(result)>1.f)valid=false;
+        }
+        const float envelope=processor.evaluateEnvelope((pass%101)/100.);
+        if(!std::isfinite(envelope)||envelope<0.f||envelope>1.f)valid=false;
+    }
+    editorThread.join();
+    require(editsDone.load(std::memory_order_acquire),
+            "Concurrent envelope editor did not complete");
+    require(valid,"Concurrent envelope editing produced invalid DSP output");
+    processor.releaseResources();
+}
+
 static void audioSidechainTrigger()
 {
     DISidechainProcessor p;
@@ -249,6 +300,7 @@ int main()
         audioSidechainTrigger();
         envelopeInterpolationRegression();
         editableEnvelopeRoundtrip();
+        concurrentEnvelopeEditingStress();
         std::cout << "Editor lifecycle, attachments, MIDI, bus layouts and state: PASS\n";
         return 0;
     }
