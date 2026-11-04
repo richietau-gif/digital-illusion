@@ -20,15 +20,18 @@ are intentionally preserved.
   **Alt+drag** a graph segment vertically to shape its cubic Bezier easing;
   each segment has an independent curvature and saves with the Ableton Set.
   The plotted curve uses the exact same DSP evaluator.
-- **Frequency Target:** choose FULL, LOW, HIGH or BAND. In LOW/BAND, drag a
-  handle to change crossover frequency; the selected region updates live.
+- **Frequency Target:** live 24-bar log-frequency spectrum derived from a
+  2048-point FFT of the stereo input **before** gain reduction, refreshed
+  on the GUI message thread. Choose FULL, LOW, HIGH or BAND. Drag a
+  boundary to change crossover frequency; the selected region updates live.
+  The spectrum shows INPUT energy, not precise frequency-dependent
+  gain reduction. Bars decay when no new input arrives.
 - **Bottom:** active DSP Depth, Smooth, and Mix parameter sliders.
 - **Advanced Controls:** expand to reveal Threshold, Length in milliseconds,
   cutoff frequencies, and Retrigger/Holdoff.
 
 ## Not implemented yet
 
-- The bars in Frequency Target are an **illustration**, not a live FFT.
 - **MULTI** mode is visibly disabled; no multiband DSP yet.
 - Curves now support per-segment cubic shaping via Alt-drag, but do not
   yet expose independent two-handle bezier controls or segment presets.
