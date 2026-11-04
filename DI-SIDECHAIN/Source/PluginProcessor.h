@@ -25,6 +25,8 @@ public:
  juce::AudioProcessorValueTreeState state;
  std::array<std::atomic<float>,8> points;
  std::atomic<float> meter {0};
+ // Same gain envelope evaluator is used by DSP and GUI rendering.
+ float evaluateEnvelope(double normalizedPhase) const;
 private:
  static juce::AudioProcessorValueTreeState::ParameterLayout makeParams();
  struct FilterChannel {juce::dsp::LinkwitzRileyFilter<float> low, high;};
