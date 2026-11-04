@@ -6,8 +6,13 @@ are intentionally preserved.
 
 ## Controls implemented
 
-- **Top selectors:** Trigger (Audio+MIDI, Audio, MIDI), Frequency Mode
-  (Full, Low, High, Band), rhythmic division.
+- **Top selectors:** Trigger (Audio+MIDI, Audio, MIDI), **MODE (One Shot / Loop)**,
+  and rhythmic division. FULL/LOW/HIGH/BAND remain in Frequency Target below.
+  **One Shot** starts an envelope at every accepted audio or MIDI event.
+  **Loop** repeats automatically. When the host provides transport PPQ and tempo
+  with SYNC enabled, the loop is locked to the musical timeline; otherwise
+  it falls back to its internal phase oscillator. Stopping the host silences
+  looping ducking when a host playing flag is available.
 - **SYNC:** toggles tempo-synced envelope length. Switch it off to use the
   milliseconds LENGTH parameter in Advanced Controls.
 - **Volume envelope:** between 2 and 32 freely positioned DSP-backed nodes.
