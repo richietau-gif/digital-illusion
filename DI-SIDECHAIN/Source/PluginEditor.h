@@ -34,6 +34,7 @@ private:
     int bandHandle = -1;
     int selectedPoint = -1;
     bool snapToGrid = false;
+    int curvatureSegment = -1;
     uint32_t lastTriggerSequence = 0;
     int triggerFlashTicks = 0;
     static constexpr float designWidth = 700.f;
