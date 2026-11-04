@@ -154,7 +154,12 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  envelopeLength=get("sync")>0.5?60.0/juce::jmax(1.0,bpm)*divisions[juce::jlimit(0,6,(int)get("division"))]:get("length")/1000.0;
  double step=1.0/juce::jmax(1.0,envelopeLength*sr);int holdoff=(int)(get("retrigger")*.001*sr);float threshold=juce::Decibels::decibelsToGain(get("threshold"));float coeff=std::exp(-1.f/(float)(juce::jmax(.1f,get("smooth"))*.001*sr));
  juce::MidiBuffer::Iterator it(midi);juce::MidiMessage msg;int midiPos=0;bool hasEvent=it.getNextEvent(msg,midiPos);float peak=0;
+ const uint64_t analyzerStart=analyzerWritten.load(std::memory_order_relaxed);
  for(int i=0;i<n;++i){bool fire=false;
+ // Capture unprocessed input BEFORE the gain/filters alter the stereo bus.
+ const float inputMono=.5f*(main.getSample(0,i)+main.getSample(1,i));
+ analyzerHistory[(analyzerStart+(uint64_t)i)%analyzerSize].store(
+     std::isfinite(inputMono)?inputMono:0.f,std::memory_order_relaxed);
  while(hasEvent&&midiPos<=i){if(msg.isNoteOn()&&msg.getVelocity()>0&&trig!=1)fire=true;hasEvent=it.getNextEvent(msg,midiPos);}
  if(hasSide&&trig!=2&&side.getNumSamples()>=n){float v=0;for(int ch=0;ch<side.getNumChannels();++ch)v=juce::jmax(v,std::abs(side.getSample(ch,i)));detector=std::max((double)v,detector*.995);if(detector<threshold*.65)armed=true;if(armed&&detector>=threshold&&refractory==0){fire=true;armed=false;}}
  if(refractory>0)--refractory;if(fire){phase=0;refractory=holdoff;triggerSequence.fetch_add(1,std::memory_order_relaxed);}
@@ -164,6 +169,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  if(mode!=0){auto& f=filters[ch];float low=f.low.processSample(0,dry),high=f.high.processSample(0,dry);float affected=mode==1?low:mode==2?high:dry-low-high;wet=dry+affected*(smoothGain-1);}
  float out=dry+(wet-dry)*mix;if(!std::isfinite(out))out=dry;main.setSample(ch,i,out);peak=juce::jmax(peak,std::abs(out));}
  }
+ analyzerWritten.store(analyzerStart+(uint64_t)n,std::memory_order_release);
  meter.store(peak);visualPhase.store((float)phase,std::memory_order_relaxed);visualGainReductionDb.store(juce::Decibels::gainToDecibels(juce::jmax(0.000001f,smoothGain),-120.f),std::memory_order_relaxed);midi.clear();
 }
 void DISidechainProcessor::getStateInformation(juce::MemoryBlock& dest){
