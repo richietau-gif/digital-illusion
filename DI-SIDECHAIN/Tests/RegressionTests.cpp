@@ -74,14 +74,34 @@ static void audioSidechainTrigger()
             buffer.setSample(2, i, 0.8f);
     }
     juce::MidiBuffer midi;
+    const auto triggersBefore = p.triggerSequence.load();
     p.processBlock(buffer, midi);
+    require(p.triggerSequence.load() > triggersBefore,
+            "External audio transient was not detected");
     require(std::abs(buffer.getSample(0, 0) - 0.5f) < 0.001f,
             "Audio sidechain altered output before trigger");
-    require(buffer.getSample(0, 40) < 0.4f,
-            "External audio transient did not trigger gain reduction");
-    for (int i = 0; i < 256; ++i)
-        require(std::isfinite(buffer.getSample(0, i)), "Invalid audio output after trigger");
 
+    // At 120 ms envelope length the initial few samples remain near unity.
+    // Observe the full envelope instead of incorrectly expecting significant
+    // reduction eight samples after the sidechain transient.
+    float minimum = 1.f;
+    for (int block = 0; block < 28; ++block)
+    {
+        for (int ch = 0; ch < 2; ++ch)
+            for (int i = 0; i < 256; ++i)
+                buffer.setSample(ch, i, 0.5f);
+        for (int i = 0; i < 256; ++i)
+            buffer.setSample(2, i, 0.f);
+        midi.clear();
+        p.processBlock(buffer, midi);
+        for (int i = 0; i < 256; ++i)
+        {
+            const float sample = buffer.getSample(0, i);
+            require(std::isfinite(sample), "Invalid audio output after trigger");
+            minimum = juce::jmin(minimum, sample);
+        }
+    }
+    require(minimum < 0.4f, "External audio trigger did not duck within envelope duration");
     p.releaseResources();
 }
 
