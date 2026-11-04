@@ -25,12 +25,32 @@ public:
  juce::AudioProcessorValueTreeState state;
  std::array<std::atomic<float>,8> points;
  std::atomic<float> meter {0};
+ // Realtime-safe observability: written from the audio callback, read by the editor.
+ std::atomic<float> visualPhase {1.f};
+ std::atomic<float> visualGainReductionDb {0.f};
+ std::atomic<uint32_t> triggerSequence {0};
+ // Variable-time nodes use atomic storage; default legacy eight-node sessions remain readable.
+ static constexpr int maxEnvelopeNodes = 32;
+ struct EnvelopeNode { float x=0.f, y=1.f; };
+ int getEnvelopeNodeCount() const noexcept;
+ EnvelopeNode getEnvelopeNode(int index) const noexcept;
+ void setEnvelopeNode(int index, float x, float y) noexcept;
+ int insertEnvelopeNode(float x, float y) noexcept;
+ bool removeEnvelopeNode(int index) noexcept;
+ float getEnvelopeSegmentCurve(int segment) const noexcept;
+ void setEnvelopeSegmentCurve(int segment, float curve) noexcept;
+ float evaluateEnvelope(double normalizedPhase) const noexcept;
 private:
  static juce::AudioProcessorValueTreeState::ParameterLayout makeParams();
  struct FilterChannel {juce::dsp::LinkwitzRileyFilter<float> low, high;};
  std::array<FilterChannel,2> filters;
+ std::array<std::atomic<float>,maxEnvelopeNodes> nodeX {};
+ std::array<std::atomic<float>,maxEnvelopeNodes> nodeY {};
+ // Cubic Bezier easing factor per segment [-1, 1], 0 = smoothstep.
+ std::array<std::atomic<float>,maxEnvelopeNodes> nodeCurve {};
+ std::atomic<int> activeNodeCount {0}; // 0 selects legacy 8-point envelope
+ void adoptLegacyPoints() noexcept;
  double sr=44100, phase=1, envelopeLength=0.25, detector=0;
  int refractory=0; bool armed=true; float smoothGain=1;
- float curve(double) const;
  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DISidechainProcessor)
 };

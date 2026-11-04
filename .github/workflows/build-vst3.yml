@@ -4,6 +4,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+# Only validate the newest commit per branch; previous GUI revisions are superseded.
+concurrency:
+  group: di-sidechain-${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   windows-vst3:
     runs-on: windows-2025

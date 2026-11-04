@@ -22,7 +22,7 @@ static void editorLifecycle(DISidechainProcessor& p)
     {
         std::unique_ptr<juce::AudioProcessorEditor> editor(p.createEditor());
         require(editor != nullptr, "Editor creation failed");
-        require(editor->getWidth() == 850 && editor->getHeight() == 550, "Initial editor size");
+        require(editor->getWidth() == 700 && editor->getHeight() == 760, "Initial editor size");
         require(editor->getNumChildComponents() == 20, "Missing editor controls");
         int sliders = 0, combos = 0, buttons = 0;
         for (auto* child : editor->getChildren())
@@ -34,7 +34,7 @@ static void editorLifecycle(DISidechainProcessor& p)
         }
         require(sliders == 8 && combos == 3 && buttons == 1, "Control types changed");
         editor->setSize(900, 600);
-        editor->setSize(850, 550);
+        editor->setSize(700, 760);
         require(editor->createComponentSnapshot(editor->getLocalBounds()).isValid(), "Editor paint failed");
         // Exercise attachments from a host automation thread while the editor exists.
         std::thread automation([&] {
@@ -48,6 +48,142 @@ static void editorLifecycle(DISidechainProcessor& p)
         set(p, "depth", 1.0f);
         juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
     }
+}
+
+static void envelopeInterpolationRegression()
+{
+    DISidechainProcessor processor;
+    const float keys[8] = {1.f, .9f, .1f, 0.f, .4f, .75f, .95f, 1.f};
+    for (int i=0; i<8; ++i)
+    {
+        processor.points[i] = keys[i];
+        auto exact = processor.evaluateEnvelope((double)i/7.0);
+        require(std::abs(exact - keys[i]) < 0.0001f,
+                "Envelope evaluator does not match an edited node");
+    }
+    for (int i=0; i<=256; ++i)
+    {
+        float gain = processor.evaluateEnvelope(i/256.0);
+        require(std::isfinite(gain) && gain >= 0.f && gain <= 1.f,
+                "Envelope evaluator returned invalid gain");
+    }
+    require(std::abs(processor.evaluateEnvelope(-1.0) - keys[0]) < 0.0001f,
+            "Envelope negative phase is not clamped");
+    require(std::abs(processor.evaluateEnvelope(3.0) - keys[7]) < 0.0001f,
+            "Envelope phase greater than one is not clamped");
+}
+
+static void editableEnvelopeRoundtrip()
+{
+    DISidechainProcessor p;
+    require(p.getEnvelopeNodeCount()==8, "Legacy eight-node default missing");
+    const float preserved=p.evaluateEnvelope(0.5);
+    const int inserted=p.insertEnvelopeNode(.46f,.12f);
+    require(inserted>0 && inserted<8, "Envelope point insertion failed");
+    require(p.getEnvelopeNodeCount()==9, "Envelope point count not updated");
+    p.setEnvelopeNode(inserted,.48f,.22f);
+    // Per-segment cubic controls must change the true DSP evaluation,
+    // remain bounded, and survive serialized host state.
+    p.setEnvelopeSegmentCurve(inserted, .7f);
+    require(std::abs(p.getEnvelopeSegmentCurve(inserted)-.7f)<.0001f,
+            "Cubic segment curvature was not applied");
+    const auto a=p.getEnvelopeNode(inserted);
+    const auto b=p.getEnvelopeNode(inserted+1);
+    const double halfway=((double)a.x+b.x)*.5;
+    const float bent=p.evaluateEnvelope(halfway);
+    p.setEnvelopeSegmentCurve(inserted, 0.f);
+    const float neutral=p.evaluateEnvelope(halfway);
+    require(std::abs(bent-neutral)>0.001f,
+            "Cubic curvature did not change the processed envelope");
+    p.setEnvelopeSegmentCurve(inserted, .7f);
+    for(int i=0;i<=100;++i){
+        const float v=p.evaluateEnvelope((double)i/100.0);
+        require(std::isfinite(v)&&v>=0.f&&v<=1.f,"Cubic envelope overshoot");
+    }
+    const auto edited=p.getEnvelopeNode(inserted);
+    require(std::abs(edited.x-.48f)<.0001f &&
+            std::abs(edited.y-.22f)<.0001f, "Time and gain edits not applied");
+    require(p.evaluateEnvelope(.48) >= .219f &&
+            p.evaluateEnvelope(.48) <= .221f, "Envelope must pass exactly through node");
+    juce::MemoryBlock saved;
+    p.getStateInformation(saved);
+    DISidechainProcessor restored;
+    restored.setStateInformation(saved.getData(),(int)saved.getSize());
+    require(restored.getEnvelopeNodeCount()==9, "New envelope node count not restored");
+    require(std::abs(restored.getEnvelopeSegmentCurve(inserted)-.7f)<.0001f,
+            "Cubic envelope curvature lost during state restoration");
+    const auto after=restored.getEnvelopeNode(inserted);
+    require(std::abs(after.x-.48f)<.0001f &&
+            std::abs(after.y-.22f)<.0001f, "Envelope node state not restored");
+    require(restored.removeEnvelopeNode(inserted), "Envelope node removal failed");
+    require(restored.getEnvelopeNodeCount()==8, "Envelope point removal count wrong");
+    require(!restored.removeEnvelopeNode(0), "Endpoint should be protected");
+    require(!restored.removeEnvelopeNode(7), "Last endpoint should be protected");
+    for(int i=0;i<=256;++i)
+    {
+        const float v=restored.evaluateEnvelope(i/256.);
+        require(std::isfinite(v) && v>=0.f && v<=1.f, "Variable envelope out of range");
+    }
+    // Existing sessions without envelopeCount must still use the legacy path.
+    DISidechainProcessor legacy;
+    require(legacy.getEnvelopeNodeCount()==8, "Legacy fallback count changed");
+    require(std::abs(legacy.evaluateEnvelope(.5)-preserved)<.0001f, "Legacy curve changed");
+    juce::MemoryBlock legacySaved;
+    legacy.getStateInformation(legacySaved);
+    DISidechainProcessor loadedLegacy;
+    loadedLegacy.setStateInformation(legacySaved.getData(),(int)legacySaved.getSize());
+    require(std::abs(loadedLegacy.evaluateEnvelope(.5)-preserved)<.0001f, "Legacy state migration changed envelope");
+}
+
+static void concurrentEnvelopeEditingStress()
+{
+    DISidechainProcessor processor;
+    processor.prepareToPlay(48000., 128);
+    set(processor, "trigger", 2); // MIDI only
+
+    std::atomic<bool> editsDone {false};
+    std::thread editorThread([&] {
+        for (int pass=0;pass<300;++pass)
+        {
+            const float position=.15f+((pass%65)/100.f);
+            const int inserted=processor.insertEnvelopeNode(position,.2f+(pass%6)*.1f);
+            if(inserted>0)
+            {
+                processor.setEnvelopeSegmentCurve(inserted,((pass%11)-5)/5.f);
+                processor.setEnvelopeNode(inserted,position,.15f+(pass%8)*.1f);
+                processor.removeEnvelopeNode(inserted);
+            }
+            // Modifying the curve while audio is processing must remain
+            // bounded, finite, and free of data races / invalid indices.
+            processor.setEnvelopeNode(1,.1f,.15f+(pass%7)*.1f);
+        }
+        editsDone.store(true,std::memory_order_release);
+    });
+
+    bool valid=true;
+    for (int pass=0;pass<400;++pass)
+    {
+        juce::AudioBuffer<float> buffer(2,128);
+        buffer.clear();
+        for (int ch=0;ch<2;++ch)
+            for (int sample=0;sample<128;++sample)
+                buffer.setSample(ch,sample,.3f);
+        juce::MidiBuffer midi;
+        if(pass%4==0)midi.addEvent(juce::MidiMessage::noteOn(1,60,(juce::uint8)100),0);
+        processor.processBlock(buffer,midi);
+        for(int sample=0;sample<128;++sample)
+        {
+            const float result=buffer.getSample(0,sample);
+            if(!std::isfinite(result)||std::abs(result)>1.f)valid=false;
+        }
+        const float envelope=processor.evaluateEnvelope((pass%101)/100.);
+        if(!std::isfinite(envelope)||envelope<0.f||envelope>1.f)valid=false;
+    }
+    editorThread.join();
+    require(editsDone.load(std::memory_order_acquire),
+            "Concurrent envelope editor did not complete");
+    require(valid,"Concurrent envelope editing produced invalid DSP output");
+    processor.releaseResources();
 }
 
 static void audioSidechainTrigger()
@@ -112,7 +248,19 @@ static void processingAndState()
                     for (int i = 0; i < 512; ++i) buffer.setSample(ch, i, 0.5f);
                 midi.clear();
                 midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8) 100), 0);
+                const auto triggerCountBefore = p.triggerSequence.load();
                 p.processBlock(buffer, midi);
+                if (mode == 0)
+                {
+                    require(p.triggerSequence.load() > triggerCountBefore,
+                            "MIDI note-on not reflected by trigger activity counter");
+                    const auto phase = p.visualPhase.load();
+                    const auto gainDb = p.visualGainReductionDb.load();
+                    require(std::isfinite(phase) && phase >= 0.f && phase <= 1.f,
+                            "UI envelope phase meter out of range");
+                    require(std::isfinite(gainDb) && gainDb <= 0.f,
+                            "UI gain reduction meter invalid");
+                }
                 float minimum = 1;
                 for (int ch = 0; ch < 2; ++ch)
                     for (int i = 0; i < 512; ++i)
@@ -150,6 +298,9 @@ int main()
         processor.releaseResources();
         processingAndState();
         audioSidechainTrigger();
+        envelopeInterpolationRegression();
+        editableEnvelopeRoundtrip();
+        concurrentEnvelopeEditingStress();
         std::cout << "Editor lifecycle, attachments, MIDI, bus layouts and state: PASS\n";
         return 0;
     }
