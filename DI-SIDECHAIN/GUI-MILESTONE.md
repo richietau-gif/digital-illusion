@@ -43,3 +43,10 @@ Merge the stability PR #1 before merging this GUI PR. The GUI PR uses the
 stability branch as its base. GitHub Windows CI must pass both CTest and
 pluginval before any human install test; a green CI result alone does not
 prove host compatibility.
+
+## CI verification for this revision
+
+Run the Windows VST3 workflow against the **feature/di-sidechain-v1-gui**
+branch or let a pull-request synchronization commit trigger it. The run must
+compile the VST3, execute CTest, run pluginval and upload the VST3 artifact.
+A failed or cancelled run is not a verified plugin release.
