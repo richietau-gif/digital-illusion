@@ -12,6 +12,8 @@ public:
     void mouseDown(const juce::MouseEvent&) override;
     void mouseDrag(const juce::MouseEvent&) override;
     void mouseUp(const juce::MouseEvent&) override;
+    void mouseDoubleClick(const juce::MouseEvent&) override;
+    bool keyPressed(const juce::KeyPress&) override;
 private:
     void timerCallback() override { repaint(); }
     void updatePoint(const juce::MouseEvent&);
@@ -30,6 +32,8 @@ private:
     juce::LookAndFeel_V4 skin;
     bool advanced = false;
     int bandHandle = -1;
+    int selectedPoint = -1;
+    bool snapToGrid = false;
     static constexpr float designWidth = 700.f;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DISidechainEditor)
 };
