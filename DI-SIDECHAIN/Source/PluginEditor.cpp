@@ -243,3 +243,4 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
 void DISidechainEditor::mouseDrag(const juce::MouseEvent& e){
     if(bandHandle>=0)updateBand(e);else updatePoint(e);
 }
+void DISidechainEditor::mouseUp(const juce::MouseEvent&){bandHandle=-1;}
