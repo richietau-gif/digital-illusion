@@ -141,7 +141,7 @@ void DISidechainEditor::paint(juce::Graphics& g){
     text(g,"0",12,{36,421,50,20},muted);
     text(g,"100%",12,{598,421,57,20},muted,juce::Justification::centredRight);
     text(g,"0 dB",10,{19,445,90,18},muted);
-    text(g,"DOUBLE-CLICK: ADD · DELETE: REMOVE",9,{219,445,265,18},accent,juce::Justification::centred);
+    text(g,"DOUBLE-CLICK: ADD · ALT-DRAG: CURVE",9,{206,445,295,18},accent,juce::Justification::centred);
     text(g,"-inf dB",10,{581,445,95,18},muted,juce::Justification::centredRight);
     text(g,"FREQUENCY TARGET",11,{11,488,255,22},pale);
     text(g,"ILLUSTRATIVE BARS · DSP CUTOFFS BELOW",9,{406,488,276,22},muted,juce::Justification::centredRight);
@@ -237,6 +237,15 @@ void DISidechainEditor::updateBand(const juce::MouseEvent& e){
 void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
     auto q=localDesignPoint(e);
     if(q.x>=460&&q.x<=680&&q.y>=119&&q.y<=144){snapToGrid=!snapToGrid;repaint();return;}
+    if(graph.contains(q)&&e.mods.isAltDown()){
+        // Alt-drag the curve segment, with per-segment cubic shaping.
+        const float t=juce::jlimit(0.f,1.f,(q.x-graph.getX())/graph.getWidth());
+        curvatureSegment=proc.getEnvelopeNodeCount()-2;
+        for(int i=0;i<proc.getEnvelopeNodeCount()-1;++i)
+            if(t<=proc.getEnvelopeNode(i+1).x){curvatureSegment=i;break;}
+        grabKeyboardFocus();
+        return;
+    }
     if(graph.contains(q)){
         // Only a node grabs the mouse. Clicking an empty part of the plot
         // does not alter a possibly distant node.
@@ -275,9 +284,15 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
     }
 }
 void DISidechainEditor::mouseDrag(const juce::MouseEvent& e){
+    if(curvatureSegment>=0){
+        const auto q=localDesignPoint(e);
+        const float amount=juce::jlimit(-1.f,1.f,(graph.getCentreY()-q.y)/(graph.getHeight()*.5f));
+        proc.setEnvelopeSegmentCurve(curvatureSegment,amount);
+        repaint();return;
+    }
     if(bandHandle>=0)updateBand(e);else updatePoint(e);
 }
-void DISidechainEditor::mouseUp(const juce::MouseEvent&){bandHandle=-1;}
+void DISidechainEditor::mouseUp(const juce::MouseEvent&){bandHandle=-1;curvatureSegment=-1;}
 void DISidechainEditor::mouseDoubleClick(const juce::MouseEvent& e){
     const auto q=localDesignPoint(e);
     if(!graph.contains(q))return;
