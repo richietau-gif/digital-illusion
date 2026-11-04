@@ -73,6 +73,48 @@ static void envelopeInterpolationRegression()
             "Envelope phase greater than one is not clamped");
 }
 
+static void editableEnvelopeRoundtrip()
+{
+    DISidechainProcessor p;
+    require(p.getEnvelopeNodeCount()==8, "Legacy eight-node default missing");
+    const float preserved=p.evaluateEnvelope(0.5);
+    const int inserted=p.insertEnvelopeNode(.46f,.12f);
+    require(inserted>0 && inserted<8, "Envelope point insertion failed");
+    require(p.getEnvelopeNodeCount()==9, "Envelope point count not updated");
+    p.setEnvelopeNode(inserted,.48f,.22f);
+    const auto edited=p.getEnvelopeNode(inserted);
+    require(std::abs(edited.x-.48f)<.0001f &&
+            std::abs(edited.y-.22f)<.0001f, "Time and gain edits not applied");
+    require(p.evaluateEnvelope(.48) >= .219f &&
+            p.evaluateEnvelope(.48) <= .221f, "Envelope must pass exactly through node");
+    juce::MemoryBlock saved;
+    p.getStateInformation(saved);
+    DISidechainProcessor restored;
+    restored.setStateInformation(saved.getData(),(int)saved.getSize());
+    require(restored.getEnvelopeNodeCount()==9, "New envelope node count not restored");
+    const auto after=restored.getEnvelopeNode(inserted);
+    require(std::abs(after.x-.48f)<.0001f &&
+            std::abs(after.y-.22f)<.0001f, "Envelope node state not restored");
+    require(restored.removeEnvelopeNode(inserted), "Envelope node removal failed");
+    require(restored.getEnvelopeNodeCount()==8, "Envelope point removal count wrong");
+    require(!restored.removeEnvelopeNode(0), "Endpoint should be protected");
+    require(!restored.removeEnvelopeNode(7), "Last endpoint should be protected");
+    for(int i=0;i<=256;++i)
+    {
+        const float v=restored.evaluateEnvelope(i/256.);
+        require(std::isfinite(v) && v>=0.f && v<=1.f, "Variable envelope out of range");
+    }
+    // Existing sessions without envelopeCount must still use the legacy path.
+    DISidechainProcessor legacy;
+    require(legacy.getEnvelopeNodeCount()==8, "Legacy fallback count changed");
+    require(std::abs(legacy.evaluateEnvelope(.5)-preserved)<.0001f, "Legacy curve changed");
+    juce::MemoryBlock legacySaved;
+    legacy.getStateInformation(legacySaved);
+    DISidechainProcessor loadedLegacy;
+    loadedLegacy.setStateInformation(legacySaved.getData(),(int)legacySaved.getSize());
+    require(std::abs(loadedLegacy.evaluateEnvelope(.5)-preserved)<.0001f, "Legacy state migration changed envelope");
+}
+
 static void audioSidechainTrigger()
 {
     DISidechainProcessor p;
@@ -186,6 +228,7 @@ int main()
         processingAndState();
         audioSidechainTrigger();
         envelopeInterpolationRegression();
+        editableEnvelopeRoundtrip();
         std::cout << "Editor lifecycle, attachments, MIDI, bus layouts and state: PASS\n";
         return 0;
     }
