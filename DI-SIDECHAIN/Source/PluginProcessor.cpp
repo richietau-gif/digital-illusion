@@ -17,7 +17,103 @@ DISidechainProcessor::DISidechainProcessor():AudioProcessor(BusesProperties().wi
 }
 bool DISidechainProcessor::isBusesLayoutSupported(const BusesLayout& b) const {return b.getMainInputChannelSet()==juce::AudioChannelSet::stereo()&&b.getMainOutputChannelSet()==juce::AudioChannelSet::stereo()&&(b.inputBuses.size()<2||b.inputBuses[1].isDisabled()||b.inputBuses[1]==juce::AudioChannelSet::mono()||b.inputBuses[1]==juce::AudioChannelSet::stereo());}
 void DISidechainProcessor::prepareToPlay(double sampleRate,int maxBlock){sr=sampleRate;phase=1;detector=0;armed=true;refractory=0;smoothGain=1;juce::dsp::ProcessSpec spec{sampleRate,(juce::uint32)juce::jmax(1,maxBlock),1};for(auto& c:filters){c.low.prepare(spec);c.high.prepare(spec);c.low.setType(juce::dsp::LinkwitzRileyFilterType::lowpass);c.high.setType(juce::dsp::LinkwitzRileyFilterType::highpass);c.low.reset();c.high.reset();}}
-float DISidechainProcessor::evaluateEnvelope(double t) const {t=juce::jlimit(0.0,1.0,t);double x=t*7;int i=juce::jmin(6,(int)x);float a=points[i].load(),b=points[i+1].load();float u=(float)(x-i);u=u*u*(3-2*u);return a+(b-a)*u;}
+int DISidechainProcessor::getEnvelopeNodeCount() const noexcept {
+    const int n=activeNodeCount.load(std::memory_order_acquire);
+    return n >= 2 ? juce::jlimit(2,maxEnvelopeNodes,n) : 8;
+}
+DISidechainProcessor::EnvelopeNode DISidechainProcessor::getEnvelopeNode(int index) const noexcept {
+    const int count=activeNodeCount.load(std::memory_order_acquire);
+    const int n=count>=2 ? juce::jlimit(2,maxEnvelopeNodes,count) : 8;
+    index=juce::jlimit(0,n-1,index);
+    if(count<2) return {(float)index/7.f,juce::jlimit(0.f,1.f,points[index].load())};
+    const float x=nodeX[index].load(std::memory_order_relaxed);
+    const float y=nodeY[index].load(std::memory_order_relaxed);
+    return {juce::jlimit(0.f,1.f,std::isfinite(x)?x:0.f),
+            juce::jlimit(0.f,1.f,std::isfinite(y)?y:1.f)};
+}
+void DISidechainProcessor::adoptLegacyPoints() noexcept {
+    if(activeNodeCount.load(std::memory_order_acquire)>=2)return;
+    for(int i=0;i<8;++i){
+        nodeX[i].store((float)i/7.f,std::memory_order_relaxed);
+        nodeY[i].store(juce::jlimit(0.f,1.f,points[i].load()),std::memory_order_relaxed);
+    }
+    activeNodeCount.store(8,std::memory_order_release);
+}
+void DISidechainProcessor::setEnvelopeNode(int index,float x,float y) noexcept {
+    adoptLegacyPoints();
+    const int n=getEnvelopeNodeCount();
+    if(index<0||index>=n)return;
+    if(!std::isfinite(x)||!std::isfinite(y))return;
+    if(index==0)x=0.f;
+    else if(index==n-1)x=1.f;
+    else {
+        const float left=nodeX[index-1].load(std::memory_order_relaxed);
+        const float right=nodeX[index+1].load(std::memory_order_relaxed);
+        x=juce::jlimit(left+0.001f,right-0.001f,x);
+    }
+    nodeX[index].store(x,std::memory_order_relaxed);
+    nodeY[index].store(juce::jlimit(0.f,1.f,y),std::memory_order_relaxed);
+}
+int DISidechainProcessor::insertEnvelopeNode(float x,float y) noexcept {
+    if(!std::isfinite(x)||!std::isfinite(y))return -1;
+    adoptLegacyPoints();
+    const int n=getEnvelopeNodeCount();
+    if(n>=maxEnvelopeNodes)return -1;
+    x=juce::jlimit(0.001f,0.999f,x);
+    int index=1;
+    while(index<n&&nodeX[index].load(std::memory_order_relaxed)<x)++index;
+    const float left=nodeX[index-1].load(std::memory_order_relaxed);
+    const float right=nodeX[index].load(std::memory_order_relaxed);
+    if(right-left<0.002f)return -1;
+    x=juce::jlimit(left+0.001f,right-0.001f,x);
+    for(int i=n;i>index;--i){
+        nodeX[i].store(nodeX[i-1].load(std::memory_order_relaxed),std::memory_order_relaxed);
+        nodeY[i].store(nodeY[i-1].load(std::memory_order_relaxed),std::memory_order_relaxed);
+    }
+    nodeX[index].store(x,std::memory_order_relaxed);
+    nodeY[index].store(juce::jlimit(0.f,1.f,y),std::memory_order_relaxed);
+    activeNodeCount.store(n+1,std::memory_order_release);
+    return index;
+}
+bool DISidechainProcessor::removeEnvelopeNode(int index) noexcept {
+    adoptLegacyPoints();
+    const int n=getEnvelopeNodeCount();
+    if(index<=0||index>=n-1||n<=2)return false;
+    // Reduce the visible count first so a concurrent reader cannot see a stale final slot.
+    activeNodeCount.store(n-1,std::memory_order_release);
+    for(int i=index;i<n-1;++i){
+        nodeX[i].store(nodeX[i+1].load(std::memory_order_relaxed),std::memory_order_relaxed);
+        nodeY[i].store(nodeY[i+1].load(std::memory_order_relaxed),std::memory_order_relaxed);
+    }
+    return true;
+}
+float DISidechainProcessor::evaluateEnvelope(double t) const noexcept {
+    if(!std::isfinite(t))return 1.f;
+    t=juce::jlimit(0.0,1.0,t);
+    const int count=activeNodeCount.load(std::memory_order_acquire);
+    if(count<2){
+        const double x=t*7.0;
+        const int i=juce::jmin(6,(int)x);
+        const float a=points[i].load(std::memory_order_relaxed);
+        const float b=points[i+1].load(std::memory_order_relaxed);
+        float u=(float)(x-i);u=u*u*(3.f-2.f*u);
+        return juce::jlimit(0.f,1.f,a+(b-a)*u);
+    }
+    const int n=juce::jlimit(2,maxEnvelopeNodes,count);
+    auto left=getEnvelopeNode(0);
+    for(int i=1;i<n;++i){
+        auto right=getEnvelopeNode(i);
+        if(t<=right.x||i==n-1){
+            const float span=right.x-left.x;
+            if(span<=0.000001f)return right.y;
+            float u=juce::jlimit(0.f,1.f,((float)t-left.x)/span);
+            u=u*u*(3.f-2.f*u);
+            return juce::jlimit(0.f,1.f,left.y+(right.y-left.y)*u);
+        }
+        left=right;
+    }
+    return left.y;
+}
 void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::MidiBuffer& midi){
  juce::ScopedNoDenormals noDenormals;
  auto main=getBusBuffer(buffer,true,0);int n=main.getNumSamples();if(n<=0||main.getNumChannels()<2||!std::isfinite(sr)||sr<=0)return;
@@ -44,7 +140,49 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  }
  meter.store(peak);visualPhase.store((float)phase,std::memory_order_relaxed);visualGainReductionDb.store(juce::Decibels::gainToDecibels(juce::jmax(0.000001f,smoothGain),-120.f),std::memory_order_relaxed);midi.clear();
 }
-void DISidechainProcessor::getStateInformation(juce::MemoryBlock& dest){auto tree=state.copyState();for(int i=0;i<8;++i)tree.setProperty("point"+juce::String(i),points[i].load(),nullptr);if(auto xml=tree.createXml())copyXmlToBinary(*xml,dest);}
-void DISidechainProcessor::setStateInformation(const void* data,int bytes){if(auto xml=getXmlFromBinary(data,bytes)){auto tree=juce::ValueTree::fromXml(*xml);if(tree.isValid()){for(int i=0;i<8;++i)points[i]=(float)tree.getProperty("point"+juce::String(i),points[i].load());state.replaceState(tree);}}}
+void DISidechainProcessor::getStateInformation(juce::MemoryBlock& dest){
+    auto tree=state.copyState();
+    for(int i=0;i<8;++i)tree.setProperty("point"+juce::String(i),points[i].load(),nullptr);
+    const int count=activeNodeCount.load(std::memory_order_acquire);
+    if(count>=2){
+        tree.setProperty("envelopeVersion",2,nullptr);
+        tree.setProperty("envelopeCount",count,nullptr);
+        for(int i=0;i<juce::jmin(count,maxEnvelopeNodes);++i){
+            const auto node=getEnvelopeNode(i);
+            tree.setProperty("envX"+juce::String(i),node.x,nullptr);
+            tree.setProperty("envY"+juce::String(i),node.y,nullptr);
+        }
+    }
+    if(auto xml=tree.createXml())copyXmlToBinary(*xml,dest);
+}
+void DISidechainProcessor::setStateInformation(const void* data,int bytes){
+    if(auto xml=getXmlFromBinary(data,bytes)){
+        auto tree=juce::ValueTree::fromXml(*xml);
+        if(tree.isValid()){
+            // Legacy sessions have no envelopeCount and retain the original eight points.
+            activeNodeCount.store(0,std::memory_order_release);
+            for(int i=0;i<8;++i)
+                points[i].store(juce::jlimit(0.f,1.f,(float)tree.getProperty("point"+juce::String(i),points[i].load())),std::memory_order_relaxed);
+            const int count=(int)tree.getProperty("envelopeCount",0);
+            if(count>=2&&count<=maxEnvelopeNodes){
+                bool valid=tree.hasProperty("envX0")&&tree.hasProperty("envY0");
+                float previous=-1.f;
+                for(int i=0;i<count&&valid;++i){
+                    const float x=(float)tree.getProperty("envX"+juce::String(i),-1.f);
+                    const float y=(float)tree.getProperty("envY"+juce::String(i),-1.f);
+                    valid=std::isfinite(x)&&std::isfinite(y)&&x>=0.f&&x<=1.f&&
+                          y>=0.f&&y<=1.f&&(i==0||x>previous);
+                    if(valid){
+                        nodeX[i].store(x,std::memory_order_relaxed);
+                        nodeY[i].store(y,std::memory_order_relaxed);
+                    }
+                    previous=x;
+                }
+                if(valid)activeNodeCount.store(count,std::memory_order_release);
+            }
+            state.replaceState(tree);
+        }
+    }
+}
 juce::AudioProcessorEditor* DISidechainProcessor::createEditor(){return new DISidechainEditor(*this);}
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter(){return new DISidechainProcessor();}
