@@ -34,6 +34,7 @@ DISidechainProcessor::EnvelopeNode DISidechainProcessor::getEnvelopeNode(int ind
 void DISidechainProcessor::adoptLegacyPoints() noexcept {
     if(activeNodeCount.load(std::memory_order_acquire)>=2)return;
     for(int i=0;i<8;++i){
+        nodeCurve[i].store(0.f,std::memory_order_relaxed);
         nodeX[i].store((float)i/7.f,std::memory_order_relaxed);
         nodeY[i].store(juce::jlimit(0.f,1.f,points[i].load()),std::memory_order_relaxed);
     }
@@ -69,7 +70,9 @@ int DISidechainProcessor::insertEnvelopeNode(float x,float y) noexcept {
     for(int i=n;i>index;--i){
         nodeX[i].store(nodeX[i-1].load(std::memory_order_relaxed),std::memory_order_relaxed);
         nodeY[i].store(nodeY[i-1].load(std::memory_order_relaxed),std::memory_order_relaxed);
+        nodeCurve[i].store(nodeCurve[i-1].load(std::memory_order_relaxed),std::memory_order_relaxed);
     }
+    nodeCurve[index].store(0.f,std::memory_order_relaxed);
     nodeX[index].store(x,std::memory_order_relaxed);
     nodeY[index].store(juce::jlimit(0.f,1.f,y),std::memory_order_relaxed);
     activeNodeCount.store(n+1,std::memory_order_release);
@@ -84,8 +87,31 @@ bool DISidechainProcessor::removeEnvelopeNode(int index) noexcept {
     for(int i=index;i<n-1;++i){
         nodeX[i].store(nodeX[i+1].load(std::memory_order_relaxed),std::memory_order_relaxed);
         nodeY[i].store(nodeY[i+1].load(std::memory_order_relaxed),std::memory_order_relaxed);
+        nodeCurve[i].store(nodeCurve[i+1].load(std::memory_order_relaxed),std::memory_order_relaxed);
     }
     return true;
+}
+float DISidechainProcessor::getEnvelopeSegmentCurve(int segment) const noexcept {
+    const int n=getEnvelopeNodeCount();
+    if(segment<0||segment>=n-1)return 0.f;
+    if(activeNodeCount.load(std::memory_order_acquire)<2)return 0.f;
+    const float v=nodeCurve[segment].load(std::memory_order_relaxed);
+    return std::isfinite(v)?juce::jlimit(-1.f,1.f,v):0.f;
+}
+void DISidechainProcessor::setEnvelopeSegmentCurve(int segment,float value) noexcept {
+    if(!std::isfinite(value))return;
+    adoptLegacyPoints();
+    const int n=getEnvelopeNodeCount();
+    if(segment<0||segment>=n-1)return;
+    nodeCurve[segment].store(juce::jlimit(-1.f,1.f,value),std::memory_order_relaxed);
+}
+static float cubicEnvelopeEase(float u,float curve) noexcept {
+    // Bezier y(t) with P0=(0,0) and P3=(1,1).
+    // Monotone, bounded control values avoid DSP overshoot.
+    const float c1=curve>0.f?curve*.8f:0.f;
+    const float c2=curve<0.f?1.f+curve*.8f:1.f;
+    const float inv=1.f-u;
+    return 3.f*inv*inv*u*c1+3.f*inv*u*u*c2+u*u*u;
 }
 float DISidechainProcessor::evaluateEnvelope(double t) const noexcept {
     if(!std::isfinite(t))return 1.f;
@@ -107,7 +133,7 @@ float DISidechainProcessor::evaluateEnvelope(double t) const noexcept {
             const float span=right.x-left.x;
             if(span<=0.000001f)return right.y;
             float u=juce::jlimit(0.f,1.f,((float)t-left.x)/span);
-            u=u*u*(3.f-2.f*u);
+            u=cubicEnvelopeEase(u,getEnvelopeSegmentCurve(i-1));
             return juce::jlimit(0.f,1.f,left.y+(right.y-left.y)*u);
         }
         left=right;
@@ -151,6 +177,7 @@ void DISidechainProcessor::getStateInformation(juce::MemoryBlock& dest){
             const auto node=getEnvelopeNode(i);
             tree.setProperty("envX"+juce::String(i),node.x,nullptr);
             tree.setProperty("envY"+juce::String(i),node.y,nullptr);
+            tree.setProperty("envCurve"+juce::String(i),getEnvelopeSegmentCurve(i),nullptr);
         }
     }
     if(auto xml=tree.createXml())copyXmlToBinary(*xml,dest);
@@ -175,6 +202,8 @@ void DISidechainProcessor::setStateInformation(const void* data,int bytes){
                     if(valid){
                         nodeX[i].store(x,std::memory_order_relaxed);
                         nodeY[i].store(y,std::memory_order_relaxed);
+                        const float rawCurve=(float)tree.getProperty("envCurve"+juce::String(i),0.f);
+                        nodeCurve[i].store(std::isfinite(rawCurve)?juce::jlimit(-1.f,1.f,rawCurve):0.f,std::memory_order_relaxed);
                     }
                     previous=x;
                 }
