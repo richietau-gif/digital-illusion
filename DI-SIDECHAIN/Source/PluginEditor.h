@@ -16,6 +16,7 @@ public:
     bool keyPressed(const juce::KeyPress&) override;
 private:
     void timerCallback() override;
+    void updateSpectrum();
     void updatePoint(const juce::MouseEvent&);
     void updateBand(const juce::MouseEvent&);
     void setParameter(const char*, float);
@@ -30,6 +31,10 @@ private:
     std::unique_ptr<juce::ToggleButton> sync;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> ba;
     juce::LookAndFeel_V4 skin;
+    juce::dsp::FFT spectrumFft {11};
+    std::array<float,4096> spectrumWork {};
+    std::array<float,24> spectrumBands {};
+    uint64_t lastSpectrumPosition = 0;
     bool advanced = false;
     int bandHandle = -1;
     int selectedPoint = -1;
