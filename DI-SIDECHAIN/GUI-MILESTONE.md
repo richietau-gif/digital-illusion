@@ -7,7 +7,10 @@ are intentionally preserved.
 ## Controls implemented
 
 - **Top selectors:** Trigger (Audio+MIDI, Audio, MIDI), **MODE (One Shot / Loop)**,
-  and rhythmic division. FULL/LOW/HIGH/BAND remain in Frequency Target below.
+  and rhythmic division. LENGTH offers 1/32 through 2 bars, plus appended
+  1/16T, 1/8T, 1/4T triplets and 1/16D, 1/8D, 1/4D dotted choices.
+  Original division indices 0–6 have not changed, preserving old Sets.
+  FULL/LOW/HIGH/BAND remain in Frequency Target below.
   **One Shot** starts an envelope at every accepted audio or MIDI event.
   **Loop** repeats automatically. When the host provides transport PPQ and tempo
   with SYNC enabled, the loop is locked to the musical timeline; otherwise
