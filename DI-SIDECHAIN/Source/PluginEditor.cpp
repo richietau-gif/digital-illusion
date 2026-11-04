@@ -5,7 +5,13 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  for(int i=0;i<8;++i){auto s=std::make_unique<juce::Slider>();s->setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);s->setTextBoxStyle(juce::Slider::TextBoxBelow,false,95,19);s->setColour(juce::Slider::rotarySliderFillColourId,juce::Colour(0xffff6969));auto l=std::make_unique<juce::Label>();l->setText(names[i],juce::dontSendNotification);l->setJustificationType(juce::Justification::centred);l->setColour(juce::Label::textColourId,juce::Colours::lightgrey);addAndMakeVisible(*s);addAndMakeVisible(*l);sa.push_back(std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(p.state,ids[i],*s));sliders.push_back(std::move(s));labels.push_back(std::move(l));}
  const char* cids[]={"mode","trigger","division"};const juce::StringArray choices[]={ {"Full","Low","High","Band"},{"Audio + MIDI","Audio only","MIDI only"},{"1/32","1/16","1/8","1/4","1/2","1 bar","2 bars"}};
  for(int i=0;i<3;++i){auto c=std::make_unique<juce::ComboBox>();c->addItemList(choices[i],1);addAndMakeVisible(*c);ca.push_back(std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(p.state,cids[i],*c));combos.push_back(std::move(c));}
- sync=std::make_unique<juce::ToggleButton>("Tempo sync");addAndMakeVisible(*sync);ba=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(p.state,"sync",*sync);setSize(850,550);startTimerHz(25);
+ sync=std::make_unique<juce::ToggleButton>("Tempo sync");addAndMakeVisible(*sync);ba=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(p.state,"sync",*sync);
+ // setSize synchronously calls resized(): all controls must exist first.
+ setSize(850,550);startTimerHz(25);
+}
+DISidechainEditor::~DISidechainEditor(){
+ // Stop callbacks and detach parameter listeners before destroying controls.
+ stopTimer();ba.reset();ca.clear();sa.clear();
 }
 void DISidechainEditor::paint(juce::Graphics& g){g.fillAll(juce::Colour(0xff11151e));g.setColour(juce::Colours::white);g.setFont(juce::FontOptions(27.f,juce::Font::bold));g.drawText("DI SIDECHAIN",24,14,350,45,juce::Justification::centredLeft);g.setColour(juce::Colour(0xffff6969));g.fillRect(24,62,802,2);
  g.setColour(juce::Colour(0xff1b2330));g.fillRoundedRectangle(graph.toFloat(),9);g.setColour(juce::Colour(0xff354151));for(int i=0;i<=7;++i){float x=graph.getX()+graph.getWidth()*i/7.f;g.drawVerticalLine((int)x,(float)graph.getY(),(float)graph.getBottom());}for(int i=0;i<=4;++i){float y=graph.getY()+graph.getHeight()*i/4.f;g.drawHorizontalLine((int)y,(float)graph.getX(),(float)graph.getRight());}
