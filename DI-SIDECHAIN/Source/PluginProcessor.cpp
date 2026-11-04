@@ -9,6 +9,7 @@ static juce::AudioProcessorValueTreeState::ParameterLayout layoutParams(){
  f("midiChannel","MIDI trigger channel (0 = any)",0,16,0);
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"mode",1},"Frequency mode",juce::StringArray{"Full","Low","High","Band"},0));
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"trigger",1},"Trigger mode",juce::StringArray{"Audio + MIDI","Audio only","MIDI only"},0));
+ p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"playbackMode",1},"Envelope playback",juce::StringArray{"One Shot","Loop"},0));
  p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"sync",1},"Tempo sync",true));
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"division",1},"Beat division",juce::StringArray{"1/32","1/16","1/8","1/4","1/2","1 bar","2 bars"},2));
  return {p.begin(),p.end()};
@@ -164,6 +165,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  juce::AudioBuffer<float> side; if(hasSide){auto view=getBusBuffer(buffer,true,1);side.setDataToReferTo(view.getArrayOfWritePointers(),view.getNumChannels(),view.getNumSamples());}
  auto get=[&](const char* id){return state.getRawParameterValue(id)->load();};
  int mode=(int)get("mode"),trig=(int)get("trigger");float depth=get("depth"),mix=get("mix");
+ const int playbackMode=juce::jlimit(0,1,juce::roundToInt(get("playbackMode")));
  const int midiNote=juce::jlimit(-1,127,juce::roundToInt(get("midiNote")));
  const int midiChannel=juce::jlimit(0,16,juce::roundToInt(get("midiChannel")));
  // Set both crossovers independently. BAND is HP(low) -> LP(high), not a
@@ -179,7 +181,17 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
   c.phaseLowPass.setCutoffFrequency(hi);
   c.phaseHighPass.setCutoffFrequency(hi);
  }
- double bpm=120; if(auto* ph=getPlayHead()){if(auto pos=ph->getPosition()){if(auto b=pos->getBpm())bpm=*b;}}
+ double bpm=120;
+ double hostPpq=0;
+ bool hostPpqAvailable=false,hostRunning=true;
+ if(auto* ph=getPlayHead()){
+  if(auto pos=ph->getPosition()){
+   if(auto b=pos->getBpm())bpm=*b;
+   if(auto beats=pos->getPpqPosition()){hostPpq=*beats;hostPpqAvailable=std::isfinite(hostPpq);}
+   if(auto playing=pos->getIsPlaying())hostRunning=*playing;
+  }
+ }
+ if(!std::isfinite(bpm)||bpm<=0)bpm=120;
  const double divisions[]={0.125,0.25,0.5,1,2,4,8};
  envelopeLength=get("sync")>0.5?60.0/juce::jmax(1.0,bpm)*divisions[juce::jlimit(0,6,(int)get("division"))]:get("length")/1000.0;
  double step=1.0/juce::jmax(1.0,envelopeLength*sr);int holdoff=(int)(get("retrigger")*.001*sr);float threshold=juce::Decibels::decibelsToGain(get("threshold"));float coeff=std::exp(-1.f/(float)(juce::jmax(.1f,get("smooth"))*.001*sr));
@@ -198,8 +210,29 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
   hasEvent=it.getNextEvent(msg,midiPos);
  }
  if(hasSide&&trig!=2&&side.getNumSamples()>=n){float v=0;for(int ch=0;ch<side.getNumChannels();++ch)v=juce::jmax(v,std::abs(side.getSample(ch,i)));detector=std::max((double)v,detector*.995);if(detector<threshold*.65)armed=true;if(armed&&detector>=threshold&&refractory==0){fire=true;armed=false;}}
- if(refractory>0)--refractory;if(fire){phase=0;refractory=holdoff;triggerSequence.fetch_add(1,std::memory_order_relaxed);}
- float env=phase>=1?1:evaluateEnvelope(phase);phase=juce::jmin(1.0,phase+step);
+ if(refractory>0)--refractory;
+ if(fire){phase=0;refractory=holdoff;triggerSequence.fetch_add(1,std::memory_order_relaxed);}
+ float env=1.f;
+ if(playbackMode==0){
+  // ONE SHOT: every accepted MIDI/audio event starts the envelope from zero.
+  env=phase>=1?1.f:evaluateEnvelope(phase);
+  phase=juce::jmin(1.0,phase+step);
+ }else if(hostRunning){
+  // LOOP: use the host's musical position when available, so each beat is
+  // repeatable on the Ableton timeline, including seek and loop playback.
+  if(hostPpqAvailable&&get("sync")>.5f){
+   const double beatsPerCycle=juce::jmax(.0001,envelopeLength*bpm/60.);
+   double beats=hostPpq+(double)i*bpm/(60.0*sr);
+   double cycle=std::fmod(beats,beatsPerCycle);
+   if(cycle<0)cycle+=beatsPerCycle;
+   phase=cycle/beatsPerCycle;
+  }
+  env=evaluateEnvelope(phase);
+  phase=hostPpqAvailable&&get("sync")>.5f ? phase : std::fmod(phase+step,1.0);
+ }else{
+  phase=1;
+  env=1.f;
+ }
  float target=1-depth*(1-env);smoothGain=coeff*smoothGain+(1-coeff)*target;
  for(int ch=0;ch<2;++ch){
   const float dry=main.getSample(ch,i);
