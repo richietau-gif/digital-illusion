@@ -135,7 +135,19 @@ static void processingAndState()
                     for (int i = 0; i < 512; ++i) buffer.setSample(ch, i, 0.5f);
                 midi.clear();
                 midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8) 100), 0);
+                const auto triggerCountBefore = p.triggerSequence.load();
                 p.processBlock(buffer, midi);
+                if (mode == 0)
+                {
+                    require(p.triggerSequence.load() > triggerCountBefore,
+                            "MIDI note-on not reflected by trigger activity counter");
+                    const auto phase = p.visualPhase.load();
+                    const auto gainDb = p.visualGainReductionDb.load();
+                    require(std::isfinite(phase) && phase >= 0.f && phase <= 1.f,
+                            "UI envelope phase meter out of range");
+                    require(std::isfinite(gainDb) && gainDb <= 0.f,
+                            "UI gain reduction meter invalid");
+                }
                 float minimum = 1;
                 for (int ch = 0; ch < 2; ++ch)
                     for (int i = 0; i < 512; ++i)
