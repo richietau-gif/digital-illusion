@@ -75,7 +75,44 @@ DISidechainEditor::~DISidechainEditor(){
     stopTimer();ba.reset();ca.clear();sa.clear();
     setLookAndFeel(nullptr);
 }
+void DISidechainEditor::updateSpectrum(){
+    const uint64_t written=proc.analyzerWritten.load(std::memory_order_acquire);
+    if(written<2048 || written==lastSpectrumPosition){
+        for(auto& band:spectrumBands)band*=.92f;
+        return;
+    }
+    lastSpectrumPosition=written;
+    constexpr int N=2048;
+    constexpr float twoPi=juce::MathConstants<float>::twoPi;
+    for(int i=0;i<N;++i){
+        const auto index=(written-N+(uint64_t)i)%N;
+        const float v=proc.analyzerHistory[index].load(std::memory_order_relaxed);
+        // Hann window on the message thread only; no FFT or allocations in DSP.
+        const float window=.5f-.5f*std::cos(twoPi*(float)i/(N-1));
+        spectrumWork[i]=(std::isfinite(v)?v:0.f)*window;
+    }
+    for(int i=N;i<2*N;++i)spectrumWork[i]=0.f;
+    spectrumFft.performFrequencyOnlyForwardTransform(spectrumWork.data());
+    const float sr=(float)juce::jmax(8000.0,proc.getSampleRate());
+    const float nyquist=sr*.5f;
+    for(int band=0;band<24;++band){
+        const float leftHz=20.f*std::pow(1000.f,(float)band/24.f);
+        const float rightHz=20.f*std::pow(1000.f,(float)(band+1)/24.f);
+        const int a=juce::jlimit(1,N/2,juce::roundToInt(leftHz*N/sr));
+        const int b=juce::jlimit(a,N/2,juce::roundToInt(juce::jmin(rightHz,nyquist)*N/sr));
+        float peak=0.f;
+        for(int bin=a;bin<=b;++bin)
+            peak=juce::jmax(peak,spectrumWork[bin]);
+        const float db=juce::Decibels::gainToDecibels(peak/(N*.5f),-90.f);
+        const float level=juce::jlimit(0.f,1.f,(db+76.f)/72.f);
+        // Fast attack and slower release give readable movement without GUI flicker.
+        spectrumBands[band]=level>spectrumBands[band]
+            ?(.65f*level+.35f*spectrumBands[band])
+            :(.2f*level+.8f*spectrumBands[band]);
+    }
+}
 void DISidechainEditor::timerCallback(){
+    updateSpectrum();
     const auto sequence=proc.triggerSequence.load(std::memory_order_relaxed);
     if(sequence!=lastTriggerSequence){lastTriggerSequence=sequence;triggerFlashTicks=3;}
     else if(triggerFlashTicks>0)--triggerFlashTicks;
@@ -144,11 +181,11 @@ void DISidechainEditor::paint(juce::Graphics& g){
     text(g,"DOUBLE-CLICK: ADD · ALT-DRAG: CURVE",9,{206,445,295,18},accent,juce::Justification::centred);
     text(g,"-inf dB",10,{581,445,95,18},muted,juce::Justification::centredRight);
     text(g,"FREQUENCY TARGET",11,{11,488,255,22},pale);
-    text(g,"ILLUSTRATIVE BARS · DSP CUTOFFS BELOW",9,{406,488,276,22},muted,juce::Justification::centredRight);
+    text(g,"LIVE INPUT SPECTRUM · 2048-POINT FFT",9,{400,488,282,22},muted,juce::Justification::centredRight);
     box(g,{27,533,646,86},panel,11);
     for(int i=0;i<24;++i) {
-        const float amp=14.f+std::abs(std::sin(i*0.43f+0.4f))*54.f;
-        box(g,{36.f+i*26.f,576.f-amp*.5f,13,amp},juce::Colour(0xff475368),4);
+        const float amp=4.f+juce::jlimit(0.f,1.f,spectrumBands[i])*69.f;
+        box(g,{36.f+i*26.f,576.f-amp*.5f,13,amp},juce::Colour(0xff55647b),4);
     }
     const int mode=juce::jlimit(0,3,(int)proc.state.getRawParameterValue("mode")->load());
     const float low=proc.state.getRawParameterValue("low")->load();
