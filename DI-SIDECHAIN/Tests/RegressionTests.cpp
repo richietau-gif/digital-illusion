@@ -394,6 +394,54 @@ static void midiBreakbeatNoteFilter()
     p.releaseResources();
 }
 
+static void stereoExternalAudioTriggerRegression()
+{
+    DISidechainProcessor p;
+    auto layout=p.getBusesLayout();
+    layout.inputBuses.set(1,juce::AudioChannelSet::stereo());
+    require(p.setBusesLayout(layout),"Stereo sidechain layout was rejected");
+    set(p,"trigger",1); // Audio only: ignores all incoming MIDI
+    set(p,"playbackMode",0); // One Shot
+    set(p,"sync",0);
+    set(p,"length",100);
+    set(p,"smooth",.1f);
+    set(p,"retrigger",1);
+    set(p,"threshold",-24.f);
+    set(p,"mode",0);
+    p.prepareToPlay(48000.,256);
+    juce::AudioBuffer<float> buffer(4,256);
+    juce::MidiBuffer midi;
+    const auto triggerBefore=p.triggerSequence.load();
+    for(int block=0;block<9;++block)
+    {
+        buffer.clear();
+        for(int i=0;i<256;++i)
+        {
+            buffer.setSample(0,i,.5f);
+            buffer.setSample(1,i,.5f);
+        }
+        // Three irregular external kick transients, alternating L/R.
+        // Audio input channels 2,3 must never leak into program audio.
+        if(block==0)for(int i=32;i<64;++i)buffer.setSample(2,i,.9f);
+        if(block==3)for(int i=70;i<102;++i)buffer.setSample(3,i,.9f);
+        if(block==7)for(int i=22;i<54;++i)buffer.setSample(2,i,.9f);
+        midi.clear();
+        midi.addEvent(juce::MidiMessage::noteOn(1,36,(juce::uint8)110),5);
+        p.processBlock(buffer,midi);
+        for(int channel=0;channel<2;++channel)
+            for(int i=0;i<256;++i)
+            {
+                const float out=buffer.getSample(channel,i);
+                require(std::isfinite(out),"Stereo audio sidechain produced nonfinite output");
+                require(out>=-0.001f&&out<=.5001f,
+                        "Stereo audio sidechain leaked into or amplified the main signal");
+            }
+    }
+    require(p.triggerSequence.load()==triggerBefore+3,
+            "Stereo external audio transients did not trigger exactly three times");
+    p.releaseResources();
+}
+
 static void audioSidechainTrigger()
 {
     DISidechainProcessor p;
@@ -525,6 +573,7 @@ int main()
         processor.releaseResources();
         processingAndState();
         audioSidechainTrigger();
+        stereoExternalAudioTriggerRegression();
         envelopeInterpolationRegression();
         editableEnvelopeRoundtrip();
         concurrentEnvelopeEditingStress();
