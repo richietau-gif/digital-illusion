@@ -18,6 +18,11 @@ are intentionally preserved.
   looping ducking when a host playing flag is available.
 - **SYNC:** toggles tempo-synced envelope length. Switch it off to use the
   milliseconds LENGTH parameter in Advanced Controls.
+- **Factory envelope presets:** choose Pump, Tight Kick, Smooth Duck,
+  Ghost Kick, Breakbeat or Wobble from the LOAD SHAPE selector above the
+  graph. Each applies seven real editable DSP nodes. Presets replace only
+  the envelope curve, preserving other FX settings and host automation.
+  The edited shape is automatically included in normal Ableton state saves.
 - **Volume envelope:** between 2 and 32 freely positioned DSP-backed nodes.
   Drag a node horizontally (time) or vertically (gain). Double-click empty
   plot space to insert one, right-click an interior node or press Delete to
@@ -44,6 +49,21 @@ are intentionally preserved.
   all channels, 1–16 = one channel. These parameters are automatable and saved
   with the host project. Incoming MIDI note-on triggers use host sample offsets
   and can retrigger at irregular breakbeat intervals.
+
+## FILTER visibility and editor layout
+
+- The FILTER checkbox is visible beside Frequency Target. **Clicking it ON
+  opens a dedicated creative-filter panel immediately below the main controls**
+  (1050 px editor height), rather than requiring Advanced Controls. LP/HP/BP/
+  Notch, 12/24 dB, Min/Max cutoff, Amount, Resonance and Drive are visible
+  there. Clicking OFF restores the compact 760 px layout.
+- Advanced Controls is an alternate detailed settings panel (1150 px editor
+  height) for detector, routing, crossovers and MULTI low/mid/high depth.
+  Clicking Advanced while the filter is enabled temporarily shows the
+  advanced settings instead of the FILTER editor; closing it returns to the
+  FILTER panel. No FX settings are lost by switching panels.
+- Window height follows automated FILTER enabled state on the UI message
+  thread. The output audio thread performs no UI operations.
 
 ## Creative OUTPUT FILTER for wobble sound design
 
