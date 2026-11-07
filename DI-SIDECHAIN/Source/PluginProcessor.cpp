@@ -1,6 +1,12 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include <cmath>
+
+// Stable antiderivative of tanh(x); used for first-order ADAA saturation.
+static float logCoshStable(float x) noexcept {
+ const float a=std::abs(x);
+ return a+std::log1p(std::exp(-2.f*a))-juce::MathConstants<float>::ln2;
+}
 static juce::AudioProcessorValueTreeState::ParameterLayout layoutParams(){
  std::vector<std::unique_ptr<juce::RangedAudioParameter>> p;
  auto f=[&](const char* id,const char* name,float lo,float hi,float def){p.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{id,1},name,juce::NormalisableRange<float>(lo,hi),def));};
@@ -45,6 +51,7 @@ void DISidechainProcessor::prepareToPlay(double sampleRate,int maxBlock){
  for(auto& channel:outputFilterStages)
   for(auto& stage:channel)stage={};
  outputFilterBlend=0.f;smoothedFilterQ=.70710678f;smoothedFilterDrive=0.f;
+ drivePreviousInput.fill(0.f);
  visualFilterCutoffHz.store(20000.f);
  juce::dsp::ProcessSpec spec{sampleRate,(juce::uint32)juce::jmax(1,maxBlock),1};
  for(auto& c:filters){
@@ -349,11 +356,21 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
   // Pre-filter soft saturation: DRIVE 0 is exactly transparent. At higher
   // settings the soft-clipping signal excites the resonant filter harmonics.
   float filteredInput=out;
-  if(smoothedFilterDrive>0.00001f){
-   const float driveGain=1.f+15.f*smoothedFilterDrive*smoothedFilterDrive;
-   const float saturation=std::tanh(out*driveGain)/
-       juce::jmax(.001f,std::tanh(driveGain));
-   filteredInput=out+smoothedFilterDrive*(saturation-out);
+  const float driveGain=1.f+15.f*smoothedFilterDrive*smoothedFilterDrive;
+  const float drivenInput=juce::jlimit(-128.f,128.f,out*driveGain);
+  auto& previousDrive=drivePreviousInput[(size_t)ch];
+  // First-order antiderivative anti-aliasing (ADAA) of tanh:
+  // (log cosh(x[n]) - log cosh(x[n-1])) / (x[n] - x[n-1]).
+  // Stable around equal inputs and large drive; unlike raw tanh it
+  // attenuates alias products without allocation or adding host latency.
+  const float delta=drivenInput-previousDrive;
+  const float saturated=std::abs(delta)<.001f ?
+    std::tanh(.5f*(drivenInput+previousDrive)) :
+    (logCoshStable(drivenInput)-logCoshStable(previousDrive))/delta;
+  previousDrive=drivenInput;
+  if(smoothedFilterDrive>.00001f){
+   const float normalized=saturated/juce::jmax(.001f,std::tanh(driveGain));
+   filteredInput=out+smoothedFilterDrive*(normalized-out);
   }
   auto processSVF=[&](OutputSVFStage& stage,float x){
    const float v3=x-stage.ic2;
