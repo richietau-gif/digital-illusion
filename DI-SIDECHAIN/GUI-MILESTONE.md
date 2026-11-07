@@ -50,20 +50,23 @@ are intentionally preserved.
   with the host project. Incoming MIDI note-on triggers use host sample offsets
   and can retrigger at irregular breakbeat intervals.
 
-## FILTER visibility and editor layout
+## Compact two-column editor — always-visible FILTER & SIDECHAIN
 
-- The FILTER checkbox is visible beside Frequency Target. **Clicking it ON
-  opens a dedicated creative-filter panel immediately below the main controls**
-  (1050 px editor height), rather than requiring Advanced Controls. LP/HP/BP/
-  Notch, 12/24 dB, Min/Max cutoff, Amount, Resonance and Drive are visible
-  there. Clicking OFF restores the compact 760 px layout.
-- Advanced Controls is an alternate detailed settings panel (1150 px editor
-  height) for detector, routing, crossovers and MULTI low/mid/high depth.
-  Clicking Advanced while the filter is enabled temporarily shows the
-  advanced settings instead of the FILTER editor; closing it returns to the
-  FILTER panel. No FX settings are lost by switching panels.
-- Window height follows automated FILTER enabled state on the UI message
-  thread. The output audio thread performs no UI operations.
+- Fixed-size wide **1120 × 760** window, inspired by professional
+  spectrum/parameter editors, without copying another plugin's identity.
+  Left: large editable envelope, compact FFT/Frequency Target and master
+  controls. Right: permanent OUTPUT FILTER and SIDECHAIN CONTROLS.
+- The FILTER **bypass checkbox** enables/disables processing, but does **not
+  collapse controls** or resize the editor. Creative cutoff MIN/MAX, Amount,
+  Resonance and Drive knobs remain visible even when the DSP is off.
+- Filter types **LP / HP / BP / NOTCH** and slope **12 / 24 dB** use compact
+  clearly selectable buttons with APVTS-backed parameters, synced to host
+  automation. FILTER toggle remains APVTS-backed for automation/session save.
+- Every additional sidechain, MIDI, detector and multiband knob is visible
+  in the lower right SIDECHAIN CONTROLS panel. No Advanced Controls toggle
+  is required. The FFT area is intentionally shallow.
+- Factory shape selector remains above the envelope and all DSP parameters
+  retain their existing saved IDs, so existing Ableton sets can load.
 
 ## Creative OUTPUT FILTER for wobble sound design
 
