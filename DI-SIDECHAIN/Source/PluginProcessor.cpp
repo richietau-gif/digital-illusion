@@ -10,6 +10,9 @@ static juce::AudioProcessorValueTreeState::ParameterLayout layoutParams(){
  f("detectorHP","Audio trigger HP Hz (0 = off)",0,2000,0);
  f("detectorAttackMs","Audio trigger attack ms",0,30,0);
  f("detectorReleaseMs","Audio trigger release ms",1,250,4.16f);
+ f("multiLowDepth","MULTI low band ducking",0,1,1);
+ f("multiMidDepth","MULTI mid band ducking",0,1,1);
+ f("multiHighDepth","MULTI high band ducking",0,1,1);
  // Logarithmic knob response gives precision at 40–500 Hz for bass wobbles.
  juce::NormalisableRange<float> cutoffRange(20.f,20000.f);
  cutoffRange.setSkewForCentre(1000.f);
@@ -24,7 +27,7 @@ static juce::AudioProcessorValueTreeState::ParameterLayout layoutParams(){
      "Output filter slope",juce::StringArray{"12 dB","24 dB"},0));
  p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"outputFilterOn",1},"Output filter enabled",false));
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"outputFilterType",1},"Output filter type",juce::StringArray{"Low Pass","High Pass","Band Pass","Notch"},0));
- p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"mode",1},"Frequency mode",juce::StringArray{"Full","Low","High","Band"},0));
+ p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"mode",1},"Frequency mode",juce::StringArray{"Full","Low","High","Band","Multi"},0));
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"trigger",1},"Trigger mode",juce::StringArray{"Audio + MIDI","Audio only","MIDI only"},0));
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"playbackMode",1},"Envelope playback",juce::StringArray{"One Shot","Loop"},0));
  p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"sync",1},"Tempo sync",true));
@@ -187,6 +190,9 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  juce::AudioBuffer<float> side; if(hasSide){auto view=getBusBuffer(buffer,true,1);side.setDataToReferTo(view.getArrayOfWritePointers(),view.getNumChannels(),view.getNumSamples());}
  auto get=[&](const char* id){return state.getRawParameterValue(id)->load();};
  int mode=(int)get("mode"),trig=(int)get("trigger");float depth=get("depth"),mix=get("mix");
+ const float multiLowDepth=juce::jlimit(0.f,1.f,get("multiLowDepth"));
+ const float multiMidDepth=juce::jlimit(0.f,1.f,get("multiMidDepth"));
+ const float multiHighDepth=juce::jlimit(0.f,1.f,get("multiHighDepth"));
  const int playbackMode=juce::jlimit(0,1,juce::roundToInt(get("playbackMode")));
  const float detectorHP=juce::jlimit(0.f,2000.f,get("detectorHP"));
  const float detectorAttackMs=juce::jlimit(0.f,30.f,get("detectorAttackMs"));
@@ -335,7 +341,9 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
   // Interpolate from EXACT dry at no gain reduction to the
   // phase-aligned, frequency-selected output at full reduction.
   const float wet=mode==0?dry*smoothGain:
-                  dry+(1.f-smoothGain)*(keep-dry);
+     mode==4?dry-(1.f-smoothGain)*(multiLowDepth*lowAligned+
+                                multiMidDepth*mid+multiHighDepth*upper):
+             dry+(1.f-smoothGain)*(keep-dry);
   const float outUnclamped=dry+(wet-dry)*mix;
   float out=std::isfinite(outUnclamped)?outUnclamped:dry;
   // Pre-filter soft saturation: DRIVE 0 is exactly transparent. At higher
