@@ -62,10 +62,13 @@ private:
  double sr=44100, phase=1, envelopeLength=0.25, detector=0;
  // Detector high-pass state is independent from audio-output crossover filters.
  double detectorHpPreviousInput=0., detectorHpPreviousOutput=0.;
- // Output filter follows the same envelope phase as the volume shaper.
- // A dedicated one-pole state for each program channel, never sidechain audio.
- std::array<float,2> outputFilterLowState {};
+ // Zero-delay-feedback topology-preserving state variable filter (TPT SVF).
+ // Two independent stages permit 12/24 dB slopes while maintaining stereo.
+ struct OutputSVFStage { float ic1=0.f,ic2=0.f; };
+ std::array<std::array<OutputSVFStage,2>,2> outputFilterStages {};
  float outputFilterBlend=0.f;
+ float smoothedFilterQ=.70710678f;
+ float smoothedFilterDrive=0.f;
  std::atomic<float> visualFilterCutoffHz {20000.f};
  int refractory=0; bool armed=true; float smoothGain=1;
  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DISidechainProcessor)
