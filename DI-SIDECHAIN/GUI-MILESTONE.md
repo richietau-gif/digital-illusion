@@ -45,6 +45,24 @@ are intentionally preserved.
   with the host project. Incoming MIDI note-on triggers use host sample offsets
   and can retrigger at irregular breakbeat intervals.
 
+## Optional envelope-controlled OUTPUT FILTER
+
+- **FILTER** checkbox beside Frequency Target activates an additional output
+  filter. OFF is the default, retaining the exact behavior of existing projects.
+- Advanced Controls: **Low Pass / High Pass**, **Filter Min Hz**,
+  **Filter Max Hz**, **Filter Amount** (0 = static cutoff at max; 1 = full
+  envelope modulation). The plugin uses the SAME drawn curve for both volume
+  gain and cutoff: envelope 0 = minimum frequency, envelope 1 = maximum.
+- The filter is applied to the main audio output, AFTER the volume and
+  frequency-target DSP. It is independent of external sidechain TRIGGER HP,
+  which filters only the detection input.
+- DSP uses a stereo single-pole low/high-pass with per-sample cutoff
+  recalculation and a 5 ms checkbox crossfade. This is an initial 6 dB/oct
+  implementation, not a resonant synthesizer filter. There is no resonance
+  parameter yet.
+- Added regression coverage for low/high pass filtering, zero volume depth
+  independence, off-state transparency and parameter persistence.
+
 ## Not implemented yet
 
 - **MULTI** mode is visibly disabled; no multiband DSP yet.
