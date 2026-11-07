@@ -23,6 +23,69 @@ float hzFromX(float x) {
 }
 }
 
+void DIStudioSkin::drawRotarySlider(juce::Graphics& g,int x,int y,int width,int height,
+                                   float position,float startAngle,float endAngle,juce::Slider&)
+{
+    const auto rect=juce::Rectangle<float>((float)x,(float)y,(float)width,(float)height);
+    const auto cx=rect.getCentreX(),cy=rect.getCentreY();
+    const float radius=juce::jmax(9.f,juce::jmin(rect.getWidth(),rect.getHeight())*.39f);
+    const float start=startAngle,end=endAngle;
+    const float angle=juce::jmap(juce::jlimit(0.f,1.f,position),start,end);
+    const auto outer=juce::Colour(0xff233630);
+    g.setColour(juce::Colour(0xff071011));
+    g.fillEllipse(cx-radius-4,cy-radius-4,2*(radius+4),2*(radius+4));
+    g.setGradientFill(juce::ColourGradient(juce::Colour(0xff364c49),cx-radius,cy-radius,
+                                           juce::Colour(0xff101b1d),cx+radius,cy+radius,false));
+    g.fillEllipse(cx-radius,cy-radius,2*radius,2*radius);
+    juce::Path track;
+    track.addCentredArc(cx,cy,radius+2,radius+2,0,start,end,true);
+    g.setColour(outer.brighter(.25f));
+    g.strokePath(track,juce::PathStrokeType(4.f,juce::PathStrokeType::curved,
+                                              juce::PathStrokeType::rounded));
+    juce::Path active;
+    active.addCentredArc(cx,cy,radius+2,radius+2,0,start,angle,true);
+    g.setColour(juce::Colour(0xffafff4d).withAlpha(.22f));
+    g.strokePath(active,juce::PathStrokeType(7.f));
+    g.setColour(juce::Colour(0xffafff4d));
+    g.strokePath(active,juce::PathStrokeType(3.3f,juce::PathStrokeType::curved,
+                                               juce::PathStrokeType::rounded));
+    juce::Point<float> needle(cx+std::sin(angle)*(radius-9),cy-std::cos(angle)*(radius-9));
+    g.setColour(juce::Colour(0xffedfff1));
+    g.drawLine(cx,cy,needle.x,needle.y,2.2f);
+    g.fillEllipse(needle.x-2,needle.y-2,4,4);
+}
+void DIStudioSkin::drawLinearSlider(juce::Graphics& g,int x,int y,int width,int height,
+                                   float sliderPos,float,float,
+                                   juce::Slider::SliderStyle style,juce::Slider&)
+{
+    if(style!=juce::Slider::LinearHorizontal)return;
+    const float cy=y+height*.5f;
+    const float left=(float)x+5.f,right=x+width-5.f;
+    g.setColour(juce::Colour(0xff344a42));
+    g.drawLine(left,cy,right,cy,4.f);
+    g.setColour(juce::Colour(0xffafff4d).withAlpha(.27f));
+    g.drawLine(left,cy,sliderPos,cy,7.f);
+    g.setColour(juce::Colour(0xffafff4d));
+    g.drawLine(left,cy,sliderPos,cy,3.f);
+    g.setColour(juce::Colour(0xffb6ff75));
+    g.fillEllipse(sliderPos-5,cy-5,10,10);
+}
+void DIStudioSkin::drawComboBox(juce::Graphics& g,int width,int height,bool,
+                               int,int,int,int,juce::ComboBox&)
+{
+    const juce::Rectangle<float> rect(0,0,(float)width,(float)height);
+    g.setGradientFill(juce::ColourGradient(juce::Colour(0xff273a36),0,0,
+                                           juce::Colour(0xff101b1d),0,(float)height,false));
+    g.fillRoundedRectangle(rect.reduced(.5f),5.f);
+    g.setColour(juce::Colour(0xff405950));
+    g.drawRoundedRectangle(rect.reduced(.5f),5.f,1.f);
+    juce::Path arrow;
+    arrow.startNewSubPath(width-18.f,height*.43f);
+    arrow.lineTo(width-13.f,height*.60f);
+    arrow.lineTo(width-8.f,height*.43f);
+    g.setColour(juce::Colour(0xffafff4d));
+    g.strokePath(arrow,juce::PathStrokeType(1.6f));
+}
 DISidechainEditor::DISidechainEditor(DISidechainProcessor& p) : AudioProcessorEditor(&p), proc(p) {
     skin.setColour(juce::ComboBox::backgroundColourId, panel);
     skin.setColour(juce::ComboBox::outlineColourId, juce::Colour(0xff334741));
@@ -121,8 +184,24 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p) : AudioProcessorEd
         }
     };
     addAndMakeVisible(*envelopePreset);
+    const char* factory[]={"CLASSIC PUMP","TIGHT KICK","SMOOTH DUCK",
+                           "GHOST KICK","BREAKBEAT","WOBBLE"};
+    for(int i=0;i<6;++i){
+        auto button=std::make_unique<juce::TextButton>(factory[i]);
+        button->setComponentID("factory-preset-"+juce::String(i));
+        button->setColour(juce::TextButton::buttonColourId,juce::Colour(0xff20312e));
+        button->setColour(juce::TextButton::buttonOnColourId,juce::Colour(0xff38613a));
+        button->setColour(juce::TextButton::textColourOffId,pale);
+        button->setColour(juce::TextButton::textColourOnId,accent);
+        button->onClick=[this,i]{
+            envelopePreset->setSelectedId(i+1,juce::sendNotificationSync);
+        };
+        addAndMakeVisible(*button);
+        presetButtons[(size_t)i]=std::move(button);
+    }
+
     // setSize invokes resized synchronously: do not move above child construction.
-    setSize(1120,760);
+    setSize(1380,860);
     startTimerHz(15);
 }
 DISidechainEditor::~DISidechainEditor(){
@@ -176,6 +255,9 @@ void DISidechainEditor::timerCallback(){
         filterTypeButtons[(size_t)i]->setToggleState(i==selectedType,juce::dontSendNotification);
     for(int i=0;i<2;++i)
         filterSlopeButtons[(size_t)i]->setToggleState(i==selectedSlope,juce::dontSendNotification);
+    const int activePreset=envelopePreset->getSelectedId()-1;
+    for(int i=0;i<6;++i)
+        presetButtons[(size_t)i]->setToggleState(i==activePreset,juce::dontSendNotification);
     const auto sequence=proc.triggerSequence.load(std::memory_order_relaxed);
     if(sequence!=lastTriggerSequence){lastTriggerSequence=sequence;triggerFlashTicks=3;}
     else if(triggerFlashTicks>0)--triggerFlashTicks;
