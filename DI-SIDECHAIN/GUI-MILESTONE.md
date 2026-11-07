@@ -68,9 +68,30 @@ are intentionally preserved.
 - Parameters are automatable, serialized in host state, and have regression
   tests for spectral modes, drive, resonance, slope, bypass and roundtrip.
 
+## MULTI – independent three-band ducking
+
+- **MULTI** is now selectable beside FULL / LOW / HIGH / BAND.
+- Two crossover frequencies LOW and HIGH split the audio into LOW / MID /
+  HIGH via complementary Linkwitz-Riley paths with phase-alignment.
+- **MULTI LOW DEPTH**, **MULTI MID DEPTH**, **MULTI HIGH DEPTH** are separate
+  host-automatable band ducking scales (0 = retain band, 1 = full ducking).
+  Main DEPTH remains the master envelope modulation scale.
+- The extra band sliders appear under Advanced Controls for this milestone.
+  Tests cover selective band gain, depth-zero transparency and persistence.
+- A later dedicated 3-band panel and additional filter quality modes are
+  planned; this version has no independent envelopes per band.
+
+## External audio detector dynamics
+
+- **TRIGGER ATTACK ms** (0–30 ms; 0 = immediate peak response) and
+  **TRIGGER RELEASE ms** (1–250 ms; default ~4.16 ms matches legacy decay
+  near 48 kHz) control the trigger envelope without changing the audible
+  output directly. They work with existing threshold, holdoff and TRIGGER HP.
+- Added tests for short transient rejection, fast retriggering, slow release
+  suppression and saved host state.
+
 ## Not implemented yet
 
-- **MULTI** mode is visibly disabled; no multiband DSP yet.
 - Curves now support per-segment cubic shaping via Alt-drag, but do not
   yet expose independent two-handle bezier controls or segment presets.
 - The GUI curve and DSP now use the same evaluator; no merely decorative
