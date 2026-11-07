@@ -303,7 +303,7 @@ void DISidechainEditor::paint(juce::Graphics& g){
     g.setColour(cyan);g.drawLine(20,41,28,41,2);
     const juce::Point<float> signal[]={{28,41},{34,27},{40,53},{47,19},{54,47},
                                         {60,33},{67,41},{76,41}};
-    for(int i=1;i<8;++i)g.drawLine(signal[i-1],signal[i],2.f);
+    for(int i=1;i<8;++i)g.drawLine(juce::Line<float>(signal[i-1],signal[i]),2.f);
     text(g,"DI SIDECHAIN",23,{96,15,240,29},pale);
     text(g,"3.0",12,{297,21,55,23},accent);
     text(g,"D U C K   &   F I L T E R",10,{98,49,272,16},muted);
@@ -460,7 +460,7 @@ void DISidechainEditor::paint(juce::Graphics& g){
     const float minHz=proc.state.getRawParameterValue("outputFilterMin")->load();
     const float maxHz=proc.state.getRawParameterValue("outputFilterMax")->load();
     const float Q=proc.state.getRawParameterValue("outputFilterResonance")->load();
-    const float fc=juce::jlimit(20.f,20000.f,proc.visualFilterCutoffHz.load());
+    const float fc=juce::jlimit(20.f,20000.f,proc.getVisualFilterCutoffHz());
     const juce::Rectangle<float> response{699,694,202,123};
     box(g,response,dark,5);
     for(int k=0;k<5;++k){
