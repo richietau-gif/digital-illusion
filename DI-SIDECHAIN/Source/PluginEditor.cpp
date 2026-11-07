@@ -35,9 +35,9 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p) : AudioProcessorEd
     setLookAndFeel(&skin);
     setWantsKeyboardFocus(true);
 
-    const char* ids[] = {"depth","mix","threshold","length","smooth","low","high","retrigger","midiNote","midiChannel","detectorHP","outputFilterMin","outputFilterMax","outputFilterAmount","outputFilterResonance","outputFilterDrive"};
-    const char* titles[] = {"DEPTH","MIX","THRESHOLD dB","LENGTH ms","SMOOTH","LOW Hz","HIGH Hz","HOLDOFF","MIDI NOTE (-1 ANY)","MIDI CH (0 ANY)","TRIGGER HP Hz","FILTER MIN Hz","FILTER MAX Hz","FILTER AMOUNT","RESONANCE Q","FILTER DRIVE"};
-    for (int i=0;i<16;++i) {
+    const char* ids[] = {"depth","mix","threshold","length","smooth","low","high","retrigger","midiNote","midiChannel","detectorHP","outputFilterMin","outputFilterMax","outputFilterAmount","outputFilterResonance","outputFilterDrive","detectorAttackMs","detectorReleaseMs"};
+    const char* titles[] = {"DEPTH","MIX","THRESHOLD dB","LENGTH ms","SMOOTH","LOW Hz","HIGH Hz","HOLDOFF","MIDI NOTE (-1 ANY)","MIDI CH (0 ANY)","TRIGGER HP Hz","FILTER MIN Hz","FILTER MAX Hz","FILTER AMOUNT","RESONANCE Q","FILTER DRIVE","TRIGGER ATTACK ms","TRIGGER RELEASE ms"};
+    for (int i=0;i<18;++i) {
         auto s=std::make_unique<juce::Slider>();
         s->setSliderStyle(juce::Slider::LinearHorizontal);
         if(i>=8&&i<=12)s->setNumDecimalPlacesToDisplay(0);
@@ -270,10 +270,10 @@ void DISidechainEditor::paint(juce::Graphics& g){
     text(g,"MIX",10,{463,688,219,15},muted,juce::Justification::centred);
     text(g,advanced?"HIDE ADVANCED ↑":"ADVANCED CONTROLS ↓",10,{13,744,675,16},accent,juce::Justification::centred);
     if(advanced){
-        box(g,{11,767,678,432},panelDark,9);
+        box(g,{11,767,678,486},panelDark,9);
         text(g,"ADDITIONAL DSP SETTINGS",12,{25,774,420,20},pale);
         text(g,"OUTPUT FILTER · ENVELOPE CONTROLS CUTOFF · DRIVE ADDS HARMONICS",9,
-             {25,1180,650,14},muted);
+             {25,1223,650,14},muted);
     }
     g.restoreState();
 }
@@ -282,7 +282,7 @@ void DISidechainEditor::resized(){
     const auto bounds=[sc](float x,float y,float w,float h){
         return juce::Rectangle<int>(juce::roundToInt(x*sc),juce::roundToInt(y*sc),
             juce::jmax(1,juce::roundToInt(w*sc)),juce::jmax(1,juce::roundToInt(h*sc)));};
-    if(sliders.size()!=16||labels.size()!=16||combos.size()!=3||
+    if(sliders.size()!=18||labels.size()!=18||combos.size()!=3||
        sync==nullptr||outputFilterToggle==nullptr||outputFilterType==nullptr||
        outputFilterSlope==nullptr)return;
     for(int i=0;i<3;++i)combos[i]->setBounds(bounds(18.f+i*226.f,76,203,19));
@@ -294,12 +294,12 @@ void DISidechainEditor::resized(){
         labels[i]->setVisible(false);sliders[i]->setVisible(true);
     }
     outputFilterToggle->setBounds(bounds(272,486,113,25));
-    outputFilterType->setBounds(bounds(46,1148,295,24));
+    outputFilterType->setBounds(bounds(46,1194,295,24));
     outputFilterType->setVisible(advanced);
-    outputFilterSlope->setBounds(bounds(363,1148,295,24));
+    outputFilterSlope->setBounds(bounds(363,1194,295,24));
     outputFilterSlope->setVisible(advanced);
-    const int extra[]={2,3,5,6,7,8,9,10,11,12,13,14,15};
-    for(int k=0;k<13;++k){
+    const int extra[]={2,3,5,6,7,8,9,10,11,12,13,14,15,16,17};
+    for(int k=0;k<15;++k){
         int i=extra[k], row=k/2,col=k%2;
         float x=29.f+col*335.f, y=803.f+row*46.f;
         labels[i]->setBounds(bounds(x,y,114,20));
@@ -388,7 +388,7 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
         return;
     }
     if(q.y>=740&&q.y<=764){
-        advanced=!advanced;setSize(700,advanced?1215:760);repaint();
+        advanced=!advanced;setSize(700,advanced?1270:760);repaint();
     }
 }
 void DISidechainEditor::mouseDrag(const juce::MouseEvent& e){
