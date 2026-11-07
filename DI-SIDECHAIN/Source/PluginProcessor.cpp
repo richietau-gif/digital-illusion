@@ -347,9 +347,15 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
   const float keep=mode==1?high:mode==2?low:lowAligned+upper;
   // Interpolate from EXACT dry at no gain reduction to the
   // phase-aligned, frequency-selected output at full reduction.
+  // MULTI: every band must be reconstructed in the SAME crossover phase
+  // domain before applying independent band attenuation. Subtracting
+  // phase-shifted low/mid/high components from the original dry signal
+  // causes incomplete cancellation, especially below the first crossover.
+  const float multiProcessed=(1.f-multiLowDepth)*lowAligned+
+                             (1.f-multiMidDepth)*mid+
+                             (1.f-multiHighDepth)*upper;
   const float wet=mode==0?dry*smoothGain:
-     mode==4?dry-(1.f-smoothGain)*(multiLowDepth*lowAligned+
-                                multiMidDepth*mid+multiHighDepth*upper):
+     mode==4?dry+(1.f-smoothGain)*(multiProcessed-dry):
              dry+(1.f-smoothGain)*(keep-dry);
   const float outUnclamped=dry+(wet-dry)*mix;
   float out=std::isfinite(outUnclamped)?outUnclamped:dry;
