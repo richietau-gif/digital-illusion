@@ -23,7 +23,7 @@ static void editorLifecycle(DISidechainProcessor& p)
         std::unique_ptr<juce::AudioProcessorEditor> editor(p.createEditor());
         require(editor != nullptr, "Editor creation failed");
         require(editor->getWidth() == 700 && editor->getHeight() == 760, "Initial editor size");
-        require(editor->getNumChildComponents() == 34, "Missing editor controls");
+        require(editor->getNumChildComponents() == 39, "Missing editor controls");
         int sliders = 0, combos = 0, buttons = 0;
         for (auto* child : editor->getChildren())
         {
@@ -32,7 +32,7 @@ static void editorLifecycle(DISidechainProcessor& p)
             combos += dynamic_cast<juce::ComboBox*>(child) != nullptr;
             buttons += dynamic_cast<juce::ToggleButton*>(child) != nullptr;
         }
-        require(sliders == 14 && combos == 4 && buttons == 2, "Control types changed");
+        require(sliders == 16 && combos == 5 && buttons == 2, "Control types changed");
         editor->setSize(900, 600);
         editor->setSize(700, 760);
         require(editor->createComponentSnapshot(editor->getLocalBounds()).isValid(), "Editor paint failed");
@@ -394,7 +394,8 @@ static void midiBreakbeatNoteFilter()
     p.releaseResources();
 }
 
-static float outputFilterSignalRms(float freq,bool enabled,int type,float amount)
+static float outputFilterSignalRms(float freq,bool enabled,int type,float amount,
+                                  float resonance=.70710678f,float drive=0.f,int slope=0)
 {
     DISidechainProcessor p;
     p.prepareToPlay(48000.,256);
@@ -407,6 +408,9 @@ static float outputFilterSignalRms(float freq,bool enabled,int type,float amount
     set(p,"outputFilterMax",16000.f);
     set(p,"outputFilterAmount",amount);
     set(p,"outputFilterType",(float)type);
+    set(p,"outputFilterResonance",resonance);
+    set(p,"outputFilterDrive",drive);
+    set(p,"outputFilterSlope",(float)slope);
     set(p,"outputFilterOn",enabled?1.f:0.f);
     for(auto& point:p.points)point.store(0.f);
     juce::AudioBuffer<float> buffer(2,256);
@@ -456,19 +460,41 @@ static void outputEnvelopeFilterRegression()
     // Amount 0 keeps the cutoff at MAX, so almost all bass gets through.
     const float staticBass=outputFilterSignalRms(100.f,true,0,0.f);
     require(staticBass>bassLP*.9f,"Static cutoff modulation setting is unstable");
+    // Band pass must select the cutoff region while rejecting either extreme.
+    const float midBP=outputFilterSignalRms(250.f,true,2,1.f);
+    const float subBP=outputFilterSignalRms(40.f,true,2,1.f);
+    const float airBP=outputFilterSignalRms(6500.f,true,2,1.f);
+    require(midBP>subBP*1.7f&&midBP>airBP*1.7f,
+            "Band Pass failed to isolate target frequency band");
+    const float midNotch=outputFilterSignalRms(250.f,true,3,1.f);
+    const float airNotch=outputFilterSignalRms(6500.f,true,3,1.f);
+    require(midNotch<airNotch*.7f,"Notch failed to suppress its center frequency");
+    const float midResonant=outputFilterSignalRms(250.f,true,0,1.f,4.f);
+    require(midResonant>midBP*1.5f,"Resonance control failed to boost cutoff region");
+    const float shallow=outputFilterSignalRms(6500.f,true,0,1.f,.7071f,0.f,0);
+    const float steep=outputFilterSignalRms(6500.f,true,0,1.f,.7071f,0.f,1);
+    require(steep<shallow*.75f,"24 dB filter did not attenuate treble more than 12 dB");
+    const float driven=outputFilterSignalRms(5000.f,true,1,1.f,.7071f,.9f,0);
+    require(std::isfinite(driven)&&std::abs(driven-trebleDry)>.005f,
+            "Drive did not change output or produced invalid audio");
     DISidechainProcessor p;
     set(p,"outputFilterOn",1.f);
     set(p,"outputFilterType",1.f);
     set(p,"outputFilterMin",260.f);
     set(p,"outputFilterMax",9000.f);
     set(p,"outputFilterAmount",.75f);
+    set(p,"outputFilterResonance",5.f);
+    set(p,"outputFilterDrive",.6f);
+    set(p,"outputFilterSlope",1.f);
     juce::MemoryBlock saved;
     p.getStateInformation(saved);
     DISidechainProcessor restored;
     restored.setStateInformation(saved.getData(),(int)saved.getSize());
     for(auto [id,expected]:{std::pair<const char*,float>{"outputFilterOn",1.f},
                             {"outputFilterType",1.f},{"outputFilterMin",260.f},
-                            {"outputFilterMax",9000.f},{"outputFilterAmount",.75f}})
+                            {"outputFilterMax",9000.f},{"outputFilterAmount",.75f},
+                            {"outputFilterResonance",5.f},{"outputFilterDrive",.6f},
+                            {"outputFilterSlope",1.f}})
         require(std::abs(restored.state.getRawParameterValue(id)->load()-expected)<.05f,
                 "Output filter parameter lost when restoring an Ableton set");
 }
