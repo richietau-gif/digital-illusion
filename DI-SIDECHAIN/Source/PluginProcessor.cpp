@@ -8,6 +8,11 @@ static juce::AudioProcessorValueTreeState::ParameterLayout layoutParams(){
  f("midiNote","MIDI trigger note (-1 = any)",-1,127,-1);
  f("midiChannel","MIDI trigger channel (0 = any)",0,16,0);
  f("detectorHP","Audio trigger HP Hz (0 = off)",0,2000,0);
+ f("outputFilterMin","Output filter minimum Hz",20,20000,120);
+ f("outputFilterMax","Output filter maximum Hz",20,20000,16000);
+ f("outputFilterAmount","Output filter modulation",0,1,1);
+ p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"outputFilterOn",1},"Output filter enabled",false));
+ p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"outputFilterType",1},"Output filter type",juce::StringArray{"Low Pass","High Pass"},0));
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"mode",1},"Frequency mode",juce::StringArray{"Full","Low","High","Band"},0));
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"trigger",1},"Trigger mode",juce::StringArray{"Audio + MIDI","Audio only","MIDI only"},0));
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"playbackMode",1},"Envelope playback",juce::StringArray{"One Shot","Loop"},0));
@@ -23,6 +28,7 @@ bool DISidechainProcessor::isBusesLayoutSupported(const BusesLayout& b) const {r
 void DISidechainProcessor::prepareToPlay(double sampleRate,int maxBlock){
  sr=sampleRate;phase=1;detector=0;armed=true;refractory=0;smoothGain=1;
  detectorHpPreviousInput=0.;detectorHpPreviousOutput=0.;
+ outputFilterLowState.fill(0.f);outputFilterBlend=0.f;visualFilterCutoffHz.store(20000.f);
  juce::dsp::ProcessSpec spec{sampleRate,(juce::uint32)juce::jmax(1,maxBlock),1};
  for(auto& c:filters){
   auto init=[&](juce::dsp::LinkwitzRileyFilter<float>& filter,
@@ -169,6 +175,14 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  int mode=(int)get("mode"),trig=(int)get("trigger");float depth=get("depth"),mix=get("mix");
  const int playbackMode=juce::jlimit(0,1,juce::roundToInt(get("playbackMode")));
  const float detectorHP=juce::jlimit(0.f,2000.f,get("detectorHP"));
+ const bool filterEnabled=get("outputFilterOn")>.5f;
+ const int outputFilterType=juce::jlimit(0,1,juce::roundToInt(get("outputFilterType")));
+ const float filterAmount=juce::jlimit(0.f,1.f,get("outputFilterAmount"));
+ const float cutoffMin=juce::jlimit(20.f,(float)(sr*.45),get("outputFilterMin"));
+ const float cutoffMax=juce::jlimit(cutoffMin,(float)(sr*.45),
+                                    juce::jmax(cutoffMin,get("outputFilterMax")));
+ const float filterLogRange=std::log(juce::jmax(1.0001f,cutoffMax/cutoffMin));
+ const float filterFadeStep=1.f/(float)juce::jmax(1.0,sr*.005);
  const double hpCoefficient=detectorHP>1.f ? std::exp(-juce::MathConstants<double>::twoPi*(double)detectorHP/sr) : 0.;
  const int midiNote=juce::jlimit(-1,127,juce::roundToInt(get("midiNote")));
  const int midiChannel=juce::jlimit(0,16,juce::roundToInt(get("midiChannel")));
@@ -261,6 +275,15 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
   env=1.f;
  }
  float target=1-depth*(1-env);smoothGain=coeff*smoothGain+(1-coeff)*target;
+ // Envelope 0 => minimum cutoff; envelope 1 => maximum cutoff.
+ // Amount 0 makes the cutoff static at maximum; independent of volume depth.
+ const float shaped=1.f-filterAmount*(1.f-juce::jlimit(0.f,1.f,env));
+ const float cutoff=cutoffMin*std::exp(filterLogRange*shaped);
+ const float lpCoefficient=std::exp(-juce::MathConstants<float>::twoPi*
+                                    cutoff/(float)sr);
+ outputFilterBlend=juce::jlimit(0.f,1.f,outputFilterBlend+
+    (filterEnabled?filterFadeStep:-filterFadeStep));
+ if(i==n-1)visualFilterCutoffHz.store(cutoff,std::memory_order_relaxed);
  for(int ch=0;ch<2;++ch){
   const float dry=main.getSample(ch,i);
   auto& f=filters[ch];
@@ -280,7 +303,14 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
   const float wet=mode==0?dry*smoothGain:
                   dry+(1.f-smoothGain)*(keep-dry);
   const float outUnclamped=dry+(wet-dry)*mix;
-  const float out=std::isfinite(outUnclamped)?outUnclamped:dry;
+  float out=std::isfinite(outUnclamped)?outUnclamped:dry;
+  // Keep the filter state warm even when disabled, and crossfade the
+  // enable switch over 5 ms to prevent a discontinuity in the output.
+  auto& lowState=outputFilterLowState[(size_t)ch];
+  lowState=(1.f-lpCoefficient)*out+lpCoefficient*lowState;
+  const float filtered=outputFilterType==0?lowState:out-lowState;
+  out+=outputFilterBlend*(filtered-out);
+  if(!std::isfinite(out)){out=dry;lowState=0.f;}
   main.setSample(ch,i,out);
   peak=juce::jmax(peak,std::abs(out));
  }
