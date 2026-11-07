@@ -22,8 +22,8 @@ static void editorLifecycle(DISidechainProcessor& p)
     {
         std::unique_ptr<juce::AudioProcessorEditor> editor(p.createEditor());
         require(editor != nullptr, "Editor creation failed");
-        require(editor->getWidth() == 1120 && editor->getHeight() == 760, "Initial editor size");
-        require(editor->getNumChildComponents() == 54, "Missing editor controls");
+        require(editor->getWidth() == 1380 && editor->getHeight() == 860, "Initial editor size");
+        require(editor->getNumChildComponents() == 60, "Missing editor controls");
         int sliders = 0, combos = 0, buttons = 0;
         for (auto* child : editor->getChildren())
         {
@@ -33,8 +33,8 @@ static void editorLifecycle(DISidechainProcessor& p)
             buttons += dynamic_cast<juce::ToggleButton*>(child) != nullptr;
         }
         require(sliders == 21 && combos == 4 && buttons == 2, "Control types changed");
-        editor->setSize(1300, 760);
-        editor->setSize(1120, 760);
+        editor->setSize(1500, 860);
+        editor->setSize(1380, 860);
         require(editor->createComponentSnapshot(editor->getLocalBounds()).isValid(), "Editor paint failed");
         // Exercise attachments from a host automation thread while the editor exists.
         std::thread automation([&] {
@@ -117,13 +117,14 @@ static void factoryPresetGuiRegression()
     require(processor.getEnvelopeNodeCount()==7 &&
             std::abs(processor.getEnvelopeNode(1).y-.05f)<.001f,
             "Selecting Wobble did not change the processed envelope");
-    require(editor->getWidth()==1120&&editor->getHeight()==760,
-            "Wide always-on filter layout must be fixed 1120x760");
-    int visibleSliders=0, filterButtons=0, slopeButtons=0;
+    require(editor->getWidth()==1380&&editor->getHeight()==860,
+            "Three-column studio layout must be fixed 1380x860");
+    int visibleSliders=0, filterButtons=0, slopeButtons=0, factoryButtons=0, rotary=0;
     juce::TextButton* bandPass=nullptr;
     for(auto* child:editor->getChildren()){
         if(auto* slider=dynamic_cast<juce::Slider*>(child)){
             if(slider->isVisible())++visibleSliders;
+            if(slider->getSliderStyle()==juce::Slider::RotaryHorizontalVerticalDrag)++rotary;
             require(slider->getBounds().getRight()<=editor->getWidth(),
                     "A knob extends beyond the wide editor");
             require(slider->getBounds().getBottom()<=editor->getHeight(),
@@ -135,9 +136,12 @@ static void factoryPresetGuiRegression()
             if(id=="filter-type-2")bandPass=dynamic_cast<juce::TextButton*>(child);
         }
         if(id.startsWith("filter-slope-"))++slopeButtons;
+        if(id.startsWith("factory-preset-"))++factoryButtons;
     }
     require(visibleSliders==21,
             "Filter and sidechain knobs must always be simultaneously visible");
+    require(rotary==8,"Studio master and filter must have eight rotary controls");
+    require(factoryButtons==6,"Studio preset bank should have six one-click buttons");
     require(filterButtons==4&&slopeButtons==2&&bandPass!=nullptr,
             "Filter must expose four compact type and two slope buttons");
     // V3 visual contract: neon lime interaction, orange exclusive to the
@@ -149,6 +153,18 @@ static void factoryPresetGuiRegression()
             ==juce::Colour(0xff102012),
             "V3 selected filter label should contrast with bright green");
 
+    // The new preset bank must edit the same DSP envelope as the menu.
+    juce::TextButton* breakbeatButton=nullptr;
+    for(auto* child:editor->getChildren())
+        if(child->getComponentID()=="factory-preset-4")
+            breakbeatButton=dynamic_cast<juce::TextButton*>(child);
+    require(breakbeatButton!=nullptr,"Breakbeat shortcut missing");
+    breakbeatButton->triggerClick();
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    require(processor.getEnvelopeNodeCount()==7 &&
+            std::abs(processor.getEnvelopeNode(1).y-.08f)<.001f,
+            "One-click preset bank did not update envelope nodes");
+
     bandPass->triggerClick();
     juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
     require(juce::roundToInt(processor.state.getRawParameterValue("outputFilterType")->load())==2,
@@ -156,7 +172,7 @@ static void factoryPresetGuiRegression()
     filterCheckbox->triggerClick();
     juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
     require(editor->getWidth()==1120&&editor->getHeight()==760,
-            "FILTER toggle must not resize the new wide editor");
+            "FILTER bypass must not resize the studio editor");
 }
 
 static void envelopeInterpolationRegression()
