@@ -5,7 +5,7 @@
 // Stable antiderivative of tanh(x); used for first-order ADAA saturation.
 static float logCoshStable(float x) noexcept {
  const float a=std::abs(x);
- return a+std::log1p(std::exp(-2.f*a))-juce::MathConstants<float>::ln2;
+ return a+std::log1p(std::exp(-2.f*a))-std::log(2.f);
 }
 static juce::AudioProcessorValueTreeState::ParameterLayout layoutParams(){
  std::vector<std::unique_ptr<juce::RangedAudioParameter>> p;
