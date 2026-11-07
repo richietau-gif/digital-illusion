@@ -8,6 +8,8 @@ static juce::AudioProcessorValueTreeState::ParameterLayout layoutParams(){
  f("midiNote","MIDI trigger note (-1 = any)",-1,127,-1);
  f("midiChannel","MIDI trigger channel (0 = any)",0,16,0);
  f("detectorHP","Audio trigger HP Hz (0 = off)",0,2000,0);
+ f("detectorAttackMs","Audio trigger attack ms",0,30,0);
+ f("detectorReleaseMs","Audio trigger release ms",1,250,4.16f);
  // Logarithmic knob response gives precision at 40–500 Hz for bass wobbles.
  juce::NormalisableRange<float> cutoffRange(20.f,20000.f);
  cutoffRange.setSkewForCentre(1000.f);
@@ -187,6 +189,12 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  int mode=(int)get("mode"),trig=(int)get("trigger");float depth=get("depth"),mix=get("mix");
  const int playbackMode=juce::jlimit(0,1,juce::roundToInt(get("playbackMode")));
  const float detectorHP=juce::jlimit(0.f,2000.f,get("detectorHP"));
+ const float detectorAttackMs=juce::jlimit(0.f,30.f,get("detectorAttackMs"));
+ const float detectorReleaseMs=juce::jlimit(1.f,250.f,get("detectorReleaseMs"));
+ const double attackCoeff=detectorAttackMs<=.0001f ? 0.0 :
+       std::exp(-1.0/(juce::jmax(1.0,(double)detectorAttackMs*.001*sr)));
+ const double releaseCoeff=std::exp(-1.0/
+       juce::jmax(1.0,(double)detectorReleaseMs*.001*sr));
  const bool filterEnabled=get("outputFilterOn")>.5f;
  const int outputFilterType=juce::jlimit(0,3,juce::roundToInt(get("outputFilterType")));
  const int outputFilterSlope=juce::jlimit(0,1,juce::roundToInt(get("outputFilterSlope")));
@@ -263,7 +271,10 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
    detectorHpPreviousInput=0.;
    detectorHpPreviousOutput=0.;
   }
-  detector=std::max((double)v,detector*.995);
+  // Attack/release peak follower. ATTACK 0 is instantaneous (legacy).
+  // The release default ~4.16 ms matches the legacy 0.995 at 48 kHz.
+  const double coefficient=v>=detector ? attackCoeff : releaseCoeff;
+  detector=coefficient*detector+(1.0-coefficient)*(double)v;
   if(detector<threshold*.65)armed=true;
   if(armed&&detector>=threshold&&refractory==0){fire=true;armed=false;}
  }
