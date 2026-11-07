@@ -23,7 +23,7 @@ static void editorLifecycle(DISidechainProcessor& p)
         std::unique_ptr<juce::AudioProcessorEditor> editor(p.createEditor());
         require(editor != nullptr, "Editor creation failed");
         require(editor->getWidth() == 700 && editor->getHeight() == 760, "Initial editor size");
-        require(editor->getNumChildComponents() == 49, "Missing editor controls");
+        require(editor->getNumChildComponents() == 50, "Missing editor controls");
         int sliders = 0, combos = 0, buttons = 0;
         for (auto* child : editor->getChildren())
         {
@@ -32,7 +32,7 @@ static void editorLifecycle(DISidechainProcessor& p)
             combos += dynamic_cast<juce::ComboBox*>(child) != nullptr;
             buttons += dynamic_cast<juce::ToggleButton*>(child) != nullptr;
         }
-        require(sliders == 21 && combos == 5 && buttons == 2, "Control types changed");
+        require(sliders == 21 && combos == 6 && buttons == 2, "Control types changed");
         editor->setSize(900, 600);
         editor->setSize(700, 760);
         require(editor->createComponentSnapshot(editor->getLocalBounds()).isValid(), "Editor paint failed");
@@ -48,6 +48,89 @@ static void editorLifecycle(DISidechainProcessor& p)
         set(p, "depth", 1.0f);
         juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
     }
+}
+
+static void factoryEnvelopePresetsRegression()
+{
+    DISidechainProcessor processor;
+    const float expectedFirstDip[]={.02f,0.f,.35f,.15f,.08f,.05f};
+    float shapeChecksums[6]={};
+    for(int preset=0;preset<6;++preset){
+        processor.applyEnvelopePreset(preset);
+        require(processor.getEnvelopeNodeCount()==7,
+                "Factory envelope did not create seven editable points");
+        require(std::abs(processor.getEnvelopeNode(0).x)<.00001f,
+                "Preset curve must start exactly at beat zero");
+        require(std::abs(processor.getEnvelopeNode(6).x-1.f)<.00001f,
+                "Preset curve must end at normalized beat one");
+        for(int i=0;i<7;++i){
+            const auto node=processor.getEnvelopeNode(i);
+            require(std::isfinite(node.x)&&std::isfinite(node.y)&&
+                    node.y>=0.f&&node.y<=1.f,
+                    "Factory preset contained invalid envelope points");
+            if(i>0)require(node.x>processor.getEnvelopeNode(i-1).x,
+                            "Preset x coordinates are not strictly increasing");
+            if(i>0&&i<6)shapeChecksums[preset]+=node.y*(float)(i+1);
+        }
+        require(std::abs(processor.getEnvelopeNode(1).y-expectedFirstDip[preset])<.001f,
+                "Factory preset loaded unexpected envelope shape");
+    }
+    for(int first=0;first<6;++first)
+        for(int second=first+1;second<6;++second)
+            require(std::abs(shapeChecksums[first]-shapeChecksums[second])>.001f,
+                    "Two factory presets are indistinguishable");
+    processor.applyEnvelopePreset(5);
+    juce::MemoryBlock saved;
+    processor.getStateInformation(saved);
+    DISidechainProcessor restored;
+    restored.setStateInformation(saved.getData(),(int)saved.getSize());
+    require(restored.getEnvelopeNodeCount()==7,
+            "Factory shape was not persisted to Ableton project state");
+    for(int i=0;i<7;++i){
+        const auto original=processor.getEnvelopeNode(i);
+        const auto reloaded=restored.getEnvelopeNode(i);
+        require(std::abs(original.x-reloaded.x)<.0001f &&
+                std::abs(original.y-reloaded.y)<.0001f,
+                "Preset shape changed during host state restoration");
+    }
+    // Changing a node must retain editability after preset selection.
+    restored.setEnvelopeNode(3,.51f,.42f);
+    require(std::abs(restored.getEnvelopeNode(3).y-.42f)<.001f,
+            "Factory preset curve is not editable");
+}
+
+static void factoryPresetGuiRegression()
+{
+    DISidechainProcessor processor;
+    std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+    juce::ComboBox* presetCombo=nullptr;
+    juce::ToggleButton* filterCheckbox=nullptr;
+    for(auto* child:editor->getChildren()){
+        if(child->getComponentID()=="envelopePreset")
+            presetCombo=dynamic_cast<juce::ComboBox*>(child);
+        if(auto* toggle=dynamic_cast<juce::ToggleButton*>(child))
+            if(toggle->getButtonText()=="FILTER")filterCheckbox=toggle;
+    }
+    require(presetCombo!=nullptr,"Factory preset dropdown missing from UI");
+    require(filterCheckbox!=nullptr,"FILTER checkbox missing from UI");
+    presetCombo->setSelectedId(6,juce::sendNotificationSync);
+    require(processor.getEnvelopeNodeCount()==7 &&
+            std::abs(processor.getEnvelopeNode(1).y-.05f)<.001f,
+            "Selecting Wobble did not change the processed envelope");
+    require(editor->getHeight()==760,"Disabled FILTER should preserve compact window");
+    filterCheckbox->triggerClick();
+    require(editor->getHeight()==1050,
+            "Enabling FILTER did not reveal the dedicated filter panel");
+    int visibleFilterSliders=0;
+    for(auto* child:editor->getChildren())
+        if(auto* slider=dynamic_cast<juce::Slider*>(child))
+            if(slider->isVisible()&&slider->getY()>800)
+                ++visibleFilterSliders;
+    require(visibleFilterSliders==5,
+            "FILTER panel does not expose all five creative controls");
+    filterCheckbox->triggerClick();
+    require(editor->getHeight()==760,
+            "Disabling FILTER did not restore compact window");
 }
 
 static void envelopeInterpolationRegression()
@@ -925,6 +1008,8 @@ int main()
         resonantDriveStabilityRegression();
         liveWobbleCutoffRegression();
         envelopeInterpolationRegression();
+        factoryEnvelopePresetsRegression();
+        factoryPresetGuiRegression();
         editableEnvelopeRoundtrip();
         concurrentEnvelopeEditingStress();
         liveSpectrumInputCapture();
