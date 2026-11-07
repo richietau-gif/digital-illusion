@@ -23,7 +23,7 @@ static void editorLifecycle(DISidechainProcessor& p)
         std::unique_ptr<juce::AudioProcessorEditor> editor(p.createEditor());
         require(editor != nullptr, "Editor creation failed");
         require(editor->getWidth() == 700 && editor->getHeight() == 760, "Initial editor size");
-        require(editor->getNumChildComponents() == 24, "Missing editor controls");
+        require(editor->getNumChildComponents() == 26, "Missing editor controls");
         int sliders = 0, combos = 0, buttons = 0;
         for (auto* child : editor->getChildren())
         {
@@ -32,7 +32,7 @@ static void editorLifecycle(DISidechainProcessor& p)
             combos += dynamic_cast<juce::ComboBox*>(child) != nullptr;
             buttons += dynamic_cast<juce::ToggleButton*>(child) != nullptr;
         }
-        require(sliders == 10 && combos == 3 && buttons == 1, "Control types changed");
+        require(sliders == 11 && combos == 3 && buttons == 1, "Control types changed");
         editor->setSize(900, 600);
         editor->setSize(700, 760);
         require(editor->createComponentSnapshot(editor->getLocalBounds()).isValid(), "Editor paint failed");
@@ -394,6 +394,54 @@ static void midiBreakbeatNoteFilter()
     p.releaseResources();
 }
 
+static void filteredExternalAudioTriggerRegression()
+{
+    auto countTriggers=[](float sourceHz,float hpHz){
+        DISidechainProcessor processor;
+        auto buses=processor.getBusesLayout();
+        buses.inputBuses.set(1,juce::AudioChannelSet::mono());
+        require(processor.setBusesLayout(buses),"Filtered mono sidechain layout rejected");
+        set(processor,"trigger",1);
+        set(processor,"playbackMode",0);
+        set(processor,"threshold",-18.f);
+        set(processor,"detectorHP",hpHz);
+        processor.prepareToPlay(48000.,256);
+        juce::AudioBuffer<float> buffer(3,256);
+        juce::MidiBuffer midi;
+        for(int block=0;block<12;++block)
+        {
+            buffer.clear();
+            for(int i=0;i<256;++i){
+                buffer.setSample(0,i,.4f);
+                buffer.setSample(1,i,.4f);
+                buffer.setSample(2,i,.45f*std::sin(
+                    juce::MathConstants<float>::twoPi*sourceHz*
+                    (block*256+i)/48000.f));
+            }
+            midi.clear();
+            processor.processBlock(buffer,midi);
+        }
+        const auto count=processor.triggerSequence.load();
+        processor.releaseResources();
+        return count;
+    };
+    require(countTriggers(70.f,0.f)>0,
+            "Unfiltered legacy external sidechain no longer responds to bass");
+    require(countTriggers(70.f,300.f)==0,
+            "Detector HP failed to reject low-frequency interference");
+    require(countTriggers(1000.f,300.f)>0,
+            "Detector HP incorrectly rejected an above-cutoff transient");
+
+    DISidechainProcessor processor;
+    set(processor,"detectorHP",275.f);
+    juce::MemoryBlock saved;
+    processor.getStateInformation(saved);
+    DISidechainProcessor restored;
+    restored.setStateInformation(saved.getData(),(int)saved.getSize());
+    require(std::abs(restored.state.getRawParameterValue("detectorHP")->load()-275.f)<.01f,
+            "Detector HP cutoff was not restored from host state");
+}
+
 static void stereoExternalAudioTriggerRegression()
 {
     DISidechainProcessor p;
@@ -574,6 +622,7 @@ int main()
         processingAndState();
         audioSidechainTrigger();
         stereoExternalAudioTriggerRegression();
+        filteredExternalAudioTriggerRegression();
         envelopeInterpolationRegression();
         editableEnvelopeRoundtrip();
         concurrentEnvelopeEditingStress();
