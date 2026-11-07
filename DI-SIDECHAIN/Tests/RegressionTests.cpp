@@ -23,7 +23,7 @@ static void editorLifecycle(DISidechainProcessor& p)
         std::unique_ptr<juce::AudioProcessorEditor> editor(p.createEditor());
         require(editor != nullptr, "Editor creation failed");
         require(editor->getWidth() == 700 && editor->getHeight() == 760, "Initial editor size");
-        require(editor->getNumChildComponents() == 39, "Missing editor controls");
+        require(editor->getNumChildComponents() == 43, "Missing editor controls");
         int sliders = 0, combos = 0, buttons = 0;
         for (auto* child : editor->getChildren())
         {
@@ -32,7 +32,7 @@ static void editorLifecycle(DISidechainProcessor& p)
             combos += dynamic_cast<juce::ComboBox*>(child) != nullptr;
             buttons += dynamic_cast<juce::ToggleButton*>(child) != nullptr;
         }
-        require(sliders == 16 && combos == 5 && buttons == 2, "Control types changed");
+        require(sliders == 18 && combos == 5 && buttons == 2, "Control types changed");
         editor->setSize(900, 600);
         editor->setSize(700, 760);
         require(editor->createComponentSnapshot(editor->getLocalBounds()).isValid(), "Editor paint failed");
@@ -546,6 +546,60 @@ static void outputEnvelopeFilterRegression()
                 "Output filter parameter lost when restoring an Ableton set");
 }
 
+static uint32_t measureDetectorTiming(float attackMs,float releaseMs,bool secondTransient)
+{
+    DISidechainProcessor p;
+    auto buses=p.getBusesLayout();
+    buses.inputBuses.set(1,juce::AudioChannelSet::mono());
+    require(p.setBusesLayout(buses),"Detector timing test cannot enable sidechain");
+    set(p,"trigger",1);
+    set(p,"threshold",-12.f);
+    set(p,"retrigger",1.f);
+    set(p,"detectorAttackMs",attackMs);
+    set(p,"detectorReleaseMs",releaseMs);
+    p.prepareToPlay(48000.,256);
+    juce::AudioBuffer<float> buffer(3,256);
+    juce::MidiBuffer midi;
+    for(int block=0;block<20;++block)
+    {
+        buffer.clear();
+        for(int i=0;i<256;++i){
+            buffer.setSample(0,i,.5f);
+            buffer.setSample(1,i,.5f);
+        }
+        if(block==0||(secondTransient&&block==10))
+            for(int i=16;i<46;++i)buffer.setSample(2,i,.9f);
+        midi.clear();
+        p.processBlock(buffer,midi);
+    }
+    const auto count=p.triggerSequence.load();
+    p.releaseResources();
+    return count;
+}
+
+static void detectorAttackReleaseRegression()
+{
+    require(measureDetectorTiming(0.f,4.16f,false)==1,
+            "Instantaneous detector attack missed external kick");
+    require(measureDetectorTiming(30.f,4.16f,false)==0,
+            "Slow detector attack did not reject short transient");
+    require(measureDetectorTiming(0.f,4.16f,true)==2,
+            "Fast detector release failed to rearm between kicks");
+    require(measureDetectorTiming(0.f,150.f,true)==1,
+            "Slow detector release retriggered before its level fell");
+    DISidechainProcessor p;
+    set(p,"detectorAttackMs",8.f);
+    set(p,"detectorReleaseMs",65.f);
+    juce::MemoryBlock saved;
+    p.getStateInformation(saved);
+    DISidechainProcessor restored;
+    restored.setStateInformation(saved.getData(),(int)saved.getSize());
+    require(std::abs(restored.state.getRawParameterValue("detectorAttackMs")->load()-8.f)<.05f,
+            "Detector attack failed state serialization");
+    require(std::abs(restored.state.getRawParameterValue("detectorReleaseMs")->load()-65.f)<.05f,
+            "Detector release failed state serialization");
+}
+
 static void filteredExternalAudioTriggerRegression()
 {
     auto countTriggers=[](float sourceHz,float hpHz){
@@ -775,6 +829,7 @@ int main()
         audioSidechainTrigger();
         stereoExternalAudioTriggerRegression();
         filteredExternalAudioTriggerRegression();
+        detectorAttackReleaseRegression();
         outputEnvelopeFilterRegression();
         liveWobbleCutoffRegression();
         envelopeInterpolationRegression();
