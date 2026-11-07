@@ -23,7 +23,7 @@ static void editorLifecycle(DISidechainProcessor& p)
         std::unique_ptr<juce::AudioProcessorEditor> editor(p.createEditor());
         require(editor != nullptr, "Editor creation failed");
         require(editor->getWidth() == 700 && editor->getHeight() == 760, "Initial editor size");
-        require(editor->getNumChildComponents() == 26, "Missing editor controls");
+        require(editor->getNumChildComponents() == 34, "Missing editor controls");
         int sliders = 0, combos = 0, buttons = 0;
         for (auto* child : editor->getChildren())
         {
@@ -32,7 +32,7 @@ static void editorLifecycle(DISidechainProcessor& p)
             combos += dynamic_cast<juce::ComboBox*>(child) != nullptr;
             buttons += dynamic_cast<juce::ToggleButton*>(child) != nullptr;
         }
-        require(sliders == 11 && combos == 3 && buttons == 1, "Control types changed");
+        require(sliders == 14 && combos == 4 && buttons == 2, "Control types changed");
         editor->setSize(900, 600);
         editor->setSize(700, 760);
         require(editor->createComponentSnapshot(editor->getLocalBounds()).isValid(), "Editor paint failed");
@@ -394,6 +394,85 @@ static void midiBreakbeatNoteFilter()
     p.releaseResources();
 }
 
+static float outputFilterSignalRms(float freq,bool enabled,int type,float amount)
+{
+    DISidechainProcessor p;
+    p.prepareToPlay(48000.,256);
+    set(p,"trigger",2);
+    set(p,"sync",0);
+    set(p,"length",2000);
+    set(p,"smooth",.1f);
+    set(p,"depth",0.f); // Filter has its own envelope: independent of ducking.
+    set(p,"outputFilterMin",250.f);
+    set(p,"outputFilterMax",16000.f);
+    set(p,"outputFilterAmount",amount);
+    set(p,"outputFilterType",(float)type);
+    set(p,"outputFilterOn",enabled?1.f:0.f);
+    for(auto& point:p.points)point.store(0.f);
+    juce::AudioBuffer<float> buffer(2,256);
+    juce::MidiBuffer midi;
+    double sum=0.;
+    int count=0;
+    for(int block=0;block<48;++block)
+    {
+        for(int i=0;i<256;++i)
+        {
+            const float v=.35f*std::sin(juce::MathConstants<float>::twoPi*
+                                      freq*(block*256+i)/48000.f);
+            buffer.setSample(0,i,v);
+            buffer.setSample(1,i,v);
+        }
+        midi.clear();
+        if(block==0)midi.addEvent(juce::MidiMessage::noteOn(1,36,(juce::uint8)110),0);
+        p.processBlock(buffer,midi);
+        if(block>=24)
+            for(int i=0;i<256;++i)
+            {
+                const float value=buffer.getSample(0,i);
+                require(std::isfinite(value),"Output envelope filter produced nonfinite audio");
+                sum+=(double)value*value;++count;
+            }
+    }
+    p.releaseResources();
+    return (float)std::sqrt(sum/(double)count);
+}
+
+static void outputEnvelopeFilterRegression()
+{
+    const float bassDry=outputFilterSignalRms(100.f,false,0,1.f);
+    const float trebleDry=outputFilterSignalRms(5000.f,false,0,1.f);
+    require(std::abs(bassDry-.35f/std::sqrt(2.f))<.02f,
+            "Disabled output filter altered low-frequency audio");
+    require(std::abs(trebleDry-.35f/std::sqrt(2.f))<.02f,
+            "Disabled output filter altered high-frequency audio");
+    const float bassLP=outputFilterSignalRms(100.f,true,0,1.f);
+    const float trebleLP=outputFilterSignalRms(5000.f,true,0,1.f);
+    require(bassLP>bassDry*.78f,"Lowpass incorrectly removes bass");
+    require(trebleLP<trebleDry*.42f,"Envelope-controlled lowpass did not reduce treble");
+    const float bassHP=outputFilterSignalRms(100.f,true,1,1.f);
+    const float trebleHP=outputFilterSignalRms(5000.f,true,1,1.f);
+    require(bassHP<bassDry*.7f,"Envelope-controlled highpass did not reduce bass");
+    require(trebleHP>trebleDry*.75f,"Highpass incorrectly removes treble");
+    // Amount 0 keeps the cutoff at MAX, so almost all bass gets through.
+    const float staticBass=outputFilterSignalRms(100.f,true,0,0.f);
+    require(staticBass>bassLP*.9f,"Static cutoff modulation setting is unstable");
+    DISidechainProcessor p;
+    set(p,"outputFilterOn",1.f);
+    set(p,"outputFilterType",1.f);
+    set(p,"outputFilterMin",260.f);
+    set(p,"outputFilterMax",9000.f);
+    set(p,"outputFilterAmount",.75f);
+    juce::MemoryBlock saved;
+    p.getStateInformation(saved);
+    DISidechainProcessor restored;
+    restored.setStateInformation(saved.getData(),(int)saved.getSize());
+    for(auto [id,expected]:{std::pair<const char*,float>{"outputFilterOn",1.f},
+                            {"outputFilterType",1.f},{"outputFilterMin",260.f},
+                            {"outputFilterMax",9000.f},{"outputFilterAmount",.75f}})
+        require(std::abs(restored.state.getRawParameterValue(id)->load()-expected)<.05f,
+                "Output filter parameter lost when restoring an Ableton set");
+}
+
 static void filteredExternalAudioTriggerRegression()
 {
     auto countTriggers=[](float sourceHz,float hpHz){
@@ -623,6 +702,7 @@ int main()
         audioSidechainTrigger();
         stereoExternalAudioTriggerRegression();
         filteredExternalAudioTriggerRegression();
+        outputEnvelopeFilterRegression();
         envelopeInterpolationRegression();
         editableEnvelopeRoundtrip();
         concurrentEnvelopeEditingStress();
