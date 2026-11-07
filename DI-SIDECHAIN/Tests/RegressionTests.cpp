@@ -531,6 +531,54 @@ static void liveWobbleCutoffRegression()
     p.releaseResources();
 }
 
+static void resonantDriveStabilityRegression()
+{
+    // Stress state-variable stages and antialiased drive at every supported
+    // output mode and sample rate without host-side allocations.
+    for(double sampleRate:{44100.,48000.,96000.})
+      for(int type=0;type<4;++type)
+        for(int slope=0;slope<2;++slope)
+        {
+            DISidechainProcessor p;
+            p.prepareToPlay(sampleRate,128);
+            set(p,"trigger",2);
+            set(p,"playbackMode",1);
+            set(p,"sync",0);
+            set(p,"length",23);
+            set(p,"depth",0.f);
+            set(p,"outputFilterOn",1.f);
+            set(p,"outputFilterType",(float)type);
+            set(p,"outputFilterSlope",(float)slope);
+            set(p,"outputFilterResonance",11.8f);
+            set(p,"outputFilterDrive",1.f);
+            set(p,"outputFilterMin",32.f);
+            set(p,"outputFilterMax",19000.f);
+            set(p,"outputFilterAmount",1.f);
+            juce::AudioBuffer<float> buffer(2,128);
+            juce::MidiBuffer midi;
+            for(int block=0;block<45;++block)
+            {
+                for(int i=0;i<128;++i)
+                {
+                    const float v=.7f*std::sin(juce::MathConstants<float>::twoPi*
+                         560.f*(block*128+i)/(float)sampleRate);
+                    buffer.setSample(0,i,v);
+                    buffer.setSample(1,i,v*.8f);
+                }
+                midi.clear();
+                p.processBlock(buffer,midi);
+                for(int ch=0;ch<2;++ch)
+                    for(int i=0;i<128;++i)
+                    {
+                        const float v=buffer.getSample(ch,i);
+                        require(std::isfinite(v)&&std::abs(v)<100.f,
+                           "High resonance/drive produced unstable audio");
+                    }
+            }
+            p.releaseResources();
+        }
+}
+
 static void outputEnvelopeFilterRegression()
 {
     const float bassDry=outputFilterSignalRms(100.f,false,0,1.f);
@@ -874,6 +922,7 @@ int main()
         filteredExternalAudioTriggerRegression();
         detectorAttackReleaseRegression();
         outputEnvelopeFilterRegression();
+        resonantDriveStabilityRegression();
         liveWobbleCutoffRegression();
         envelopeInterpolationRegression();
         editableEnvelopeRoundtrip();
