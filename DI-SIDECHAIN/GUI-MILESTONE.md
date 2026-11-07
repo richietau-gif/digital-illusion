@@ -55,8 +55,10 @@ are intentionally preserved.
 - Select **12 dB** (one state-variable stage) or **24 dB** (two stages).
   **RESONANCE Q** from 0.5 to 12 emphasizes the cutoff (high Q can be loud).
   **FILTER DRIVE** 0–100% adds soft saturation before the filter, with 0%
-  remaining transparent. At aggressive DRIVE and resonance settings, digital
-  aliasing may remain; oversampling is a future improvement.
+  remaining transparent. Drive uses a first-order ADAA tanh shaper to reduce
+  aliasing compared with naive per-sample tanh. This is not equivalent to
+  oversampling; some aliasing at extreme settings can remain, and the high-Q
+  / full-drive combinations require practical Ableton validation.
 - **FILTER MIN Hz** and **FILTER MAX Hz** set the cutoff boundaries.
   **FILTER AMOUNT** sets how strongly the VOLUME ENVELOPE drives cutoff.
   At 100%, normalized envelope 0 = MIN cutoff and 1 = MAX cutoff;
