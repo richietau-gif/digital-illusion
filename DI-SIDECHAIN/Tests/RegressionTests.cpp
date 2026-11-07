@@ -119,6 +119,7 @@ static void factoryPresetGuiRegression()
             "Selecting Wobble did not change the processed envelope");
     require(editor->getHeight()==760,"Disabled FILTER should preserve compact window");
     filterCheckbox->triggerClick();
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(60);
     require(editor->getHeight()==1050,
             "Enabling FILTER did not reveal the dedicated filter panel");
     int visibleFilterSliders=0;
@@ -129,6 +130,7 @@ static void factoryPresetGuiRegression()
     require(visibleFilterSliders==5,
             "FILTER panel does not expose all five creative controls");
     filterCheckbox->triggerClick();
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(60);
     require(editor->getHeight()==760,
             "Disabling FILTER did not restore compact window");
 }
