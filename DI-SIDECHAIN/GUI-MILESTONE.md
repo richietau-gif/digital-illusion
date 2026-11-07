@@ -1,3 +1,29 @@
+## DI SIDECHAIN 3.0 Studio GUI redesign (second pass)
+
+- Latest layout is **1380 × 860**, modeled on a modern studio FX workflow
+  rather than a simple recoloring of default JUCE controls.
+- Custom JUCE look-and-feel renders **glowing lime rotary knobs** with
+  fine indicator needles, refined linear parameter tracks, dark gradient
+  combo boxes and high-contrast values. The editable audio envelope alone
+  uses **orange** stroke/fill/drag points.
+- Layout: left **SIDECHAIN INPUT** detector and mini real-input monitor;
+  center prominent **SHAPE EDITOR** with detailed grid and host-trigger
+  cursor; right **OUTPUT** master knobs and six one-click **FACTORY PRESETS**.
+  Lower panels offer a slim frequency target meter, full-width
+  **FILTER ENGINE** with DSP-controlled approximate frequency response curve,
+  and compact always-visible **SIDECHAIN CONTROLS**.
+- LP/HP/BP/NOTCH & 12/24 dB use segmented bright green buttons. Existing
+  DSP parameters, host automation IDs, editor interaction and JUCE editor
+  lifecycle are preserved. Factory presets work through both dropdown and
+  right-hand shortcut bank.
+- The filter frequency-response graph is an **approximate analog preview**,
+  not a high-resolution measurement of processed audio. It reads the DSP
+  cutoff for responsive motion. It must not be mistaken for a calibrated
+  frequency-response analyzer.
+- New regression tests verify editor dimensions, rotary knob styles,
+  six preset shortcuts, bypass and parameter binding. Full Windows VST3
+  build/pluginval and manual Ableton visual testing are still required.
+
 ## DI SIDECHAIN 3.0 visual identity
 
 The third-generation editor keeps the 1120×760 two-column ergonomics
