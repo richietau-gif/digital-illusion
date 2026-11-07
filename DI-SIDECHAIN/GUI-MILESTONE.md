@@ -45,23 +45,28 @@ are intentionally preserved.
   with the host project. Incoming MIDI note-on triggers use host sample offsets
   and can retrigger at irregular breakbeat intervals.
 
-## Optional envelope-controlled OUTPUT FILTER
+## Creative OUTPUT FILTER for wobble sound design
 
-- **FILTER** checkbox beside Frequency Target activates an additional output
-  filter. OFF is the default, retaining the exact behavior of existing projects.
-- Advanced Controls: **Low Pass / High Pass**, **Filter Min Hz**,
-  **Filter Max Hz**, **Filter Amount** (0 = static cutoff at max; 1 = full
-  envelope modulation). The plugin uses the SAME drawn curve for both volume
-  gain and cutoff: envelope 0 = minimum frequency, envelope 1 = maximum.
-- The filter is applied to the main audio output, AFTER the volume and
-  frequency-target DSP. It is independent of external sidechain TRIGGER HP,
-  which filters only the detection input.
-- DSP uses a stereo single-pole low/high-pass with per-sample cutoff
-  recalculation and a 5 ms checkbox crossfade. This is an initial 6 dB/oct
-  implementation, not a resonant synthesizer filter. There is no resonance
-  parameter yet.
-- Added regression coverage for low/high pass filtering, zero volume depth
-  independence, off-state transparency and parameter persistence.
+- **FILTER** checkbox beside Frequency Target toggles this entire output
+  stage; default OFF preserves existing Ableton Sets and build #64 behavior.
+- **LP / HP / BP / Notch** selectable filter shapes (indices 0/1 retain prior
+  Low Pass / High Pass settings). A topology-preserving SVF filter has smooth
+  per-sample cutoff modulation suitable for wobble curves.
+- Select **12 dB** (one state-variable stage) or **24 dB** (two stages).
+  **RESONANCE Q** from 0.5 to 12 emphasizes the cutoff (high Q can be loud).
+  **FILTER DRIVE** 0–100% adds soft saturation before the filter, with 0%
+  remaining transparent. At aggressive DRIVE and resonance settings, digital
+  aliasing may remain; oversampling is a future improvement.
+- **FILTER MIN Hz** and **FILTER MAX Hz** set the cutoff boundaries.
+  **FILTER AMOUNT** sets how strongly the VOLUME ENVELOPE drives cutoff.
+  At 100%, normalized envelope 0 = MIN cutoff and 1 = MAX cutoff;
+  at 0%, cutoff stays at MAX. Volume **DEPTH** may remain at zero, allowing
+  purely rhythmic filter motion without volume pumping.
+- The creative output filter operates on program audio *after* gain shaping.
+  It is independent of **TRIGGER HP**, which only filters the external audio
+  detector. Enabling/disabling FILTER crossfades over 5 ms.
+- Parameters are automatable, serialized in host state, and have regression
+  tests for spectral modes, drive, resonance, slope, bypass and roundtrip.
 
 ## Not implemented yet
 
