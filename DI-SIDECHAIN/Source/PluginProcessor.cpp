@@ -8,8 +8,13 @@ static juce::AudioProcessorValueTreeState::ParameterLayout layoutParams(){
  f("midiNote","MIDI trigger note (-1 = any)",-1,127,-1);
  f("midiChannel","MIDI trigger channel (0 = any)",0,16,0);
  f("detectorHP","Audio trigger HP Hz (0 = off)",0,2000,0);
- f("outputFilterMin","Output filter minimum Hz",20,20000,120);
- f("outputFilterMax","Output filter maximum Hz",20,20000,16000);
+ // Logarithmic knob response gives precision at 40–500 Hz for bass wobbles.
+ juce::NormalisableRange<float> cutoffRange(20.f,20000.f);
+ cutoffRange.setSkewForCentre(1000.f);
+ p.push_back(std::make_unique<juce::AudioParameterFloat>(
+    juce::ParameterID{"outputFilterMin",1},"Output filter minimum Hz",cutoffRange,120.f));
+ p.push_back(std::make_unique<juce::AudioParameterFloat>(
+    juce::ParameterID{"outputFilterMax",1},"Output filter maximum Hz",cutoffRange,16000.f));
  f("outputFilterAmount","Output filter modulation",0,1,1);
  f("outputFilterResonance","Output filter resonance Q",0.5,12,0.70710678f);
  f("outputFilterDrive","Output filter drive",0,1,0);
