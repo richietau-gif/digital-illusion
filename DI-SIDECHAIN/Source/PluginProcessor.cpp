@@ -7,6 +7,7 @@ static juce::AudioProcessorValueTreeState::ParameterLayout layoutParams(){
  f("depth","Depth",0,1,1); f("mix","Mix",0,1,1);f("threshold","Trigger threshold dB",-60,0,-22);f("length","Envelope milliseconds",10,2000,250);f("smooth","Smoothing milliseconds",0.1,20,2);f("low","Low cutoff",25,1500,120);f("high","High cutoff",60,18000,400);f("retrigger","Trigger holdoff milliseconds",1,250,35);
  f("midiNote","MIDI trigger note (-1 = any)",-1,127,-1);
  f("midiChannel","MIDI trigger channel (0 = any)",0,16,0);
+ f("detectorHP","Audio trigger HP Hz (0 = off)",0,2000,0);
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"mode",1},"Frequency mode",juce::StringArray{"Full","Low","High","Band"},0));
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"trigger",1},"Trigger mode",juce::StringArray{"Audio + MIDI","Audio only","MIDI only"},0));
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"playbackMode",1},"Envelope playback",juce::StringArray{"One Shot","Loop"},0));
@@ -21,6 +22,7 @@ DISidechainProcessor::DISidechainProcessor():AudioProcessor(BusesProperties().wi
 bool DISidechainProcessor::isBusesLayoutSupported(const BusesLayout& b) const {return b.getMainInputChannelSet()==juce::AudioChannelSet::stereo()&&b.getMainOutputChannelSet()==juce::AudioChannelSet::stereo()&&(b.inputBuses.size()<2||b.inputBuses[1].isDisabled()||b.inputBuses[1]==juce::AudioChannelSet::mono()||b.inputBuses[1]==juce::AudioChannelSet::stereo());}
 void DISidechainProcessor::prepareToPlay(double sampleRate,int maxBlock){
  sr=sampleRate;phase=1;detector=0;armed=true;refractory=0;smoothGain=1;
+ detectorHpPreviousInput=0.;detectorHpPreviousOutput=0.;
  juce::dsp::ProcessSpec spec{sampleRate,(juce::uint32)juce::jmax(1,maxBlock),1};
  for(auto& c:filters){
   auto init=[&](juce::dsp::LinkwitzRileyFilter<float>& filter,
@@ -166,6 +168,8 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  auto get=[&](const char* id){return state.getRawParameterValue(id)->load();};
  int mode=(int)get("mode"),trig=(int)get("trigger");float depth=get("depth"),mix=get("mix");
  const int playbackMode=juce::jlimit(0,1,juce::roundToInt(get("playbackMode")));
+ const float detectorHP=juce::jlimit(0.f,2000.f,get("detectorHP"));
+ const double hpCoefficient=detectorHP>1.f ? std::exp(-juce::MathConstants<double>::twoPi*(double)detectorHP/sr) : 0.;
  const int midiNote=juce::jlimit(-1,127,juce::roundToInt(get("midiNote")));
  const int midiChannel=juce::jlimit(0,16,juce::roundToInt(get("midiChannel")));
  // Set both crossovers independently. BAND is HP(low) -> LP(high), not a
@@ -209,7 +213,30 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
     fire=true; // Exact host-provided sample offset, including irregular patterns.
   hasEvent=it.getNextEvent(msg,midiPos);
  }
- if(hasSide&&trig!=2&&side.getNumSamples()>=n){float v=0;for(int ch=0;ch<side.getNumChannels();++ch)v=juce::jmax(v,std::abs(side.getSample(ch,i)));detector=std::max((double)v,detector*.995);if(detector<threshold*.65)armed=true;if(armed&&detector>=threshold&&refractory==0){fire=true;armed=false;}}
+ if(hasSide&&trig!=2&&side.getNumSamples()>=n){
+  float v=0.f;
+  // Peak detection across mono or stereo sidechain, without leaking the
+  // external audio to the main signal. Process signed audio before rectifying.
+  float signedInput=0.f;
+  for(int ch=0;ch<side.getNumChannels();++ch){
+   const float sample=side.getSample(ch,i);
+   if(std::abs(sample)>std::abs(signedInput))signedInput=sample;
+   v=juce::jmax(v,std::abs(sample));
+  }
+  if(detectorHP>1.f){
+   const double filtered=hpCoefficient*(detectorHpPreviousOutput+
+                                         (double)signedInput-detectorHpPreviousInput);
+   detectorHpPreviousInput=signedInput;
+   detectorHpPreviousOutput=filtered;
+   v=std::isfinite(filtered)?(float)std::abs(filtered):0.f;
+  }else{
+   detectorHpPreviousInput=0.;
+   detectorHpPreviousOutput=0.;
+  }
+  detector=std::max((double)v,detector*.995);
+  if(detector<threshold*.65)armed=true;
+  if(armed&&detector>=threshold&&refractory==0){fire=true;armed=false;}
+ }
  if(refractory>0)--refractory;
  if(fire){phase=0;refractory=holdoff;triggerSequence.fetch_add(1,std::memory_order_relaxed);}
  float env=1.f;
