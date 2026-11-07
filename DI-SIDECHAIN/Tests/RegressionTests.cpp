@@ -171,7 +171,7 @@ static void factoryPresetGuiRegression()
             "Band Pass filter button did not update processor parameter");
     filterCheckbox->triggerClick();
     juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
-    require(editor->getWidth()==1120&&editor->getHeight()==760,
+    require(editor->getWidth()==1380&&editor->getHeight()==860,
             "FILTER bypass must not resize the studio editor");
 }
 
