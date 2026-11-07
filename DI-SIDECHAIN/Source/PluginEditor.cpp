@@ -40,7 +40,8 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p) : AudioProcessorEd
     for (int i=0;i<16;++i) {
         auto s=std::make_unique<juce::Slider>();
         s->setSliderStyle(juce::Slider::LinearHorizontal);
-        if(i>=8)s->setNumDecimalPlacesToDisplay(0);
+        if(i>=8&&i<=12)s->setNumDecimalPlacesToDisplay(0);
+        if(i>=13)s->setNumDecimalPlacesToDisplay(2);
         s->setTextBoxStyle(juce::Slider::TextBoxRight,false,67,23);
         s->setColour(juce::Slider::textBoxTextColourId,pale);
         auto l=std::make_unique<juce::Label>();
