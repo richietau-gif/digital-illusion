@@ -21,7 +21,7 @@ private:
     void updateBand(const juce::MouseEvent&);
     void setParameter(const char*, float);
     juce::Point<float> localDesignPoint(const juce::MouseEvent&) const;
-    juce::Rectangle<float> graph {33.f, 162.f, 625.f, 250.f};
+    juce::Rectangle<float> graph {35.f, 166.f, 658.f, 260.f};
     DISidechainProcessor& proc;
     std::vector<std::unique_ptr<juce::Slider>> sliders;
     std::vector<std::unique_ptr<juce::Label>> labels;
@@ -32,23 +32,20 @@ private:
     std::unique_ptr<juce::ToggleButton> outputFilterToggle;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> outputFilterAttachment;
     std::unique_ptr<juce::ComboBox> envelopePreset;
-    std::unique_ptr<juce::ComboBox> outputFilterType;
-    std::unique_ptr<juce::ComboBox> outputFilterSlope;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> outputFilterSlopeAttachment;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> outputFilterTypeAttachment;
+    std::array<std::unique_ptr<juce::TextButton>,4> filterTypeButtons;
+    std::array<std::unique_ptr<juce::TextButton>,2> filterSlopeButtons;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> ba;
     juce::LookAndFeel_V4 skin;
     juce::dsp::FFT spectrumFft {11};
     std::array<float,4096> spectrumWork {};
     std::array<float,24> spectrumBands {};
     uint64_t lastSpectrumPosition = 0;
-    bool advanced = false;
     int bandHandle = -1;
     int selectedPoint = -1;
     bool snapToGrid = false;
     int curvatureSegment = -1;
     uint32_t lastTriggerSequence = 0;
     int triggerFlashTicks = 0;
-    static constexpr float designWidth = 700.f;
+    static constexpr float designWidth = 1120.f;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DISidechainEditor)
 };
