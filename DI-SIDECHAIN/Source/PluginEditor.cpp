@@ -410,7 +410,7 @@ void DISidechainEditor::paint(juce::Graphics& g){
     // RIGHT: output/mix/master rotary knobs and quick preset library.
     const char* masterNames[]={"DEPTH","SMOOTH","MIX"};
     for(int i=0;i<3;++i)
-        text(g,masterNames[i],10,{1133.f+i*77.f,238,70,17},
+        text(g,masterNames[i],10,{1133.f+i*77.f,136,70,17},
              muted,juce::Justification::centred);
     text(g,"GREEN: ACTIVE CONTROL  ·  ORANGE: SHAPE",9,
          {1131,264,222,15},muted,juce::Justification::centred);
@@ -530,7 +530,7 @@ void DISidechainEditor::resized(){
     for(int k=0;k<3;++k){
         const int i=master[k];
         const float x=1132.f+k*78.f;
-        labels[(size_t)i]->setBounds(bounds(x,235,73,17));
+        labels[(size_t)i]->setBounds(bounds(x,137,73,17));
         sliders[(size_t)i]->setBounds(bounds(x,154,73,103));
         labels[(size_t)i]->setVisible(false);sliders[(size_t)i]->setVisible(true);
     }
