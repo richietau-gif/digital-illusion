@@ -45,6 +45,9 @@ public:
  float getEnvelopeSegmentCurve(int segment) const noexcept;
  void setEnvelopeSegmentCurve(int segment, float curve) noexcept;
  float evaluateEnvelope(double normalizedPhase) const noexcept;
+ float getVisualFilterCutoffHz() const noexcept {
+     return visualFilterCutoffHz.load(std::memory_order_relaxed);
+ }
  // Factory envelope shapes; updates only envelope nodes, not filter or other parameters.
  void applyEnvelopePreset(int presetIndex) noexcept;
 private:
