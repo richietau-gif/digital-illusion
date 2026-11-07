@@ -69,6 +69,8 @@ private:
  float outputFilterBlend=0.f;
  float smoothedFilterQ=.70710678f;
  float smoothedFilterDrive=0.f;
+ std::array<float,2> drivePreviousInput {};
+
  std::atomic<float> visualFilterCutoffHz {20000.f};
  int refractory=0; bool armed=true; float smoothGain=1;
  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DISidechainProcessor)
