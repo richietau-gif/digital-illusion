@@ -85,7 +85,6 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p) : AudioProcessorEd
         btn->setColour(juce::TextButton::buttonOnColourId,accent);
         btn->setColour(juce::TextButton::textColourOffId,pale);
         btn->setColour(juce::TextButton::textColourOnId,juce::Colour(0xff102012));
-        btn->setColour(juce::TextButton::textColourOnId,juce::Colour(0xff102012));
         btn->setClickingTogglesState(false);
         btn->onClick=[this,i]{setParameter("outputFilterType",(float)i);repaint();};
         addAndMakeVisible(*btn);
@@ -98,6 +97,7 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p) : AudioProcessorEd
         btn->setColour(juce::TextButton::buttonColourId,juce::Colour(0xff283730));
         btn->setColour(juce::TextButton::buttonOnColourId,accent);
         btn->setColour(juce::TextButton::textColourOffId,pale);
+        btn->setColour(juce::TextButton::textColourOnId,juce::Colour(0xff102012));
         btn->setClickingTogglesState(false);
         btn->onClick=[this,i]{setParameter("outputFilterSlope",(float)i);repaint();};
         addAndMakeVisible(*btn);
