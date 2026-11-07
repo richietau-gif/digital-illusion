@@ -29,6 +29,10 @@ private:
     std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> sa;
     std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>> ca;
     std::unique_ptr<juce::ToggleButton> sync;
+    std::unique_ptr<juce::ToggleButton> outputFilterToggle;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> outputFilterAttachment;
+    std::unique_ptr<juce::ComboBox> outputFilterType;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> outputFilterTypeAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> ba;
     juce::LookAndFeel_V4 skin;
     juce::dsp::FFT spectrumFft {11};
