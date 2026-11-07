@@ -140,6 +140,15 @@ static void factoryPresetGuiRegression()
             "Filter and sidechain knobs must always be simultaneously visible");
     require(filterButtons==4&&slopeButtons==2&&bandPass!=nullptr,
             "Filter must expose four compact type and two slope buttons");
+    // V3 visual contract: neon lime interaction, orange exclusive to the
+    // envelope curve (not the filter's active segment controls).
+    const auto neon=juce::Colour(0xffafff4d);
+    require(bandPass->findColour(juce::TextButton::buttonOnColourId)==neon,
+            "V3 filter segment highlight is not electric green");
+    require(bandPass->findColour(juce::TextButton::textColourOnId)
+            ==juce::Colour(0xff102012),
+            "V3 selected filter label should contrast with bright green");
+
     bandPass->triggerClick();
     juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
     require(juce::roundToInt(processor.state.getRawParameterValue("outputFilterType")->load())==2,
