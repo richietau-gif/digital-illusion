@@ -441,6 +441,53 @@ static float outputFilterSignalRms(float freq,bool enabled,int type,float amount
     return (float)std::sqrt(sum/(double)count);
 }
 
+static void liveWobbleCutoffRegression()
+{
+    DISidechainProcessor p;
+    p.prepareToPlay(48000.,256);
+    set(p,"trigger",2);
+    set(p,"playbackMode",0); // one shot
+    set(p,"sync",0);
+    set(p,"length",500);
+    set(p,"depth",0); // modulation must work without volume ducking
+    set(p,"outputFilterOn",1);
+    set(p,"outputFilterType",0); // low pass
+    set(p,"outputFilterMin",120);
+    set(p,"outputFilterMax",12000);
+    set(p,"outputFilterAmount",1);
+    for(int i=0;i<8;++i)p.points[i]=(float)i/7.f;
+    juce::AudioBuffer<float> buffer(2,256);
+    juce::MidiBuffer events;
+    double early=0.,late=0.;
+    int earlyCount=0,lateCount=0;
+    for(int block=0;block<92;++block)
+    {
+        for(int i=0;i<256;++i)
+        {
+            const float sample=.2f*std::sin(juce::MathConstants<float>::twoPi*
+                                  4000.f*(block*256+i)/48000.f);
+            buffer.setSample(0,i,sample);
+            buffer.setSample(1,i,sample);
+        }
+        events.clear();
+        if(block==0)events.addEvent(juce::MidiMessage::noteOn(1,36,(juce::uint8)100),0);
+        p.processBlock(buffer,events);
+        for(int i=0;i<256;++i)
+        {
+            const int position=block*256+i;
+            const float v=buffer.getSample(0,i);
+            require(std::isfinite(v),"Live cutoff automation produced invalid output");
+            if(position>=1500&&position<3500){early+=v*v;++earlyCount;}
+            if(position>=19000&&position<21000){late+=v*v;++lateCount;}
+        }
+    }
+    require(earlyCount>0&&lateCount>0,"Wobble measurement windows not processed");
+    const float quiet=(float)std::sqrt(early/earlyCount);
+    const float open=(float)std::sqrt(late/lateCount);
+    require(open>quiet*3.f,"Envelope movement did not sweep output filter cutoff");
+    p.releaseResources();
+}
+
 static void outputEnvelopeFilterRegression()
 {
     const float bassDry=outputFilterSignalRms(100.f,false,0,1.f);
@@ -729,6 +776,7 @@ int main()
         stereoExternalAudioTriggerRegression();
         filteredExternalAudioTriggerRegression();
         outputEnvelopeFilterRegression();
+        liveWobbleCutoffRegression();
         envelopeInterpolationRegression();
         editableEnvelopeRoundtrip();
         concurrentEnvelopeEditingStress();
