@@ -1,3 +1,16 @@
+## DI SIDECHAIN 3.0 visual identity
+
+The third-generation editor keeps the 1120×760 two-column ergonomics
+while introducing a dark graphite/green interface. **Only the envelope
+curve, its fill and the draggable envelope points are orange (#FF962F)**.
+Other highlights are bright lime green (#AFFF4D), including LP/HP/BP/NOTCH
+and 12/24 dB selections, parameter sliders, filter bypass, status accents,
+frequency selection and meter text. Selected filter buttons use a deep-green
+text foreground for contrast. The original DSP parameters and host state
+identifiers remain unchanged: this is a GUI-only evolution, not a new VST
+plugin identity. A Windows VST3 build and Ableton validation are required
+before treating the v3 skin as a release.
+
 # DI SIDECHAIN — GUI milestone
 
 This branch introduces the first native-JUCE implementation of the approved
