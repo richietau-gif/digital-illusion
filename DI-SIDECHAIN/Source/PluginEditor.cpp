@@ -268,132 +268,233 @@ void DISidechainEditor::paint(juce::Graphics& g){
     const float sc=(float)getWidth()/designWidth;
     g.saveState();
     g.addTransform(juce::AffineTransform::scale(sc));
-    box(g,{0,0,1120,760},bg,8);
-    // Header and transport bar
-    text(g,"DI",19,{16,12,30,26},pale);
-    text(g,"SIDECHAIN",19,{46,12,162,26},pale);
-    box(g,{224,17,56,23},accent.withAlpha(.13f),6);
-    text(g,"V 3.0",10,{225,17,54,23},accent,juce::Justification::centred);
-    text(g,"DIGITAL ILLUSION  /  AUDIO FX",9,{16,39,270,16},muted);
-    g.setColour(accent.withAlpha(.7f));g.fillEllipse(986,24,6,6);
-    box(g,{1001,17,104,23},triggerFlashTicks>0?juce::Colour(0xff355f28):juce::Colour(0xff25352c),10);
-    text(g,triggerFlashTicks>0?"TRIGGERED":"TRIGGER READY",9,{1004,18,98,21},
-        triggerFlashTicks>0?accent:muted,juce::Justification::centred);
-    for(int i=0;i<3;++i){
-        const float x=16.f+i*232.f;
-        box(g,{x,67,224,47},juce::Colour(0xff26352e),7);
-        const char* headings[]={"TRIGGER SOURCE","PLAYBACK","LENGTH"};
-        text(g,headings[i],9,{x+8,70,208,13},muted,juce::Justification::centred);
-    }
+    const auto dark=juce::Colour(0xff0c171b);
+    const auto border=juce::Colour(0xff294d47);
+    const auto cyan=juce::Colour(0xff31e9bf);
+    auto section=[&](juce::Rectangle<float> area,const juce::String& name){
+        g.setGradientFill(juce::ColourGradient(juce::Colour(0xff1c3033),
+                           area.getX(),area.getY(),
+                           juce::Colour(0xff101b20),area.getX(),area.getBottom(),false));
+        g.fillRoundedRectangle(area,10.f);
+        g.setColour(border.withAlpha(.80f));
+        g.drawRoundedRectangle(area.reduced(.7f),10.f,1.f);
+        g.setColour(juce::Colour(0xff244348));
+        g.fillRoundedRectangle(area.removeFromTop(36),7.f);
+        text(g,name,12,{area.getX()+14,area.getY()-29,area.getWidth()-22,21},pale);
+    };
+    // Panel groupings and clean hierarchy like studio-grade audio software.
+    section({12,91,239,528},"SIDECHAIN INPUT");
+    section({260,91,850,425},"SHAPE EDITOR");
+    section({1120,91,247,186},"OUTPUT");
+    section({1120,288,247,328},"FACTORY PRESETS");
+    section({260,527,850,88},"FREQUENCY TARGET");
+    section({12,628,908,220},"FILTER ENGINE");
+    section({930,628,437,220},"SIDECHAIN CONTROLS");
 
-    // Left: professional envelope editor
-    box(g,{16,126,695,338},panel,9);
-    text(g,"ENVELOPE",11,{29,132,114,23},pale);
+    // Brand/navigation bar: orange reserved exclusively for envelope.
+    g.setGradientFill(juce::ColourGradient(juce::Colour(0xff142a32),0,0,
+                      juce::Colour(0xff071116),0,76,false));
+    g.fillRect(0,0,1380,77);
+    g.setColour(border);g.drawLine(0,77,1380,77,1.f);
+    g.setColour(cyan);g.drawLine(20,41,28,41,2);
+    const juce::Point<float> signal[]={{28,41},{34,27},{40,53},{47,19},{54,47},
+                                        {60,33},{67,41},{76,41}};
+    for(int i=1;i<8;++i)g.drawLine(signal[i-1],signal[i],2.f);
+    text(g,"DI SIDECHAIN",23,{96,15,240,29},pale);
+    text(g,"3.0",12,{297,21,55,23},accent);
+    text(g,"D U C K   &   F I L T E R",10,{98,49,272,16},muted);
+    box(g,{390,17,318,41},juce::Colour(0xff203438),8);
+    text(g,"DIGITAL ILLUSION  ·  STUDIO SERIES",10,{409,23,284,28},
+         pale,juce::Justification::centred);
+    text(g,"AUDIO + MIDI",11,{907,27,156,23},muted,juce::Justification::centredRight);
+    g.setColour(cyan.withAlpha(.7f));g.fillEllipse(1068,33,9,9);
+    box(g,{1094,24,111,31},juce::Colour(0xff213935),9);
+    text(g,triggerFlashTicks>0?"TRIGGERED":"TRIGGER READY",9,{1096,25,108,29},
+         triggerFlashTicks>0?accent:muted,juce::Justification::centred);
+    const bool enabled=proc.state.getRawParameterValue("outputFilterOn")->load()>.5f;
+    box(g,{1230,17,137,42},enabled?juce::Colour(0xff28583c):juce::Colour(0xff263439),11);
+    text(g,enabled?"FILTER ON":"FILTER OFF",12,{1240,22,119,29},
+         enabled?accent:muted,juce::Justification::centred);
+
+    // LEFT: input/detector. All five trigger dynamics controls live here.
+    text(g,"AUDIO / MIDI TRIGGER",10,{27,134,205,19},muted);
+    box(g,{29,161,206,36},juce::Colour(0xff13282a),7);
+    text(g,"Use kick / percussion / gate as external sidechain",9,
+         {34,164,192,30},pale,juce::Justification::centred);
+    g.setColour(cyan.withAlpha(.8f));g.drawLine(27,211,234,211,1.f);
+    text(g,"DETECTOR",10,{29,219,180,19},accent);
+    // Mini signal display from the actual input FFT, updated from the audio history.
+    box(g,{28,547,207,54},juce::Colour(0xff0d2224),7);
+    for(int i=0;i<24;++i){
+        const float h=3.f+spectrumBands[(size_t)i]*41.f;
+        g.setColour(cyan.withAlpha(.22f+spectrumBands[(size_t)i]*.55f));
+        g.drawLine(35.f+i*8.f,572.f-h*.5f,35.f+i*8.f,572.f+h*.5f,2.f);
+    }
+    text(g,"LIVE TRIGGER INPUT",9,{29,527,207,15},muted);
+
+    // CENTER: preset / source / mode / length and huge editable orange curve.
+    text(g,"ENVELOPE",12,{280,131,142,21},pale);
+    text(g,"PRESET",9,{687,136,62,14},muted);
+    text(g,"SOURCE",9,{278,165,175,14},muted);
+    text(g,"MODE",9,{512,165,175,14},muted);
+    text(g,"LENGTH",9,{746,165,175,14},muted);
+    text(g,snapToGrid?"SNAP ON":"SNAP OFF",10,{1008,135,84,17},
+         snapToGrid?accent:muted,juce::Justification::centredRight);
+
     const bool synced=proc.state.getRawParameterValue("sync")->load()>.5f;
-    const int division=juce::jlimit(0,12,juce::roundToInt(
+    const int index=juce::jlimit(0,12,juce::roundToInt(
         proc.state.getRawParameterValue("division")->load()));
-    const juce::String divisions[]={"1/32","1/16","1/8","1/4","1/2","1 BAR",
-      "2 BARS","1/16T","1/8T","1/4T","1/16D","1/8D","1/4D"};
-    const auto duration=synced?divisions[division]:
+    const juce::String times[]={"1/32","1/16","1/8","1/4","1/2","1 BAR","2 BARS",
+       "1/16T","1/8T","1/4T","1/16D","1/8D","1/4D"};
+    const auto duration=synced?times[index]:
         juce::String(juce::roundToInt(proc.state.getRawParameterValue("length")->load()))+" ms";
-    const int playback=juce::roundToInt(proc.state.getRawParameterValue("playbackMode")->load());
-    text(g,(playback==1?"LOOP · ":"ONE SHOT · ")+duration,10,{350,132,158,22},muted,
-        juce::Justification::centred);
-    text(g,snapToGrid?"SNAP ON":"SNAP OFF",10,{614,133,83,20},accent,
+    text(g,"CURRENT: "+duration,9,{947,180,146,17},muted,
         juce::Justification::centredRight);
+    box(g,graph,juce::Colour(0xff101b24),4);
     for(int i=0;i<=8;++i){
         const float x=graph.getX()+graph.getWidth()*i/8.f;
-        g.setColour(juce::Colour(0xff34453d));
+        g.setColour(juce::Colour(0xff294048));
         g.drawVerticalLine(juce::roundToInt(x),graph.getY(),graph.getBottom());
     }
-    for(int i=0;i<=4;++i){
-        const float y=graph.getY()+graph.getHeight()*i/4.f;
-        g.setColour(juce::Colour(0xff34453d));
+    for(int i=0;i<=6;++i){
+        const float y=graph.getY()+graph.getHeight()*i/6.f;
+        g.setColour(juce::Colour(0xff294048));
         g.drawHorizontalLine(juce::roundToInt(y),graph.getX(),graph.getRight());
+        text(g,juce::String(-i*6)+" dB",9,{262,y-6,22,14},muted,
+             juce::Justification::centredRight);
     }
     juce::Path curve;
-    for(int i=0;i<=300;++i){
-        const float t=(float)i/300.f;
-        const float x=graph.getX()+t*graph.getWidth();
-        const float y=graph.getBottom()-proc.evaluateEnvelope(t)*graph.getHeight();
+    for(int i=0;i<=350;++i){
+        const float phase=(float)i/350.f;
+        const float x=graph.getX()+graph.getWidth()*phase;
+        const float y=graph.getBottom()-proc.evaluateEnvelope(phase)*graph.getHeight();
         if(i==0)curve.startNewSubPath(x,y);else curve.lineTo(x,y);
     }
     juce::Path fill(curve);
     fill.lineTo(graph.getRight(),graph.getBottom());
-    fill.lineTo(graph.getX(),graph.getBottom());
-    fill.closeSubPath();
-    g.setColour(curveAccent.withAlpha(.13f));g.fillPath(fill);
-    g.setColour(curveAccent);g.strokePath(curve,juce::PathStrokeType(3.5f));
+    fill.lineTo(graph.getX(),graph.getBottom());fill.closeSubPath();
+    g.setGradientFill(juce::ColourGradient(curveAccent.withAlpha(.29f),
+         graph.getCentreX(),graph.getY(),curveAccent.withAlpha(.02f),
+         graph.getCentreX(),graph.getBottom(),false));
+    g.fillPath(fill);
+    g.setColour(curveAccent.withAlpha(.15f));
+    g.strokePath(curve,juce::PathStrokeType(9.f));
+    g.setColour(curveAccent);
+    g.strokePath(curve,juce::PathStrokeType(3.0f));
     const float phase=juce::jlimit(0.f,1.f,proc.visualPhase.load());
     if(phase<1.f){
-        const float x=graph.getX()+phase*graph.getWidth();
-        g.setColour(pale.withAlpha(.5f));
-        g.drawLine(x,graph.getY(),x,graph.getBottom(),1);
+        const float cursor=graph.getX()+phase*graph.getWidth();
+        g.setColour(cyan.withAlpha(.75f));g.drawLine(cursor,graph.getY(),
+            cursor,graph.getBottom(),1.2f);
     }
     for(int i=0;i<proc.getEnvelopeNodeCount();++i){
         const auto node=proc.getEnvelopeNode(i);
         const float x=graph.getX()+node.x*graph.getWidth();
         const float y=graph.getBottom()-node.y*graph.getHeight();
+        g.setColour(curveAccent.withAlpha(.25f));g.fillEllipse(x-11,y-11,22,22);
         g.setColour(curveAccent);g.fillEllipse(x-7,y-7,14,14);
-        g.setColour(pale);g.fillEllipse(x-3,y-3,6,6);
+        g.setColour(juce::Colour(0xfffcfaf0));g.fillEllipse(x-3,y-3,6,6);
     }
-    text(g,"0%",9,{35,434,50,16},muted);
-    text(g,"100%",9,{638,434,55,16},muted,juce::Justification::centredRight);
-    text(g,"DOUBLE-CLICK TO ADD POINT  ·  ALT-DRAG TO SHAPE",9,{178,434,393,17},
-        muted,juce::Justification::centred);
+    text(g,"1.1",9,{287,481,45,17},muted);
+    text(g,"2.1",9,{669,481,45,17},muted);
+    text(g,"END",9,{1040,481,40,17},muted,juce::Justification::centredRight);
+    text(g,"DOUBLE-CLICK: ADD POINT  ·  ALT-DRAG: CURVE  ·  RIGHT CLICK: REMOVE",
+         10,{441,493,592,18},muted,juce::Justification::centred);
+    text(g,"GR "+juce::String(proc.visualGainReductionDb.load(),1)+" dB",
+         11,{955,136,127,18},accent,juce::Justification::centredRight);
 
-    // Compact frequency overview; crossover handles keep their original audio routing.
-    box(g,{16,473,695,111},panel,9);
-    text(g,"FREQUENCY TARGET",11,{29,477,225,18},pale);
-    text(g,"INPUT FFT",9,{609,477,90,18},muted,juce::Justification::centredRight);
-    box(g,{34,502,660,43},juce::Colour(0xff1b2926),6);
+    // RIGHT: output/mix/master rotary knobs and quick preset library.
+    const char* masterNames[]={"DEPTH","SMOOTH","MIX"};
+    for(int i=0;i<3;++i)
+        text(g,masterNames[i],10,{1133.f+i*77.f,238,70,17},
+             muted,juce::Justification::centred);
+    text(g,"GREEN: ACTIVE CONTROL  ·  ORANGE: SHAPE",9,
+         {1131,264,222,15},muted,juce::Justification::centred);
+    text(g,"ONE CLICK TO LOAD A CURVE",9,{1134,323,217,16},muted);
+    text(g,"Custom curves are saved with the Ableton project",9,
+         {1136,590,214,18},muted,juce::Justification::centred);
+
+    // Compact spectrum with actual incoming signal energy.
     for(int i=0;i<24;++i){
-        const float h=3.f+juce::jlimit(0.f,1.f,spectrumBands[(size_t)i])*33.f;
-        box(g,{43.f+i*26.8f,523.f-h*.5f,11,h},juce::Colour(0xff506c5d),3);
+        const float amp=2.f+juce::jlimit(0.f,1.f,spectrumBands[(size_t)i])*26.f;
+        g.setColour(cyan.withAlpha(.2f+.6f*spectrumBands[(size_t)i]));
+        g.fillRoundedRectangle({280.f+i*33.f,567.f-amp*.5f,15.f,amp},3.f);
     }
-    const int mode=juce::jlimit(0,4,juce::roundToInt(proc.state.getRawParameterValue("mode")->load()));
+    text(g,"20 Hz",9,{280,579,52,13},muted);
+    text(g,"20 kHz",9,{1046,579,51,13},muted,juce::Justification::centredRight);
+    const int mode=juce::jlimit(0,4,juce::roundToInt(
+        proc.state.getRawParameterValue("mode")->load()));
     const float low=proc.state.getRawParameterValue("low")->load();
     const float high=proc.state.getRawParameterValue("high")->load();
+    const float lowX=280.f+(xFromHz(low)-286.f)/795.f*795.f;
+    const float highX=280.f+(xFromHz(high)-286.f);
     if(mode!=0){
-        float l=mode==1?35.f:xFromHz(low);
-        float r=mode==2?693.f:mode==1?xFromHz(low):xFromHz(high);
-        if(mode==2)r=693.f;
-        box(g,{l,502,juce::jmax(2.f,r-l),43},accent.withAlpha(.22f),4);
-        g.setColour(accent);
-        g.drawVerticalLine(juce::roundToInt(l),502,546);
-        g.drawVerticalLine(juce::roundToInt(r),502,546);
+        const float l=mode==1?280.f:lowX;
+        const float r=mode==1?lowX:mode==2?1096.f:highX;
+        box(g,{l,545,juce::jmax(1.f,r-l),40},accent.withAlpha(.14f),2.f);
+        g.setColour(accent);g.drawVerticalLine((int)l,545,584);
+        g.drawVerticalLine((int)r,545,584);
     }
-    text(g,"20 Hz",9,{35,548,70,15},muted);
-    text(g,"20 kHz",9,{619,548,74,15},muted,juce::Justification::centredRight);
-    const char* targets[]={"FULL","LOW","HIGH","BAND","MULTI"};
+    const char* targetNames[]={"FULL","LOW","HIGH","BAND","MULTI"};
     for(int i=0;i<5;++i){
-        const juce::Rectangle<float> rect{17.f+i*139.f,563,131,19};
-        box(g,rect,i==mode?accent.withAlpha(.63f):juce::Colour(0xff29382f),4);
-        text(g,targets[i],9,rect,i==mode?bg:pale,juce::Justification::centred);
+        const juce::Rectangle<float> area{279.f+i*165.f,593,155,19};
+        box(g,area,mode==i?juce::Colour(0xff3b8e52):
+                   juce::Colour(0xff203238),5);
+        text(g,targetNames[i],9,area,mode==i?accent:pale,
+             juce::Justification::centred);
     }
 
-    box(g,{16,593,695,152},panel,9);
-    text(g,"MASTER",11,{29,600,172,20},pale);
-    for(int i=0;i<3;++i){
-        const char* names[]={"DEPTH","SMOOTH","MIX"};
-        text(g,names[i],10,{29.f+i*228.f,636,220,17},muted,juce::Justification::centred);
-        box(g,{29.f+i*228.f,660,217,53},juce::Colour(0xff24332e),6);
+    // BOTTOM FILTER: interactive controls and an actual modeled response.
+    const bool filterEnabled=proc.state.getRawParameterValue("outputFilterOn")->load()>.5f;
+    text(g,"FILTER",11,{28,663,60,20},pale);
+    text(g,filterEnabled?"ACTIVE":"BYPASSED",9,{85,664,79,18},
+         filterEnabled?accent:muted);
+    text(g,"TYPE",9,{172,645,56,14},muted);
+    text(g,"SLOPE",9,{529,645,66,14},muted);
+    const int filterType=juce::jlimit(0,3,
+         juce::roundToInt(proc.state.getRawParameterValue("outputFilterType")->load()));
+    const float minHz=proc.state.getRawParameterValue("outputFilterMin")->load();
+    const float maxHz=proc.state.getRawParameterValue("outputFilterMax")->load();
+    const float Q=proc.state.getRawParameterValue("outputFilterResonance")->load();
+    const float fc=juce::jlimit(20.f,20000.f,proc.visualFilterCutoffHz.load());
+    const juce::Rectangle<float> response{699,694,202,123};
+    box(g,response,dark,5);
+    for(int k=0;k<5;++k){
+        const float x=response.getX()+k*response.getWidth()/4.f;
+        g.setColour(border.withAlpha(.5f));g.drawVerticalLine((int)x,
+                         response.getY(),response.getBottom());
     }
-    text(g,"GR "+juce::String(proc.visualGainReductionDb.load(),1)+" dB",
-        10,{545,601,146,20},accent,juce::Justification::centredRight);
+    // Frequency-response preview based on analog SVF biquad magnitude,
+    // separate from the real DSP but reacting to its actual cutoff and Q.
+    const float w0=juce::MathConstants<float>::twoPi;
+    juce::Path responseLine;
+    for(int j=0;j<180;++j){
+        const float f=20.f*std::pow(1000.f,(float)j/179.f);
+        const float ratio=f/juce::jmax(20.f,fc);
+        const float k=1.f/juce::jmax(.5f,Q);
+        const float den=std::sqrt(juce::square(1.f-ratio*ratio)+
+                                   juce::square(k*ratio));
+        float num=1.f;
+        if(filterType==1)num=ratio*ratio;
+        if(filterType==2)num=ratio;
+        if(filterType==3)num=std::sqrt(1.f+ratio*ratio*ratio*ratio);
+        float mag=juce::jlimit(0.f,3.f,num/juce::jmax(.001f,den));
+        const float db=juce::jlimit(-35.f,12.f,20.f*std::log10(juce::jmax(.0001f,mag)));
+        const float x=response.getX()+(float)j/179.f*response.getWidth();
+        const float y=response.getBottom()-5.f-(db+35.f)/47.f*(response.getHeight()-10.f);
+        if(j==0)responseLine.startNewSubPath(x,y);else responseLine.lineTo(x,y);
+    }
+    g.setColour(accent.withAlpha(filterEnabled?.20f:.07f));
+    g.strokePath(responseLine,juce::PathStrokeType(7.f));
+    g.setColour(filterEnabled?accent:muted);
+    g.strokePath(responseLine,juce::PathStrokeType(2.2f));
+    text(g,""+juce::String(fc>=1000?fc/1000.f:fc,1)+
+         (fc>=1000?" kHz":" Hz"),9,{775,820,128,18},accent,
+         juce::Justification::centredRight);
+    text(g,"DRIVE  ·  RESONANCE  ·  CUTOFF SWEEP",9,{32,825,635,15},muted);
 
-    // Right: always-open creative filter panel
-    box(g,{723,67,382,332},panel,9);
-    text(g,"FILTER ENGINE",12,{739,77,223,22},pale);
-    g.setColour(accent.withAlpha(.8f));g.fillEllipse(725,85,6,6);
-    text(g,"TYPE",9,{741,125,106,17},muted);
-    text(g,"SLOPE",9,{741,171,106,17},muted);
-    text(g,"CUTOFF FOLLOWS THE ENVELOPE",9,{740,371,345,17},muted);
-    // Right: always-open sidechain and multiband controls, even in bypass.
-    box(g,{723,407,382,338},panelDark,9);
-    text(g,"SIDECHAIN CONTROLS",12,{738,417,290,19},pale);
-    g.setColour(accent.withAlpha(.8f));g.fillEllipse(725,423,6,6);
-    text(g,"DETECTOR  ·  MIDI  ·  MULTIBAND",9,{740,440,340,17},muted);
+    // BOTTOM RIGHT: all additional parameters remain accessible, compact.
+    text(g,"AUDIO DETECTOR / MIDI / MULTIBAND",10,{942,663,410,16},muted);
     g.restoreState();
 }
 void DISidechainEditor::resized(){
