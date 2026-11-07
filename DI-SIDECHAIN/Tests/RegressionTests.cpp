@@ -22,8 +22,8 @@ static void editorLifecycle(DISidechainProcessor& p)
     {
         std::unique_ptr<juce::AudioProcessorEditor> editor(p.createEditor());
         require(editor != nullptr, "Editor creation failed");
-        require(editor->getWidth() == 700 && editor->getHeight() == 760, "Initial editor size");
-        require(editor->getNumChildComponents() == 50, "Missing editor controls");
+        require(editor->getWidth() == 1120 && editor->getHeight() == 760, "Initial editor size");
+        require(editor->getNumChildComponents() == 54, "Missing editor controls");
         int sliders = 0, combos = 0, buttons = 0;
         for (auto* child : editor->getChildren())
         {
@@ -32,9 +32,9 @@ static void editorLifecycle(DISidechainProcessor& p)
             combos += dynamic_cast<juce::ComboBox*>(child) != nullptr;
             buttons += dynamic_cast<juce::ToggleButton*>(child) != nullptr;
         }
-        require(sliders == 21 && combos == 6 && buttons == 2, "Control types changed");
-        editor->setSize(900, 600);
-        editor->setSize(700, 760);
+        require(sliders == 21 && combos == 4 && buttons == 2, "Control types changed");
+        editor->setSize(1300, 760);
+        editor->setSize(1120, 760);
         require(editor->createComponentSnapshot(editor->getLocalBounds()).isValid(), "Editor paint failed");
         // Exercise attachments from a host automation thread while the editor exists.
         std::thread automation([&] {
@@ -117,22 +117,37 @@ static void factoryPresetGuiRegression()
     require(processor.getEnvelopeNodeCount()==7 &&
             std::abs(processor.getEnvelopeNode(1).y-.05f)<.001f,
             "Selecting Wobble did not change the processed envelope");
-    require(editor->getHeight()==760,"Disabled FILTER should preserve compact window");
+    require(editor->getWidth()==1120&&editor->getHeight()==760,
+            "Wide always-on filter layout must be fixed 1120x760");
+    int visibleSliders=0, filterButtons=0, slopeButtons=0;
+    juce::TextButton* bandPass=nullptr;
+    for(auto* child:editor->getChildren()){
+        if(auto* slider=dynamic_cast<juce::Slider*>(child)){
+            if(slider->isVisible())++visibleSliders;
+            require(slider->getBounds().getRight()<=editor->getWidth(),
+                    "A knob extends beyond the wide editor");
+            require(slider->getBounds().getBottom()<=editor->getHeight(),
+                    "A knob extends below the wide editor");
+        }
+        const auto id=child->getComponentID();
+        if(id.startsWith("filter-type-")){
+            ++filterButtons;
+            if(id=="filter-type-2")bandPass=dynamic_cast<juce::TextButton*>(child);
+        }
+        if(id.startsWith("filter-slope-"))++slopeButtons;
+    }
+    require(visibleSliders==21,
+            "Filter and sidechain knobs must always be simultaneously visible");
+    require(filterButtons==4&&slopeButtons==2&&bandPass!=nullptr,
+            "Filter must expose four compact type and two slope buttons");
+    bandPass->triggerClick();
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    require(juce::roundToInt(processor.state.getRawParameterValue("outputFilterType")->load())==2,
+            "Band Pass filter button did not update processor parameter");
     filterCheckbox->triggerClick();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(60);
-    require(editor->getHeight()==1050,
-            "Enabling FILTER did not reveal the dedicated filter panel");
-    int visibleFilterSliders=0;
-    for(auto* child:editor->getChildren())
-        if(auto* slider=dynamic_cast<juce::Slider*>(child))
-            if(slider->isVisible()&&slider->getY()>800)
-                ++visibleFilterSliders;
-    require(visibleFilterSliders==5,
-            "FILTER panel does not expose all five creative controls");
-    filterCheckbox->triggerClick();
-    juce::MessageManager::getInstance()->runDispatchLoopUntil(60);
-    require(editor->getHeight()==760,
-            "Disabling FILTER did not restore compact window");
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    require(editor->getWidth()==1120&&editor->getHeight()==760,
+            "FILTER toggle must not resize the new wide editor");
 }
 
 static void envelopeInterpolationRegression()
