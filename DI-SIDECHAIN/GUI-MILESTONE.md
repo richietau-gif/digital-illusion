@@ -36,7 +36,10 @@ are intentionally preserved.
   gain reduction. Bars decay when no new input arrives.
 - **Bottom:** active DSP Depth, Smooth, and Mix parameter sliders.
 - **Advanced Controls:** expand to reveal Threshold, Length in milliseconds,
-  cutoff frequencies, Retrigger/Holdoff, MIDI note and MIDI channel.
+  cutoff frequencies, Retrigger/Holdoff, MIDI note and MIDI channel, plus
+  **TRIGGER HP Hz** (0 = off, up to 2000 Hz). This applies a detector-only
+  high-pass to the external audio sidechain and does not filter the audible
+  program signal. Default 0 preserves the behavior of older projects.
   MIDI note -1 = all notes, 0–127 = specific note number; MIDI channel 0 =
   all channels, 1–16 = one channel. These parameters are automatable and saved
   with the host project. Incoming MIDI note-on triggers use host sample offsets
