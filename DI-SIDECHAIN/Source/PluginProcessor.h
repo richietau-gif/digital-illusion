@@ -45,6 +45,8 @@ public:
  float getEnvelopeSegmentCurve(int segment) const noexcept;
  void setEnvelopeSegmentCurve(int segment, float curve) noexcept;
  float evaluateEnvelope(double normalizedPhase) const noexcept;
+ // Factory envelope shapes; updates only envelope nodes, not filter or other parameters.
+ void applyEnvelopePreset(int presetIndex) noexcept;
 private:
  static juce::AudioProcessorValueTreeState::ParameterLayout makeParams();
  struct FilterChannel {
