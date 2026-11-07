@@ -3,6 +3,14 @@
 
 /** DI SIDECHAIN editor. All children are constructed before setSize() invokes resized().
     The envelope is currently the existing eight-point DSP model. */
+class DIStudioSkin : public juce::LookAndFeel_V4 {
+public:
+    void drawRotarySlider(juce::Graphics&,int,int,int,int,float,float,float,juce::Slider&) override;
+    void drawLinearSlider(juce::Graphics&,int,int,int,int,float,float,float,
+                          juce::Slider::SliderStyle,juce::Slider&) override;
+    void drawComboBox(juce::Graphics&,int,int,bool,int,int,int,int,juce::ComboBox&) override;
+};
+
 class DISidechainEditor : public juce::AudioProcessorEditor, private juce::Timer {
 public:
     explicit DISidechainEditor(DISidechainProcessor&);
@@ -21,7 +29,7 @@ private:
     void updateBand(const juce::MouseEvent&);
     void setParameter(const char*, float);
     juce::Point<float> localDesignPoint(const juce::MouseEvent&) const;
-    juce::Rectangle<float> graph {35.f, 166.f, 658.f, 260.f};
+    juce::Rectangle<float> graph {286.f, 213.f, 795.f, 265.f};
     DISidechainProcessor& proc;
     std::vector<std::unique_ptr<juce::Slider>> sliders;
     std::vector<std::unique_ptr<juce::Label>> labels;
@@ -34,8 +42,9 @@ private:
     std::unique_ptr<juce::ComboBox> envelopePreset;
     std::array<std::unique_ptr<juce::TextButton>,4> filterTypeButtons;
     std::array<std::unique_ptr<juce::TextButton>,2> filterSlopeButtons;
+    std::array<std::unique_ptr<juce::TextButton>,6> presetButtons;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> ba;
-    juce::LookAndFeel_V4 skin;
+    DIStudioSkin skin;
     juce::dsp::FFT spectrumFft {11};
     std::array<float,4096> spectrumWork {};
     std::array<float,24> spectrumBands {};
@@ -46,6 +55,6 @@ private:
     int curvatureSegment = -1;
     uint32_t lastTriggerSequence = 0;
     int triggerFlashTicks = 0;
-    static constexpr float designWidth = 1120.f;
+    static constexpr float designWidth = 1380.f;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DISidechainEditor)
 };
