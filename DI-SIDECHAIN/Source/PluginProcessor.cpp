@@ -89,6 +89,39 @@ void DISidechainProcessor::adoptLegacyPoints() noexcept {
     }
     activeNodeCount.store(8,std::memory_order_release);
 }
+void DISidechainProcessor::applyEnvelopePreset(int presetIndex) noexcept {
+    // Seven time/value keyframes per shape; explicit 0/1 endpoints keep
+    // One Shot and Loop deterministic and avoid zero-duration segments.
+    static constexpr float factory[6][7][2] = {
+        // Pump: immediate ducking with a long smooth release.
+        {{0.f,1.f},{.04f,.02f},{.19f,.02f},{.4f,.18f},
+         {.65f,.63f},{.84f,.93f},{1.f,1.f}},
+        // Tight Kick: very short dip with fast recovery.
+        {{0.f,1.f},{.012f,0.f},{.08f,.03f},{.19f,.4f},
+         {.34f,.93f},{.6f,1.f},{1.f,1.f}},
+        // Smooth Duck: soft onset and gentle recovery.
+        {{0.f,1.f},{.12f,.35f},{.26f,.2f},{.5f,.32f},
+         {.73f,.7f},{.9f,.98f},{1.f,1.f}},
+        // Ghost Kick: subtle groove for bus ducking.
+        {{0.f,1.f},{.03f,.15f},{.14f,.15f},{.34f,.45f},
+         {.53f,.7f},{.77f,.95f},{1.f,1.f}},
+        // Breakbeat: three irregular ducks in a single cycle.
+        {{0.f,1.f},{.07f,.08f},{.22f,1.f},{.41f,.15f},
+         {.56f,1.f},{.79f,.08f},{1.f,1.f}},
+        // Wobble: three cyclic sweeps; works with FILTER and Depth 0.
+        {{0.f,1.f},{.15f,.05f},{.33f,1.f},{.49f,.05f},
+         {.67f,1.f},{.83f,.05f},{1.f,1.f}}
+    };
+    if(presetIndex<0 || presetIndex>=6)return;
+    activeNodeCount.store(0,std::memory_order_release);
+    for(int i=0;i<7;++i){
+        nodeX[(size_t)i].store(factory[presetIndex][i][0],std::memory_order_relaxed);
+        nodeY[(size_t)i].store(factory[presetIndex][i][1],std::memory_order_relaxed);
+        nodeCurve[(size_t)i].store(0.f,std::memory_order_relaxed);
+    }
+    activeNodeCount.store(7,std::memory_order_release);
+}
+
 void DISidechainProcessor::setEnvelopeNode(int index,float x,float y) noexcept {
     adoptLegacyPoints();
     const int n=getEnvelopeNodeCount();
