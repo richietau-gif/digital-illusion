@@ -2,8 +2,11 @@
 #include <cmath>
 
 namespace {
-const juce::Colour bg(0xff0d1016), panel(0xff1b222e), panelDark(0xff151c27),
-                   accent(0xffff686c), pale(0xfff4f5f8), muted(0xff9ca8b8);
+// DI SIDECHAIN 3.0: only the envelope is orange; every interactive
+// accent, spectrum highlight and status light is electric lime green.
+const juce::Colour bg(0xff0a1011), panel(0xff172023), panelDark(0xff111a1d),
+                   accent(0xffafff4d), curveAccent(0xffff962f),
+                   pale(0xffeef4f0), muted(0xff92aaa5);
 void box(juce::Graphics& g, juce::Rectangle<float> r, juce::Colour c, float radius=10.f) {
     g.setColour(c); g.fillRoundedRectangle(r, radius);
 }
@@ -22,15 +25,15 @@ float hzFromX(float x) {
 
 DISidechainEditor::DISidechainEditor(DISidechainProcessor& p) : AudioProcessorEditor(&p), proc(p) {
     skin.setColour(juce::ComboBox::backgroundColourId, panel);
-    skin.setColour(juce::ComboBox::outlineColourId, juce::Colour(0xff354050));
+    skin.setColour(juce::ComboBox::outlineColourId, juce::Colour(0xff334741));
     skin.setColour(juce::ComboBox::textColourId, pale);
     skin.setColour(juce::PopupMenu::backgroundColourId, panel);
     skin.setColour(juce::PopupMenu::textColourId, pale);
     skin.setColour(juce::Slider::thumbColourId, accent);
     skin.setColour(juce::Slider::trackColourId, accent);
-    skin.setColour(juce::Slider::backgroundColourId, juce::Colour(0xff3a4455));
-    skin.setColour(juce::Slider::textBoxTextColourId, pale);
-    skin.setColour(juce::Slider::textBoxBackgroundColourId, panel);
+    skin.setColour(juce::Slider::backgroundColourId, juce::Colour(0xff35473f));
+    skin.setColour(juce::Slider::textBoxTextColourId, accent);
+    skin.setColour(juce::Slider::textBoxBackgroundColourId, panelDark);
     skin.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
     setLookAndFeel(&skin);
     setWantsKeyboardFocus(true);
@@ -78,9 +81,11 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p) : AudioProcessorEd
     for(int i=0;i<4;++i){
         auto btn=std::make_unique<juce::TextButton>(typeNames[i]);
         btn->setComponentID("filter-type-"+juce::String(i));
-        btn->setColour(juce::TextButton::buttonColourId,juce::Colour(0xff293240));
+        btn->setColour(juce::TextButton::buttonColourId,juce::Colour(0xff283730));
         btn->setColour(juce::TextButton::buttonOnColourId,accent);
         btn->setColour(juce::TextButton::textColourOffId,pale);
+        btn->setColour(juce::TextButton::textColourOnId,juce::Colour(0xff102012));
+        btn->setColour(juce::TextButton::textColourOnId,juce::Colour(0xff102012));
         btn->setClickingTogglesState(false);
         btn->onClick=[this,i]{setParameter("outputFilterType",(float)i);repaint();};
         addAndMakeVisible(*btn);
@@ -90,7 +95,7 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p) : AudioProcessorEd
     for(int i=0;i<2;++i){
         auto btn=std::make_unique<juce::TextButton>(slopeNames[i]);
         btn->setComponentID("filter-slope-"+juce::String(i));
-        btn->setColour(juce::TextButton::buttonColourId,juce::Colour(0xff293240));
+        btn->setColour(juce::TextButton::buttonColourId,juce::Colour(0xff283730));
         btn->setColour(juce::TextButton::buttonOnColourId,accent);
         btn->setColour(juce::TextButton::textColourOffId,pale);
         btn->setClickingTogglesState(false);
@@ -184,14 +189,17 @@ void DISidechainEditor::paint(juce::Graphics& g){
     box(g,{0,0,1120,760},bg,8);
     // Header and transport bar
     text(g,"DI",19,{16,12,30,26},pale);
-    text(g,"SIDECHAIN",19,{46,12,162,26},accent);
+    text(g,"SIDECHAIN",19,{46,12,162,26},pale);
+    box(g,{224,17,56,23},accent.withAlpha(.13f),6);
+    text(g,"V 3.0",10,{225,17,54,23},accent,juce::Justification::centred);
     text(g,"DIGITAL ILLUSION  /  AUDIO FX",9,{16,39,270,16},muted);
-    box(g,{1001,17,104,23},triggerFlashTicks>0?juce::Colour(0xff256c3e):juce::Colour(0xff273445),10);
+    g.setColour(accent.withAlpha(.7f));g.fillEllipse(986,24,6,6);
+    box(g,{1001,17,104,23},triggerFlashTicks>0?juce::Colour(0xff355f28):juce::Colour(0xff25352c),10);
     text(g,triggerFlashTicks>0?"TRIGGERED":"TRIGGER READY",9,{1004,18,98,21},
-        triggerFlashTicks>0?juce::Colour(0xff8ff4aa):muted,juce::Justification::centred);
+        triggerFlashTicks>0?accent:muted,juce::Justification::centred);
     for(int i=0;i<3;++i){
         const float x=16.f+i*232.f;
-        box(g,{x,67,224,47},juce::Colour(0xff242e3a),7);
+        box(g,{x,67,224,47},juce::Colour(0xff26352e),7);
         const char* headings[]={"TRIGGER SOURCE","PLAYBACK","LENGTH"};
         text(g,headings[i],9,{x+8,70,208,13},muted,juce::Justification::centred);
     }
@@ -213,12 +221,12 @@ void DISidechainEditor::paint(juce::Graphics& g){
         juce::Justification::centredRight);
     for(int i=0;i<=8;++i){
         const float x=graph.getX()+graph.getWidth()*i/8.f;
-        g.setColour(juce::Colour(0xff354151));
+        g.setColour(juce::Colour(0xff34453d));
         g.drawVerticalLine(juce::roundToInt(x),graph.getY(),graph.getBottom());
     }
     for(int i=0;i<=4;++i){
         const float y=graph.getY()+graph.getHeight()*i/4.f;
-        g.setColour(juce::Colour(0xff354151));
+        g.setColour(juce::Colour(0xff34453d));
         g.drawHorizontalLine(juce::roundToInt(y),graph.getX(),graph.getRight());
     }
     juce::Path curve;
@@ -232,8 +240,8 @@ void DISidechainEditor::paint(juce::Graphics& g){
     fill.lineTo(graph.getRight(),graph.getBottom());
     fill.lineTo(graph.getX(),graph.getBottom());
     fill.closeSubPath();
-    g.setColour(accent.withAlpha(.1f));g.fillPath(fill);
-    g.setColour(accent);g.strokePath(curve,juce::PathStrokeType(3.f));
+    g.setColour(curveAccent.withAlpha(.13f));g.fillPath(fill);
+    g.setColour(curveAccent);g.strokePath(curve,juce::PathStrokeType(3.5f));
     const float phase=juce::jlimit(0.f,1.f,proc.visualPhase.load());
     if(phase<1.f){
         const float x=graph.getX()+phase*graph.getWidth();
@@ -244,7 +252,7 @@ void DISidechainEditor::paint(juce::Graphics& g){
         const auto node=proc.getEnvelopeNode(i);
         const float x=graph.getX()+node.x*graph.getWidth();
         const float y=graph.getBottom()-node.y*graph.getHeight();
-        g.setColour(accent);g.fillEllipse(x-7,y-7,14,14);
+        g.setColour(curveAccent);g.fillEllipse(x-7,y-7,14,14);
         g.setColour(pale);g.fillEllipse(x-3,y-3,6,6);
     }
     text(g,"0%",9,{35,434,50,16},muted);
@@ -256,10 +264,10 @@ void DISidechainEditor::paint(juce::Graphics& g){
     box(g,{16,473,695,111},panel,9);
     text(g,"FREQUENCY TARGET",11,{29,477,225,18},pale);
     text(g,"INPUT FFT",9,{609,477,90,18},muted,juce::Justification::centredRight);
-    box(g,{34,502,660,43},juce::Colour(0xff202a38),6);
+    box(g,{34,502,660,43},juce::Colour(0xff1b2926),6);
     for(int i=0;i<24;++i){
         const float h=3.f+juce::jlimit(0.f,1.f,spectrumBands[(size_t)i])*33.f;
-        box(g,{43.f+i*26.8f,523.f-h*.5f,11,h},juce::Colour(0xff56657e),3);
+        box(g,{43.f+i*26.8f,523.f-h*.5f,11,h},juce::Colour(0xff506c5d),3);
     }
     const int mode=juce::jlimit(0,4,juce::roundToInt(proc.state.getRawParameterValue("mode")->load()));
     const float low=proc.state.getRawParameterValue("low")->load();
@@ -278,8 +286,8 @@ void DISidechainEditor::paint(juce::Graphics& g){
     const char* targets[]={"FULL","LOW","HIGH","BAND","MULTI"};
     for(int i=0;i<5;++i){
         const juce::Rectangle<float> rect{17.f+i*139.f,563,131,19};
-        box(g,rect,i==mode?juce::Colour(0xffaa3948):juce::Colour(0xff293343),4);
-        text(g,targets[i],9,rect,pale,juce::Justification::centred);
+        box(g,rect,i==mode?accent.withAlpha(.63f):juce::Colour(0xff29382f),4);
+        text(g,targets[i],9,rect,i==mode?bg:pale,juce::Justification::centred);
     }
 
     box(g,{16,593,695,152},panel,9);
@@ -287,20 +295,22 @@ void DISidechainEditor::paint(juce::Graphics& g){
     for(int i=0;i<3;++i){
         const char* names[]={"DEPTH","SMOOTH","MIX"};
         text(g,names[i],10,{29.f+i*228.f,636,220,17},muted,juce::Justification::centred);
-        box(g,{29.f+i*228.f,660,217,53},juce::Colour(0xff222b39),6);
+        box(g,{29.f+i*228.f,660,217,53},juce::Colour(0xff24332e),6);
     }
     text(g,"GR "+juce::String(proc.visualGainReductionDb.load(),1)+" dB",
         10,{545,601,146,20},accent,juce::Justification::centredRight);
 
     // Right: always-open creative filter panel
     box(g,{723,67,382,332},panel,9);
-    text(g,"OUTPUT FILTER",12,{739,77,223,22},pale);
+    text(g,"FILTER ENGINE",12,{739,77,223,22},pale);
+    g.setColour(accent.withAlpha(.8f));g.fillEllipse(725,85,6,6);
     text(g,"TYPE",9,{741,125,106,17},muted);
     text(g,"SLOPE",9,{741,171,106,17},muted);
     text(g,"CUTOFF FOLLOWS THE ENVELOPE",9,{740,371,345,17},muted);
     // Right: always-open sidechain and multiband controls, even in bypass.
     box(g,{723,407,382,338},panelDark,9);
     text(g,"SIDECHAIN CONTROLS",12,{738,417,290,19},pale);
+    g.setColour(accent.withAlpha(.8f));g.fillEllipse(725,423,6,6);
     text(g,"DETECTOR  ·  MIDI  ·  MULTIBAND",9,{740,440,340,17},muted);
     g.restoreState();
 }
