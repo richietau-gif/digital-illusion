@@ -60,6 +60,8 @@ private:
  std::atomic<int> activeNodeCount {0}; // 0 selects legacy 8-point envelope
  void adoptLegacyPoints() noexcept;
  double sr=44100, phase=1, envelopeLength=0.25, detector=0;
+ // Detector high-pass state is independent from audio-output crossover filters.
+ double detectorHpPreviousInput=0., detectorHpPreviousOutput=0.;
  int refractory=0; bool armed=true; float smoothGain=1;
  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DISidechainProcessor)
 };
