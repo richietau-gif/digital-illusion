@@ -13,10 +13,10 @@ void text(juce::Graphics& g, const juce::String& s, float size,
     g.drawFittedText(s, r.toNearestInt(), align, 1);
 }
 float xFromHz(float hz) {
-    return 33.f + juce::jlimit(0.f, 1.f, std::log(juce::jlimit(20.f,20000.f,hz)/20.f)/std::log(1000.f))*625.f;
+    return 35.f + juce::jlimit(0.f, 1.f, std::log(juce::jlimit(20.f,20000.f,hz)/20.f)/std::log(1000.f))*658.f;
 }
 float hzFromX(float x) {
-    return 20.f * std::pow(1000.f, juce::jlimit(0.f,1.f,(x-33.f)/625.f));
+    return 20.f * std::pow(1000.f, juce::jlimit(0.f,1.f,(x-35.f)/658.f));
 }
 }
 
@@ -74,17 +74,30 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p) : AudioProcessorEd
     addAndMakeVisible(*outputFilterToggle);
     outputFilterAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
         p.state,"outputFilterOn",*outputFilterToggle);
-    outputFilterType=std::make_unique<juce::ComboBox>();
-    outputFilterType->addItemList({"Low Pass","High Pass","Band Pass","Notch"},1);
-    addAndMakeVisible(*outputFilterType);
-    outputFilterTypeAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
-        p.state,"outputFilterType",*outputFilterType);
-
-    outputFilterSlope=std::make_unique<juce::ComboBox>();
-    outputFilterSlope->addItemList({"12 dB","24 dB"},1);
-    addAndMakeVisible(*outputFilterSlope);
-    outputFilterSlopeAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
-        p.state,"outputFilterSlope",*outputFilterSlope);
+    const char* typeNames[]={"LP","HP","BP","NOTCH"};
+    for(int i=0;i<4;++i){
+        auto btn=std::make_unique<juce::TextButton>(typeNames[i]);
+        btn->setComponentID("filter-type-"+juce::String(i));
+        btn->setColour(juce::TextButton::buttonColourId,juce::Colour(0xff293240));
+        btn->setColour(juce::TextButton::buttonOnColourId,accent);
+        btn->setColour(juce::TextButton::textColourOffId,pale);
+        btn->setClickingTogglesState(false);
+        btn->onClick=[this,i]{setParameter("outputFilterType",(float)i);repaint();};
+        addAndMakeVisible(*btn);
+        filterTypeButtons[(size_t)i]=std::move(btn);
+    }
+    const char* slopeNames[]={"12 dB","24 dB"};
+    for(int i=0;i<2;++i){
+        auto btn=std::make_unique<juce::TextButton>(slopeNames[i]);
+        btn->setComponentID("filter-slope-"+juce::String(i));
+        btn->setColour(juce::TextButton::buttonColourId,juce::Colour(0xff293240));
+        btn->setColour(juce::TextButton::buttonOnColourId,accent);
+        btn->setColour(juce::TextButton::textColourOffId,pale);
+        btn->setClickingTogglesState(false);
+        btn->onClick=[this,i]{setParameter("outputFilterSlope",(float)i);repaint();};
+        addAndMakeVisible(*btn);
+        filterSlopeButtons[(size_t)i]=std::move(btn);
+    }
 
     // Factory presets update the actual atomically stored envelope nodes.
     // The selection is a command, not a state parameter: user-edited curves
@@ -103,18 +116,12 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p) : AudioProcessorEd
         }
     };
     addAndMakeVisible(*envelopePreset);
-    outputFilterToggle->onClick=[this]{
-        if(outputFilterToggle->getToggleState())advanced=false;
-        setSize(700,advanced?1150:(outputFilterToggle->getToggleState()?1050:760));
-        repaint();
-    };
-
     // setSize invokes resized synchronously: do not move above child construction.
-    setSize(700,760);
+    setSize(1120,760);
     startTimerHz(15);
 }
 DISidechainEditor::~DISidechainEditor(){
-    stopTimer();outputFilterSlopeAttachment.reset();outputFilterTypeAttachment.reset();outputFilterAttachment.reset();ba.reset();ca.clear();sa.clear();
+    stopTimer();outputFilterAttachment.reset();ba.reset();ca.clear();sa.clear();
     setLookAndFeel(nullptr);
 }
 void DISidechainEditor::updateSpectrum(){
@@ -155,10 +162,15 @@ void DISidechainEditor::updateSpectrum(){
 }
 void DISidechainEditor::timerCallback(){
     updateSpectrum();
-    // Respond to automated FILTER enable/disable without touching audio thread.
-    const int desiredHeight=advanced?1150:
-        (outputFilterToggle->getToggleState()?1050:760);
-    if(getHeight()!=desiredHeight)setSize(700,desiredHeight);
+    // Host automation keeps all active filter modes highlighted.
+    const int selectedType=juce::jlimit(0,3,
+        juce::roundToInt(proc.state.getRawParameterValue("outputFilterType")->load()));
+    const int selectedSlope=juce::jlimit(0,1,
+        juce::roundToInt(proc.state.getRawParameterValue("outputFilterSlope")->load()));
+    for(int i=0;i<4;++i)
+        filterTypeButtons[(size_t)i]->setToggleState(i==selectedType,juce::dontSendNotification);
+    for(int i=0;i<2;++i)
+        filterSlopeButtons[(size_t)i]->setToggleState(i==selectedSlope,juce::dontSendNotification);
     const auto sequence=proc.triggerSequence.load(std::memory_order_relaxed);
     if(sequence!=lastTriggerSequence){lastTriggerSequence=sequence;triggerFlashTicks=3;}
     else if(triggerFlashTicks>0)--triggerFlashTicks;
@@ -167,151 +179,129 @@ void DISidechainEditor::timerCallback(){
 void DISidechainEditor::paint(juce::Graphics& g){
     g.fillAll(bg);
     const float sc=(float)getWidth()/designWidth;
-    g.saveState();g.addTransform(juce::AffineTransform::scale(sc));
-    const float h=(float)getHeight()/sc;
-    box(g,{0,0,700.f,h},bg,18);
-    text(g,"DI",19,{12,12,28,23},pale);
-    text(g,"SIDECHAIN",19,{40,12,160,23},accent);
-    text(g,"DIGITAL ILLUSION · AUDIO FX",9,{12,37,250,14},muted);
-    box(g,{586,18,102,19},triggerFlashTicks>0?juce::Colour(0xff256c3e):juce::Colour(0xff253447),11);
-    text(g,triggerFlashTicks>0?"TRIGGERED":"TRIGGER READY",9,{590,18,94,19},triggerFlashTicks>0?juce::Colour(0xff76f3a5):muted,juce::Justification::centred);
+    g.saveState();
+    g.addTransform(juce::AffineTransform::scale(sc));
+    box(g,{0,0,1120,760},bg,8);
+    // Header and transport bar
+    text(g,"DI",19,{16,12,30,26},pale);
+    text(g,"SIDECHAIN",19,{46,12,162,26},accent);
+    text(g,"DIGITAL ILLUSION  /  AUDIO FX",9,{16,39,270,16},muted);
+    box(g,{1001,17,104,23},triggerFlashTicks>0?juce::Colour(0xff256c3e):juce::Colour(0xff273445),10);
+    text(g,triggerFlashTicks>0?"TRIGGERED":"TRIGGER READY",9,{1004,18,98,21},
+        triggerFlashTicks>0?juce::Colour(0xff8ff4aa):muted,juce::Justification::centred);
+    for(int i=0;i<3;++i){
+        const float x=16.f+i*232.f;
+        box(g,{x,67,224,47},juce::Colour(0xff242e3a),7);
+        const char* headings[]={"TRIGGER SOURCE","PLAYBACK","LENGTH"};
+        text(g,headings[i],9,{x+8,70,208,13},muted,juce::Justification::centred);
+    }
 
-    for(int i=0;i<3;++i) box(g,{11.f+i*226.f,57,219,40},juce::Colour(0xff242b37),7);
-    const char* top[]={"TRIGGER","MODE","LENGTH"};
-    for(int i=0;i<3;++i) text(g,top[i],10,{17.f+i*226.f,60,207,16},pale,juce::Justification::centred);
-    box(g,{11,108,678,365},panel,10);
-    text(g,"VOLUME ENVELOPE",11,{19,119,127,20},pale);
-    // Surface the active timing and playback mode without covering the curve.
+    // Left: professional envelope editor
+    box(g,{16,126,695,338},panel,9);
+    text(g,"ENVELOPE",11,{29,132,114,23},pale);
     const bool synced=proc.state.getRawParameterValue("sync")->load()>.5f;
-    const int playback=(int)proc.state.getRawParameterValue("playbackMode")->load();
-    const int division=juce::jlimit(0,12,
-        juce::roundToInt(proc.state.getRawParameterValue("division")->load()));
-    const juce::String names[]={"1/32","1/16","1/8","1/4","1/2","1 BAR",
-        "2 BARS","1/16T","1/8T","1/4T","1/16D","1/8D","1/4D"};
-    const auto lengthDisplay=synced?names[division]:
+    const int division=juce::jlimit(0,12,juce::roundToInt(
+        proc.state.getRawParameterValue("division")->load()));
+    const juce::String divisions[]={"1/32","1/16","1/8","1/4","1/2","1 BAR",
+      "2 BARS","1/16T","1/8T","1/4T","1/16D","1/8D","1/4D"};
+    const auto duration=synced?divisions[division]:
         juce::String(juce::roundToInt(proc.state.getRawParameterValue("length")->load()))+" ms";
-    text(g,(playback==1?"LOOP  ·  ":"ONE SHOT  ·  ")+lengthDisplay,10,
-         {330,120,130,18},muted,juce::Justification::centred);
-    text(g,snapToGrid ? "SNAP: ON · CLICK TO TOGGLE" : "SNAP: OFF · CLICK TO TOGGLE",9,{460,119,220,20},accent,juce::Justification::centredRight);
+    const int playback=juce::roundToInt(proc.state.getRawParameterValue("playbackMode")->load());
+    text(g,(playback==1?"LOOP · ":"ONE SHOT · ")+duration,10,{350,132,158,22},muted,
+        juce::Justification::centred);
+    text(g,snapToGrid?"SNAP ON":"SNAP OFF",10,{614,133,83,20},accent,
+        juce::Justification::centredRight);
     for(int i=0;i<=8;++i){
-        auto x=graph.getX()+graph.getWidth()*i/8.f;
-        g.setColour(juce::Colour(0xff374253));g.drawVerticalLine(juce::roundToInt(x),graph.getY(),graph.getBottom());
+        const float x=graph.getX()+graph.getWidth()*i/8.f;
+        g.setColour(juce::Colour(0xff354151));
+        g.drawVerticalLine(juce::roundToInt(x),graph.getY(),graph.getBottom());
     }
     for(int i=0;i<=4;++i){
-        auto y=graph.getY()+graph.getHeight()*i/4.f;
-        g.setColour(juce::Colour(0xff374253));g.drawHorizontalLine(juce::roundToInt(y),graph.getX(),graph.getRight());
+        const float y=graph.getY()+graph.getHeight()*i/4.f;
+        g.setColour(juce::Colour(0xff354151));
+        g.drawHorizontalLine(juce::roundToInt(y),graph.getX(),graph.getRight());
     }
-    // The plotted curve is sampled from the SAME smoothstep interpolator as DSP.
-    // Unlike a decorative Bezier approximation, this matches the actual gain shape.
-    juce::Path line;
-    constexpr int plotSamples = 256;
-    for(int i=0;i<=plotSamples;++i){
-        const double t=(double)i/plotSamples;
-        const float x=graph.getX()+(float)t*graph.getWidth();
-        const float y=graph.getBottom()-juce::jlimit(0.f,1.f,proc.evaluateEnvelope(t))*graph.getHeight();
-        if(i==0)line.startNewSubPath(x,y);else line.lineTo(x,y);
+    juce::Path curve;
+    for(int i=0;i<=300;++i){
+        const float t=(float)i/300.f;
+        const float x=graph.getX()+t*graph.getWidth();
+        const float y=graph.getBottom()-proc.evaluateEnvelope(t)*graph.getHeight();
+        if(i==0)curve.startNewSubPath(x,y);else curve.lineTo(x,y);
     }
-    juce::Path shaded(line);
-    shaded.lineTo(graph.getRight(),graph.getBottom());
-    shaded.lineTo(graph.getX(),graph.getBottom());shaded.closeSubPath();
-    g.setColour(accent.withAlpha(.11f));g.fillPath(shaded);
-    g.setColour(accent);g.strokePath(line,juce::PathStrokeType(4.f));
-    const float phase=juce::jlimit(0.f,1.f,proc.visualPhase.load(std::memory_order_relaxed));
+    juce::Path fill(curve);
+    fill.lineTo(graph.getRight(),graph.getBottom());
+    fill.lineTo(graph.getX(),graph.getBottom());
+    fill.closeSubPath();
+    g.setColour(accent.withAlpha(.1f));g.fillPath(fill);
+    g.setColour(accent);g.strokePath(curve,juce::PathStrokeType(3.f));
+    const float phase=juce::jlimit(0.f,1.f,proc.visualPhase.load());
     if(phase<1.f){
-        const float cursorX=graph.getX()+phase*graph.getWidth();
-        g.setColour(pale.withAlpha(.55f));
-        g.drawLine(cursorX,graph.getY(),cursorX,graph.getBottom(),1.5f);
+        const float x=graph.getX()+phase*graph.getWidth();
+        g.setColour(pale.withAlpha(.5f));
+        g.drawLine(x,graph.getY(),x,graph.getBottom(),1);
     }
-    const float grDb=proc.visualGainReductionDb.load(std::memory_order_relaxed);
-    text(g,"GR "+juce::String(juce::jlimit(-120.f,0.f,grDb),1)+" dB",11,
-         {550,142,126,17},accent,juce::Justification::centredRight);
     for(int i=0;i<proc.getEnvelopeNodeCount();++i){
         const auto node=proc.getEnvelopeNode(i);
-        float x=graph.getX()+graph.getWidth()*node.x;
-        float y=graph.getBottom()-node.y*graph.getHeight();
-        g.setColour(accent);g.fillEllipse(x-(i==selectedPoint?11.f:9.f),y-(i==selectedPoint?11.f:9.f),i==selectedPoint?22.f:18.f,i==selectedPoint?22.f:18.f);
-        g.setColour(pale);g.fillEllipse(x-5,y-5,10,10);
+        const float x=graph.getX()+node.x*graph.getWidth();
+        const float y=graph.getBottom()-node.y*graph.getHeight();
+        g.setColour(accent);g.fillEllipse(x-7,y-7,14,14);
+        g.setColour(pale);g.fillEllipse(x-3,y-3,6,6);
     }
-    text(g,"0",12,{36,421,50,20},muted);
-    text(g,"100%",12,{598,421,57,20},muted,juce::Justification::centredRight);
-    text(g,"0 dB",10,{19,445,90,18},muted);
-    text(g,"DOUBLE-CLICK: ADD · ALT-DRAG: CURVE",9,{206,445,295,18},accent,juce::Justification::centred);
-    text(g,"-inf dB",10,{581,445,95,18},muted,juce::Justification::centredRight);
-    text(g,"FREQUENCY TARGET",11,{11,488,255,22},pale);
-    text(g,"LIVE INPUT FFT · 2048",9,{485,488,197,22},muted,juce::Justification::centredRight);
-    box(g,{27,533,646,86},panel,11);
-    for(int i=0;i<24;++i) {
-        const float amp=4.f+juce::jlimit(0.f,1.f,spectrumBands[i])*69.f;
-        box(g,{36.f+i*26.f,576.f-amp*.5f,13,amp},juce::Colour(0xff55647b),4);
+    text(g,"0%",9,{35,434,50,16},muted);
+    text(g,"100%",9,{638,434,55,16},muted,juce::Justification::centredRight);
+    text(g,"DOUBLE-CLICK TO ADD POINT  ·  ALT-DRAG TO SHAPE",9,{178,434,393,17},
+        muted,juce::Justification::centred);
+
+    // Compact frequency overview; crossover handles keep their original audio routing.
+    box(g,{16,473,695,111},panel,9);
+    text(g,"FREQUENCY TARGET",11,{29,477,225,18},pale);
+    text(g,"INPUT FFT",9,{609,477,90,18},muted,juce::Justification::centredRight);
+    box(g,{34,502,660,43},juce::Colour(0xff202a38),6);
+    for(int i=0;i<24;++i){
+        const float h=3.f+juce::jlimit(0.f,1.f,spectrumBands[(size_t)i])*33.f;
+        box(g,{43.f+i*26.8f,523.f-h*.5f,11,h},juce::Colour(0xff56657e),3);
     }
-    const int mode=juce::jlimit(0,4,(int)proc.state.getRawParameterValue("mode")->load());
+    const int mode=juce::jlimit(0,4,juce::roundToInt(proc.state.getRawParameterValue("mode")->load()));
     const float low=proc.state.getRawParameterValue("low")->load();
     const float high=proc.state.getRawParameterValue("high")->load();
-    float x1=mode==2?xFromHz(low):mode==0?33.f:xFromHz(low);
-    float x2=mode==1?xFromHz(low):mode==0?658.f:mode==2?658.f:xFromHz(high);
     if(mode!=0){
-        if(mode==1)x1=33.f;
-        if(mode==2)x2=658.f;
-        auto rect=juce::Rectangle<float>(x1,534.f,juce::jmax(2.f,x2-x1),84.f);
-        box(g,rect,accent.withAlpha(.22f),3);
-        g.setColour(accent);g.drawVerticalLine(juce::roundToInt(x1),528,623);
-        g.drawVerticalLine(juce::roundToInt(x2),528,623);
+        float l=mode==1?35.f:xFromHz(low);
+        float r=mode==2?693.f:mode==1?xFromHz(low):xFromHz(high);
+        if(mode==2)r=693.f;
+        box(g,{l,502,juce::jmax(2.f,r-l),43},accent.withAlpha(.22f),4);
+        g.setColour(accent);
+        g.drawVerticalLine(juce::roundToInt(l),502,546);
+        g.drawVerticalLine(juce::roundToInt(r),502,546);
     }
-    // Selected cutoffs are always readable, even when the advanced panel
-    // is collapsed. Labels are aligned to their draggable boundaries.
-    if(mode!=0){
-        auto hzLabel=[](float hz){
-            return hz>=1000.f ? juce::String(hz/1000.f,2)+" kHz"
-                              : juce::String(juce::roundToInt(hz))+" Hz";
-        };
-        const auto lowLabel=hzLabel(low);
-        const auto highLabel=hzLabel(high);
-        const auto cutoffText=[&](float x,const juce::String& s){
-            const float cx=juce::jlimit(78.f,610.f,x);
-            box(g,{cx-44.f,510.f,88.f,20.f},juce::Colour(0xff334055),5.f);
-            text(g,s,10,{cx-42.f,510.f,84.f,20.f},pale,
-                 juce::Justification::centred);
-            g.setColour(accent);
-            g.fillEllipse(x-4.f,615.f,8.f,8.f);
-        };
-        if(mode==1||mode==2){
-            cutoffText(xFromHz(low),lowLabel);
-        }else{
-            cutoffText(xFromHz(low),lowLabel);
-            // Avoid overlapping Hz labels for close cutoff boundaries.
-            if(std::abs(xFromHz(high)-xFromHz(low))>95.f)
-                cutoffText(xFromHz(high),highLabel);
-        }
-    }
-    text(g,"20 Hz",12,{27,621,90,20},muted);
-    text(g,"20 kHz",12,{572,621,99,20},muted,juce::Justification::centredRight);
-    const char* modes[]={"FULL","LOW","HIGH","BAND","MULTI"};
+    text(g,"20 Hz",9,{35,548,70,15},muted);
+    text(g,"20 kHz",9,{619,548,74,15},muted,juce::Justification::centredRight);
+    const char* targets[]={"FULL","LOW","HIGH","BAND","MULTI"};
     for(int i=0;i<5;++i){
-        juce::Rectangle<float> r{11.f+i*135.5f,647,129,25};
-        box(g,r,i==mode?juce::Colour(0xffa9323c):juce::Colour(0xff29313f),5);
-        text(g,modes[i],10.f,r,pale,juce::Justification::centred);
+        const juce::Rectangle<float> rect{17.f+i*139.f,563,131,19};
+        box(g,rect,i==mode?juce::Colour(0xffaa3948):juce::Colour(0xff293343),4);
+        text(g,targets[i],9,rect,pale,juce::Justification::centred);
     }
-    for(int i=0;i<3;++i)box(g,{11.f+i*226.f,683,219,59},juce::Colour(0xff232a36),6);
-    text(g,"DEPTH",10,{11,688,219,15},muted,juce::Justification::centred);
-    text(g,"SMOOTH",10,{237,688,219,15},muted,juce::Justification::centred);
-    text(g,"MIX",10,{463,688,219,15},muted,juce::Justification::centred);
-    text(g,advanced?"HIDE ADVANCED ↑":"ADVANCED CONTROLS ↓",10,{13,744,675,16},accent,juce::Justification::centred);
-    if(advanced){
-        box(g,{11,767,678,360},panelDark,9);
-        text(g,"ADDITIONAL DSP SETTINGS",12,{25,774,420,20},pale);
-        text(g,"TRIGGER · MIDI ROUTING · MULTIBAND DEPTH",9,
-             {25,1095,650,18},muted);
-    }else if(outputFilterToggle->getToggleState()){
-        // Dedicated always-visible-on-enable panel; no more hiding the
-        // creative filter behind Advanced Controls.
-        box(g,{11,767,678,267},panelDark,9);
-        text(g,"OUTPUT FILTER · ENVELOPE-CONTROLLED CUTOFF",12,
-             {25,778,500,22},pale);
-        text(g,"TYPE",9,{29,800,280,15},muted);
-        text(g,"SLOPE",9,{364,800,280,15},muted);
-        text(g,"Cutoff follows the red curve. Depth may be 0 for pure wobble.",
-             9,{25,1005,650,18},muted);
+
+    box(g,{16,593,695,152},panel,9);
+    text(g,"MASTER",11,{29,600,172,20},pale);
+    for(int i=0;i<3;++i){
+        const char* names[]={"DEPTH","SMOOTH","MIX"};
+        text(g,names[i],10,{29.f+i*228.f,636,220,17},muted,juce::Justification::centred);
+        box(g,{29.f+i*228.f,660,217,53},juce::Colour(0xff222b39),6);
     }
+    text(g,"GR "+juce::String(proc.visualGainReductionDb.load(),1)+" dB",
+        10,{545,601,146,20},accent,juce::Justification::centredRight);
+
+    // Right: always-open creative filter panel
+    box(g,{723,67,382,332},panel,9);
+    text(g,"OUTPUT FILTER",12,{739,77,223,22},pale);
+    text(g,"TYPE",9,{741,125,106,17},muted);
+    text(g,"SLOPE",9,{741,171,106,17},muted);
+    text(g,"CUTOFF FOLLOWS THE ENVELOPE",9,{740,371,345,17},muted);
+    // Right: always-open sidechain and multiband controls, even in bypass.
+    box(g,{723,407,382,338},panelDark,9);
+    text(g,"SIDECHAIN CONTROLS",12,{738,417,290,19},pale);
+    text(g,"DETECTOR  ·  MIDI  ·  MULTIBAND",9,{740,440,340,17},muted);
     g.restoreState();
 }
 void DISidechainEditor::resized(){
@@ -320,43 +310,44 @@ void DISidechainEditor::resized(){
         return juce::Rectangle<int>(juce::roundToInt(x*sc),juce::roundToInt(y*sc),
             juce::jmax(1,juce::roundToInt(w*sc)),juce::jmax(1,juce::roundToInt(h*sc)));};
     if(sliders.size()!=21||labels.size()!=21||combos.size()!=3||
-       sync==nullptr||outputFilterToggle==nullptr||outputFilterType==nullptr||
-       outputFilterSlope==nullptr||envelopePreset==nullptr)return;
-    for(int i=0;i<3;++i)combos[i]->setBounds(bounds(18.f+i*226.f,76,203,19));
-    sync->setBounds(bounds(558,105,115,23));
-    envelopePreset->setBounds(bounds(148,119,176,22));
+       sync==nullptr||outputFilterToggle==nullptr||envelopePreset==nullptr||
+       filterTypeButtons[0]==nullptr||filterSlopeButtons[0]==nullptr)return;
+    for(int i=0;i<3;++i)combos[(size_t)i]->setBounds(bounds(25.f+i*232.f,86,202,24));
+    sync->setBounds(bounds(990,53,110,22));
+    envelopePreset->setBounds(bounds(140,133,198,23));
+    outputFilterToggle->setBounds(bounds(970,77,120,24));
+    // Main controls remain directly below the envelope editor.
     const int mainIndices[]={0,4,1};
     for(int j=0;j<3;++j){
         const int i=mainIndices[j];
-        sliders[i]->setBounds(bounds(23+j*226.f,705,192,31));
-        labels[i]->setBounds(bounds(11+j*226.f,684,219,18));
-        labels[i]->setVisible(false);
-        sliders[i]->setVisible(true);
+        labels[(size_t)i]->setBounds(bounds(30+j*228.f,636,216,17));
+        sliders[(size_t)i]->setBounds(bounds(32+j*228.f,667,210,32));
+        labels[(size_t)i]->setVisible(false);
+        sliders[(size_t)i]->setVisible(true);
     }
-    outputFilterToggle->setBounds(bounds(272,486,113,25));
-    const bool filterPage=outputFilterToggle->getToggleState()&&!advanced;
-    outputFilterType->setBounds(bounds(29,817,306,24));
-    outputFilterSlope->setBounds(bounds(364,817,306,24));
-    outputFilterType->setVisible(filterPage);
-    outputFilterSlope->setVisible(filterPage);
-    // Creative filter controls remain readable immediately after checking FILTER.
+    for(int i=0;i<4;++i)
+        filterTypeButtons[(size_t)i]->setBounds(bounds(741+i*87.f,144,80,24));
+    for(int i=0;i<2;++i)
+        filterSlopeButtons[(size_t)i]->setBounds(bounds(741+i*175.f,190,166,24));
+    // Always-visible filter values; no advanced disclosure or resizing.
     for(int i=11;i<=15;++i){
-        const int k=i-11,row=k/2,col=k%2;
-        const float x=29.f+col*335.f,y=855.f+row*54.f;
-        labels[i]->setBounds(bounds(x,y,114,20));
-        sliders[i]->setBounds(bounds(x+112.f,y,193,24));
-        labels[i]->setVisible(filterPage);
-        sliders[i]->setVisible(filterPage);
+        const int row=i-11;
+        const float y=223.f+row*29.f;
+        labels[(size_t)i]->setBounds(bounds(736,y,110,24));
+        sliders[(size_t)i]->setBounds(bounds(847,y,242,25));
+        labels[(size_t)i]->setVisible(true);
+        sliders[(size_t)i]->setVisible(true);
     }
-    // Keep all remaining technical controls in Advanced, including MULTI.
+    // Detector, crossover, MIDI and MULTI controls use a compact two-column grid.
     const int extra[]={2,3,5,6,7,8,9,10,16,17,18,19,20};
     for(int k=0;k<13;++k){
         const int i=extra[k],row=k/2,col=k%2;
-        const float x=29.f+col*335.f,y=803.f+row*46.f;
-        labels[i]->setBounds(bounds(x,y,114,20));
-        sliders[i]->setBounds(bounds(x+112.f,y,193,24));
-        labels[i]->setVisible(advanced);
-        sliders[i]->setVisible(advanced);
+        const float x=739.f+col*181.f;
+        const float y=464.f+row*39.f;
+        labels[(size_t)i]->setBounds(bounds(x,y,177,15));
+        sliders[(size_t)i]->setBounds(bounds(x,y+15,174,21));
+        labels[(size_t)i]->setVisible(true);
+        sliders[(size_t)i]->setVisible(true);
     }
 }
 juce::Point<float> DISidechainEditor::localDesignPoint(const juce::MouseEvent& e) const {
@@ -389,7 +380,7 @@ void DISidechainEditor::updateBand(const juce::MouseEvent& e){
 }
 void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
     auto q=localDesignPoint(e);
-    if(q.x>=460&&q.x<=680&&q.y>=119&&q.y<=144){snapToGrid=!snapToGrid;repaint();return;}
+    if(q.x>=609&&q.x<=700&&q.y>=127&&q.y<=158){snapToGrid=!snapToGrid;repaint();return;}
     if(graph.contains(q)&&e.mods.isAltDown()){
         // Alt-drag the curve segment, with per-segment cubic shaping.
         const float t=juce::jlimit(0.f,1.f,(q.x-graph.getX())/graph.getWidth());
@@ -417,32 +408,23 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
         if(selectedPoint>=0){grabKeyboardFocus();updatePoint(e);}
         return;
     }
-    if(q.y>=647 && q.y<=674){
-        int index=(int)((q.x-11.f)/135.5f);
-        if(index>=0&&index<5){setParameter("mode",(float)index);repaint();}
+    if(q.y>=563&&q.y<=583&&q.x>=17&&q.x<=712){
+        const int index=juce::jlimit(0,4,(int)((q.x-17.f)/139.f));
+        setParameter("mode",(float)index);
+        repaint();
         return;
     }
-    if(q.y>=507&&q.y<=624&&q.x>=27&&q.x<=673){
-        const int mode=(int)proc.state.getRawParameterValue("mode")->load();
+    if(q.y>=500&&q.y<=548&&q.x>=35&&q.x<=693){
+        const int mode=juce::roundToInt(proc.state.getRawParameterValue("mode")->load());
         if(mode!=0){
             const float lo=xFromHz(proc.state.getRawParameterValue("low")->load());
             const float hi=xFromHz(proc.state.getRawParameterValue("high")->load());
-            constexpr float grabRadius=23.f;
-            const float distLow=std::abs(q.x-lo),distHigh=std::abs(q.x-hi);
-            // Only grab an actual handle: clicking anywhere in the spectrum
-            // must not accidentally jump the cutoff to the mouse.
-            if(distLow<=grabRadius&&(mode!=3||distLow<=distHigh))
-                bandHandle=0;
-            else if(mode==3&&distHigh<=grabRadius)
-                bandHandle=1;
+            const float dl=std::abs(q.x-lo),dh=std::abs(q.x-hi);
+            if(dl<=18.f&&(mode==1||mode==2||dl<=dh))bandHandle=0;
+            else if(mode>=3&&dh<=18.f)bandHandle=1;
             if(bandHandle>=0)updateBand(e);
         }
         return;
-    }
-    if(q.y>=740&&q.y<=764){
-        advanced=!advanced;
-        setSize(700,advanced?1150:(outputFilterToggle->getToggleState()?1050:760));
-        repaint();
     }
 }
 void DISidechainEditor::mouseDrag(const juce::MouseEvent& e){
