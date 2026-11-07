@@ -16,10 +16,10 @@ void text(juce::Graphics& g, const juce::String& s, float size,
     g.drawFittedText(s, r.toNearestInt(), align, 1);
 }
 float xFromHz(float hz) {
-    return 35.f + juce::jlimit(0.f, 1.f, std::log(juce::jlimit(20.f,20000.f,hz)/20.f)/std::log(1000.f))*658.f;
+    return 280.f + juce::jlimit(0.f,1.f,std::log(juce::jlimit(20.f,20000.f,hz)/20.f)/std::log(1000.f))*816.f;
 }
 float hzFromX(float x) {
-    return 20.f * std::pow(1000.f, juce::jlimit(0.f,1.f,(x-35.f)/658.f));
+    return 20.f*std::pow(1000.f,juce::jlimit(0.f,1.f,(x-280.f)/816.f));
 }
 }
 
@@ -105,10 +105,14 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p) : AudioProcessorEd
     const char* titles[] = {"DEPTH","MIX","THRESHOLD dB","LENGTH ms","SMOOTH","LOW Hz","HIGH Hz","HOLDOFF","MIDI NOTE (-1 ANY)","MIDI CH (0 ANY)","TRIGGER HP Hz","FILTER MIN Hz","FILTER MAX Hz","FILTER AMOUNT","RESONANCE Q","FILTER DRIVE","TRIGGER ATTACK ms","TRIGGER RELEASE ms","MULTI LOW DEPTH","MULTI MID DEPTH","MULTI HIGH DEPTH"};
     for (int i=0;i<21;++i) {
         auto s=std::make_unique<juce::Slider>();
-        s->setSliderStyle(juce::Slider::LinearHorizontal);
+        const bool rotary=(i==0||i==4||i==1||(i>=11&&i<=15));
+        s->setSliderStyle(rotary?juce::Slider::RotaryHorizontalVerticalDrag:
+                                 juce::Slider::LinearHorizontal);
+        if(rotary)s->setTextBoxStyle(juce::Slider::TextBoxBelow,false,78,22);
+
         if(i>=8&&i<=12)s->setNumDecimalPlacesToDisplay(0);
         if(i>=13)s->setNumDecimalPlacesToDisplay(2);
-        s->setTextBoxStyle(juce::Slider::TextBoxRight,false,67,23);
+        if(!rotary)s->setTextBoxStyle(juce::Slider::TextBoxRight,false,67,23);
         s->setColour(juce::Slider::textBoxTextColourId,pale);
         auto l=std::make_unique<juce::Label>();
         l->setText(titles[i],juce::dontSendNotification);
@@ -426,8 +430,8 @@ void DISidechainEditor::paint(juce::Graphics& g){
         proc.state.getRawParameterValue("mode")->load()));
     const float low=proc.state.getRawParameterValue("low")->load();
     const float high=proc.state.getRawParameterValue("high")->load();
-    const float lowX=280.f+(xFromHz(low)-286.f)/795.f*795.f;
-    const float highX=280.f+(xFromHz(high)-286.f);
+    const float lowX=xFromHz(low);
+    const float highX=xFromHz(high);
     if(mode!=0){
         const float l=mode==1?280.f:lowX;
         const float r=mode==1?lowX:mode==2?1096.f:highX;
@@ -472,8 +476,9 @@ void DISidechainEditor::paint(juce::Graphics& g){
         const float f=20.f*std::pow(1000.f,(float)j/179.f);
         const float ratio=f/juce::jmax(20.f,fc);
         const float k=1.f/juce::jmax(.5f,Q);
-        const float den=std::sqrt(juce::square(1.f-ratio*ratio)+
-                                   juce::square(k*ratio));
+        const float residual=1.f-ratio*ratio;
+        const float damping=k*ratio;
+        const float den=std::sqrt(residual*residual+damping*damping);
         float num=1.f;
         if(filterType==1)num=ratio*ratio;
         if(filterType==2)num=ratio;
@@ -504,43 +509,55 @@ void DISidechainEditor::resized(){
             juce::jmax(1,juce::roundToInt(w*sc)),juce::jmax(1,juce::roundToInt(h*sc)));};
     if(sliders.size()!=21||labels.size()!=21||combos.size()!=3||
        sync==nullptr||outputFilterToggle==nullptr||envelopePreset==nullptr||
-       filterTypeButtons[0]==nullptr||filterSlopeButtons[0]==nullptr)return;
-    for(int i=0;i<3;++i)combos[(size_t)i]->setBounds(bounds(25.f+i*232.f,86,202,24));
-    sync->setBounds(bounds(990,53,110,22));
-    envelopePreset->setBounds(bounds(140,133,198,23));
-    outputFilterToggle->setBounds(bounds(970,77,120,24));
-    // Main controls remain directly below the envelope editor.
-    const int mainIndices[]={0,4,1};
-    for(int j=0;j<3;++j){
-        const int i=mainIndices[j];
-        labels[(size_t)i]->setBounds(bounds(30+j*228.f,636,216,17));
-        sliders[(size_t)i]->setBounds(bounds(32+j*228.f,667,210,32));
-        labels[(size_t)i]->setVisible(false);
-        sliders[(size_t)i]->setVisible(true);
+       filterTypeButtons[0]==nullptr||filterSlopeButtons[0]==nullptr||
+       presetButtons[0]==nullptr)return;
+    // Main source, playback, tempo divisions and saved factory shapes.
+    for(int i=0;i<3;++i)
+        combos[(size_t)i]->setBounds(bounds(279.f+i*234.f,181.f,211,25));
+    envelopePreset->setBounds(bounds(750,130,188,25));
+    sync->setBounds(bounds(1002,180,98,26));
+    // Left independent audio transient detector and input.
+    const int detector[]={2,7,10,16,17};
+    for(int k=0;k<5;++k){
+        const int i=detector[k];
+        const float y=245.f+k*55.f;
+        labels[(size_t)i]->setBounds(bounds(30,y,204,17));
+        sliders[(size_t)i]->setBounds(bounds(29,y+18.f,205,29));
+        labels[(size_t)i]->setVisible(true);sliders[(size_t)i]->setVisible(true);
     }
+    // Right-hand output rotary controls remain prominent and editable.
+    const int master[]={0,4,1};
+    for(int k=0;k<3;++k){
+        const int i=master[k];
+        const float x=1132.f+k*78.f;
+        labels[(size_t)i]->setBounds(bounds(x,235,73,17));
+        sliders[(size_t)i]->setBounds(bounds(x,154,73,103));
+        labels[(size_t)i]->setVisible(false);sliders[(size_t)i]->setVisible(true);
+    }
+    // Presets are accessible as one-click buttons, in addition to the dropdown.
+    for(int k=0;k<6;++k)
+        presetButtons[(size_t)k]->setBounds(bounds(1135,350.f+k*38.f,217,31));
+    // Bottom filter signal chain: colored controls and real response display.
+    outputFilterToggle->setBounds(bounds(85,651,105,25));
     for(int i=0;i<4;++i)
-        filterTypeButtons[(size_t)i]->setBounds(bounds(741+i*87.f,144,80,24));
+        filterTypeButtons[(size_t)i]->setBounds(bounds(202.f+i*79.f,662,74,23));
     for(int i=0;i<2;++i)
-        filterSlopeButtons[(size_t)i]->setBounds(bounds(741+i*175.f,190,166,24));
-    // Always-visible filter values; no advanced disclosure or resizing.
-    for(int i=11;i<=15;++i){
-        const int row=i-11;
-        const float y=223.f+row*29.f;
-        labels[(size_t)i]->setBounds(bounds(736,y,110,24));
-        sliders[(size_t)i]->setBounds(bounds(847,y,242,25));
-        labels[(size_t)i]->setVisible(true);
-        sliders[(size_t)i]->setVisible(true);
+        filterSlopeButtons[(size_t)i]->setBounds(bounds(542.f+i*72.f,662,68,23));
+    for(int k=0;k<5;++k){
+        const int i=11+k;
+        const float x=32.f+k*129.f;
+        labels[(size_t)i]->setBounds(bounds(x,809,117,16));
+        sliders[(size_t)i]->setBounds(bounds(x,701,117,105));
+        labels[(size_t)i]->setVisible(true);sliders[(size_t)i]->setVisible(true);
     }
-    // Detector, crossover, MIDI and MULTI controls use a compact two-column grid.
-    const int extra[]={2,3,5,6,7,8,9,10,16,17,18,19,20};
-    for(int k=0;k<13;++k){
+    // Compact but always visible technical controls under the 2nd right panel.
+    const int extra[]={3,5,6,8,9,18,19,20};
+    for(int k=0;k<8;++k){
         const int i=extra[k],row=k/2,col=k%2;
-        const float x=739.f+col*181.f;
-        const float y=464.f+row*39.f;
-        labels[(size_t)i]->setBounds(bounds(x,y,177,15));
-        sliders[(size_t)i]->setBounds(bounds(x,y+15,174,21));
-        labels[(size_t)i]->setVisible(true);
-        sliders[(size_t)i]->setVisible(true);
+        const float x=944.f+col*204.f,y=686.f+row*38.f;
+        labels[(size_t)i]->setBounds(bounds(x,y,198,14));
+        sliders[(size_t)i]->setBounds(bounds(x,y+15,196,22));
+        labels[(size_t)i]->setVisible(true);sliders[(size_t)i]->setVisible(true);
     }
 }
 juce::Point<float> DISidechainEditor::localDesignPoint(const juce::MouseEvent& e) const {
@@ -573,7 +590,7 @@ void DISidechainEditor::updateBand(const juce::MouseEvent& e){
 }
 void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
     auto q=localDesignPoint(e);
-    if(q.x>=609&&q.x<=700&&q.y>=127&&q.y<=158){snapToGrid=!snapToGrid;repaint();return;}
+    if(q.x>=1005&&q.x<=1104&&q.y>=132&&q.y<=158){snapToGrid=!snapToGrid;repaint();return;}
     if(graph.contains(q)&&e.mods.isAltDown()){
         // Alt-drag the curve segment, with per-segment cubic shaping.
         const float t=juce::jlimit(0.f,1.f,(q.x-graph.getX())/graph.getWidth());
@@ -601,20 +618,20 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
         if(selectedPoint>=0){grabKeyboardFocus();updatePoint(e);}
         return;
     }
-    if(q.y>=563&&q.y<=583&&q.x>=17&&q.x<=712){
-        const int index=juce::jlimit(0,4,(int)((q.x-17.f)/139.f));
+    if(q.y>=592&&q.y<=615&&q.x>=278&&q.x<=1110){
+        const int index=juce::jlimit(0,4,(int)((q.x-279.f)/165.f));
         setParameter("mode",(float)index);
         repaint();
         return;
     }
-    if(q.y>=500&&q.y<=548&&q.x>=35&&q.x<=693){
+    if(q.y>=543&&q.y<=587&&q.x>=279&&q.x<=1098){
         const int mode=juce::roundToInt(proc.state.getRawParameterValue("mode")->load());
         if(mode!=0){
             const float lo=xFromHz(proc.state.getRawParameterValue("low")->load());
             const float hi=xFromHz(proc.state.getRawParameterValue("high")->load());
             const float dl=std::abs(q.x-lo),dh=std::abs(q.x-hi);
-            if(dl<=18.f&&(mode==1||mode==2||dl<=dh))bandHandle=0;
-            else if(mode>=3&&dh<=18.f)bandHandle=1;
+            if(dl<=20.f&&(mode==1||mode==2||dl<=dh))bandHandle=0;
+            else if(mode>=3&&dh<=20.f)bandHandle=1;
             if(bandHandle>=0)updateBand(e);
         }
         return;
