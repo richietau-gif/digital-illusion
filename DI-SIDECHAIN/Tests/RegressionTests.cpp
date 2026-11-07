@@ -23,7 +23,7 @@ static void editorLifecycle(DISidechainProcessor& p)
         std::unique_ptr<juce::AudioProcessorEditor> editor(p.createEditor());
         require(editor != nullptr, "Editor creation failed");
         require(editor->getWidth() == 700 && editor->getHeight() == 760, "Initial editor size");
-        require(editor->getNumChildComponents() == 43, "Missing editor controls");
+        require(editor->getNumChildComponents() == 49, "Missing editor controls");
         int sliders = 0, combos = 0, buttons = 0;
         for (auto* child : editor->getChildren())
         {
@@ -32,7 +32,7 @@ static void editorLifecycle(DISidechainProcessor& p)
             combos += dynamic_cast<juce::ComboBox*>(child) != nullptr;
             buttons += dynamic_cast<juce::ToggleButton*>(child) != nullptr;
         }
-        require(sliders == 18 && combos == 5 && buttons == 2, "Control types changed");
+        require(sliders == 21 && combos == 5 && buttons == 2, "Control types changed");
         editor->setSize(900, 600);
         editor->setSize(700, 760);
         require(editor->createComponentSnapshot(editor->getLocalBounds()).isValid(), "Editor paint failed");
@@ -218,13 +218,17 @@ static void liveSpectrumInputCapture()
     processor.releaseResources();
 }
 
-static float measureFrequencyMode(int mode,float hz,float depth)
+static float measureFrequencyMode(int mode,float hz,float depth,
+                                  float lowBand=1.f,float midBand=1.f,float highBand=1.f)
 {
     DISidechainProcessor processor;
     processor.prepareToPlay(48000.,256);
     set(processor,"trigger",2);
     set(processor,"mode",(float)mode);
     set(processor,"depth",depth);
+    set(processor,"multiLowDepth",lowBand);
+    set(processor,"multiMidDepth",midBand);
+    set(processor,"multiHighDepth",highBand);
     set(processor,"mix",1.f);
     set(processor,"sync",0.f);
     set(processor,"length",2000.f);
@@ -287,6 +291,45 @@ static void frequencyTargetRegression()
     const float bandModeTreble=measureFrequencyMode(3,6400.f,1.f);
     require(bandModeMid<midDry*.9f,"BAND mode failed to reduce target frequencies");
     require(bandModeTreble>highDry*.82f,"BAND mode incorrectly reduced treble");
+}
+
+static void multibandFrequencyRegression()
+{
+    // Each band's depth independently changes the corresponding spectrum.
+    // With zero global depth, even MULTI must be 100% transparent.
+    for(float hz:{65.f,430.f,6400.f})
+        require(std::abs(measureFrequencyMode(4,hz,0.f)-
+                         measureFrequencyMode(0,hz,0.f))<.0001f,
+                "MULTI altered sound with global depth at zero");
+    const float bassDry=measureFrequencyMode(4,65.f,0.f);
+    const float midDry=measureFrequencyMode(4,430.f,0.f);
+    const float trebleDry=measureFrequencyMode(4,6400.f,0.f);
+    const float bassDuck=measureFrequencyMode(4,65.f,1.f,1.f,0.f,0.f);
+    const float midDuck=measureFrequencyMode(4,430.f,1.f,0.f,1.f,0.f);
+    const float highDuck=measureFrequencyMode(4,6400.f,1.f,0.f,0.f,1.f);
+    require(bassDuck<bassDry*.85f,"MULTI LOW depth did not reduce bass");
+    require(midDuck<midDry*.85f,"MULTI MID depth did not reduce mids");
+    require(highDuck<trebleDry*.85f,"MULTI HIGH depth did not reduce treble");
+
+    const float bassKeep=measureFrequencyMode(4,65.f,1.f,0.f,1.f,1.f);
+    const float highKeep=measureFrequencyMode(4,6400.f,1.f,1.f,1.f,0.f);
+    require(bassKeep>bassDuck*1.2f,"MULTI LOW depth cannot preserve bass");
+    require(highKeep>highDuck*1.2f,"MULTI HIGH depth cannot preserve highs");
+
+    DISidechainProcessor p;
+    set(p,"mode",4.f);
+    set(p,"multiLowDepth",.35f);
+    set(p,"multiMidDepth",.7f);
+    set(p,"multiHighDepth",.9f);
+    juce::MemoryBlock saved;
+    p.getStateInformation(saved);
+    DISidechainProcessor restored;
+    restored.setStateInformation(saved.getData(),(int)saved.getSize());
+    for(auto [id,value]:{std::pair<const char*,float>{"mode",4.f},
+                        {"multiLowDepth",.35f},{"multiMidDepth",.7f},
+                        {"multiHighDepth",.9f}})
+        require(std::abs(restored.state.getRawParameterValue(id)->load()-value)<.01f,
+                "MULTI band parameters were not saved with host state");
 }
 
 static void rhythmicDivisionRegression()
@@ -837,6 +880,7 @@ int main()
         concurrentEnvelopeEditingStress();
         liveSpectrumInputCapture();
         frequencyTargetRegression();
+        multibandFrequencyRegression();
         midiBreakbeatNoteFilter();
         playbackModeRegression();
         rhythmicDivisionRegression();
