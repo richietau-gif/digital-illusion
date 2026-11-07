@@ -86,6 +86,29 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p) : AudioProcessorEd
     outputFilterSlopeAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
         p.state,"outputFilterSlope",*outputFilterSlope);
 
+    // Factory presets update the actual atomically stored envelope nodes.
+    // The selection is a command, not a state parameter: user-edited curves
+    // persist through the processor's ordinary Ableton state serialization.
+    envelopePreset=std::make_unique<juce::ComboBox>();
+    envelopePreset->setComponentID("envelopePreset");
+    envelopePreset->addItemList({"Pump","Tight Kick","Smooth Duck",
+                                 "Ghost Kick","Breakbeat","Wobble"},1);
+    envelopePreset->setTextWhenNothingSelected("LOAD SHAPE...");
+    envelopePreset->onChange=[this]{
+        const int selection=envelopePreset->getSelectedId();
+        if(selection>=1&&selection<=6){
+            proc.applyEnvelopePreset(selection-1);
+            selectedPoint=-1;
+            repaint();
+        }
+    };
+    addAndMakeVisible(*envelopePreset);
+    outputFilterToggle->onClick=[this]{
+        if(outputFilterToggle->getToggleState())advanced=false;
+        setSize(700,advanced?1150:(outputFilterToggle->getToggleState()?1050:760));
+        repaint();
+    };
+
     // setSize invokes resized synchronously: do not move above child construction.
     setSize(700,760);
     startTimerHz(15);
@@ -132,6 +155,10 @@ void DISidechainEditor::updateSpectrum(){
 }
 void DISidechainEditor::timerCallback(){
     updateSpectrum();
+    // Respond to automated FILTER enable/disable without touching audio thread.
+    const int desiredHeight=advanced?1150:
+        (outputFilterToggle->getToggleState()?1050:760);
+    if(getHeight()!=desiredHeight)setSize(700,desiredHeight);
     const auto sequence=proc.triggerSequence.load(std::memory_order_relaxed);
     if(sequence!=lastTriggerSequence){lastTriggerSequence=sequence;triggerFlashTicks=3;}
     else if(triggerFlashTicks>0)--triggerFlashTicks;
@@ -153,7 +180,7 @@ void DISidechainEditor::paint(juce::Graphics& g){
     const char* top[]={"TRIGGER","MODE","LENGTH"};
     for(int i=0;i<3;++i) text(g,top[i],10,{17.f+i*226.f,60,207,16},pale,juce::Justification::centred);
     box(g,{11,108,678,365},panel,10);
-    text(g,"VOLUME ENVELOPE",11,{19,119,260,20},pale);
+    text(g,"VOLUME ENVELOPE",11,{19,119,127,20},pale);
     // Surface the active timing and playback mode without covering the curve.
     const bool synced=proc.state.getRawParameterValue("sync")->load()>.5f;
     const int playback=(int)proc.state.getRawParameterValue("playbackMode")->load();
@@ -164,7 +191,7 @@ void DISidechainEditor::paint(juce::Graphics& g){
     const auto lengthDisplay=synced?names[division]:
         juce::String(juce::roundToInt(proc.state.getRawParameterValue("length")->load()))+" ms";
     text(g,(playback==1?"LOOP  ·  ":"ONE SHOT  ·  ")+lengthDisplay,10,
-         {235,120,213,18},muted,juce::Justification::centred);
+         {330,120,130,18},muted,juce::Justification::centred);
     text(g,snapToGrid ? "SNAP: ON · CLICK TO TOGGLE" : "SNAP: OFF · CLICK TO TOGGLE",9,{460,119,220,20},accent,juce::Justification::centredRight);
     for(int i=0;i<=8;++i){
         auto x=graph.getX()+graph.getWidth()*i/8.f;
@@ -270,10 +297,20 @@ void DISidechainEditor::paint(juce::Graphics& g){
     text(g,"MIX",10,{463,688,219,15},muted,juce::Justification::centred);
     text(g,advanced?"HIDE ADVANCED ↑":"ADVANCED CONTROLS ↓",10,{13,744,675,16},accent,juce::Justification::centred);
     if(advanced){
-        box(g,{11,767,678,569},panelDark,9);
+        box(g,{11,767,678,360},panelDark,9);
         text(g,"ADDITIONAL DSP SETTINGS",12,{25,774,420,20},pale);
-        text(g,"OUTPUT FILTER · ENVELOPE CONTROLS CUTOFF · DRIVE ADDS HARMONICS",9,
-             {25,1314,650,14},muted);
+        text(g,"TRIGGER · MIDI ROUTING · MULTIBAND DEPTH",9,
+             {25,1095,650,18},muted);
+    }else if(outputFilterToggle->getToggleState()){
+        // Dedicated always-visible-on-enable panel; no more hiding the
+        // creative filter behind Advanced Controls.
+        box(g,{11,767,678,267},panelDark,9);
+        text(g,"OUTPUT FILTER · ENVELOPE-CONTROLLED CUTOFF",12,
+             {25,778,500,22},pale);
+        text(g,"TYPE",9,{29,800,280,15},muted);
+        text(g,"SLOPE",9,{364,800,280,15},muted);
+        text(g,"Cutoff follows the red curve. Depth may be 0 for pure wobble.",
+             9,{25,1005,650,18},muted);
     }
     g.restoreState();
 }
@@ -284,27 +321,42 @@ void DISidechainEditor::resized(){
             juce::jmax(1,juce::roundToInt(w*sc)),juce::jmax(1,juce::roundToInt(h*sc)));};
     if(sliders.size()!=21||labels.size()!=21||combos.size()!=3||
        sync==nullptr||outputFilterToggle==nullptr||outputFilterType==nullptr||
-       outputFilterSlope==nullptr)return;
+       outputFilterSlope==nullptr||envelopePreset==nullptr)return;
     for(int i=0;i<3;++i)combos[i]->setBounds(bounds(18.f+i*226.f,76,203,19));
     sync->setBounds(bounds(558,105,115,23));
-    const int indices[]={0,4,1};
+    envelopePreset->setBounds(bounds(148,119,176,22));
+    const int mainIndices[]={0,4,1};
     for(int j=0;j<3;++j){
-        int i=indices[j]; sliders[i]->setBounds(bounds(23+j*226.f,705,192,31));
+        const int i=mainIndices[j];
+        sliders[i]->setBounds(bounds(23+j*226.f,705,192,31));
         labels[i]->setBounds(bounds(11+j*226.f,684,219,18));
-        labels[i]->setVisible(false);sliders[i]->setVisible(true);
+        labels[i]->setVisible(false);
+        sliders[i]->setVisible(true);
     }
     outputFilterToggle->setBounds(bounds(272,486,113,25));
-    outputFilterType->setBounds(bounds(46,1286,295,24));
-    outputFilterType->setVisible(advanced);
-    outputFilterSlope->setBounds(bounds(363,1286,295,24));
-    outputFilterSlope->setVisible(advanced);
-    const int extra[]={2,3,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20};
-    for(int k=0;k<18;++k){
-        int i=extra[k], row=k/2,col=k%2;
-        float x=29.f+col*335.f, y=803.f+row*46.f;
+    const bool filterPage=outputFilterToggle->getToggleState()&&!advanced;
+    outputFilterType->setBounds(bounds(29,817,306,24));
+    outputFilterSlope->setBounds(bounds(364,817,306,24));
+    outputFilterType->setVisible(filterPage);
+    outputFilterSlope->setVisible(filterPage);
+    // Creative filter controls remain readable immediately after checking FILTER.
+    for(int i=11;i<=15;++i){
+        const int k=i-11,row=k/2,col=k%2;
+        const float x=29.f+col*335.f,y=855.f+row*54.f;
         labels[i]->setBounds(bounds(x,y,114,20));
-        sliders[i]->setBounds(bounds(x+112,y,193,24));
-        labels[i]->setVisible(advanced);sliders[i]->setVisible(advanced);
+        sliders[i]->setBounds(bounds(x+112.f,y,193,24));
+        labels[i]->setVisible(filterPage);
+        sliders[i]->setVisible(filterPage);
+    }
+    // Keep all remaining technical controls in Advanced, including MULTI.
+    const int extra[]={2,3,5,6,7,8,9,10,16,17,18,19,20};
+    for(int k=0;k<13;++k){
+        const int i=extra[k],row=k/2,col=k%2;
+        const float x=29.f+col*335.f,y=803.f+row*46.f;
+        labels[i]->setBounds(bounds(x,y,114,20));
+        sliders[i]->setBounds(bounds(x+112.f,y,193,24));
+        labels[i]->setVisible(advanced);
+        sliders[i]->setVisible(advanced);
     }
 }
 juce::Point<float> DISidechainEditor::localDesignPoint(const juce::MouseEvent& e) const {
@@ -388,7 +440,9 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
         return;
     }
     if(q.y>=740&&q.y<=764){
-        advanced=!advanced;setSize(700,advanced?1350:760);repaint();
+        advanced=!advanced;
+        setSize(700,advanced?1150:(outputFilterToggle->getToggleState()?1050:760));
+        repaint();
     }
 }
 void DISidechainEditor::mouseDrag(const juce::MouseEvent& e){
