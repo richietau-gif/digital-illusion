@@ -11,8 +11,12 @@ static juce::AudioProcessorValueTreeState::ParameterLayout layoutParams(){
  f("outputFilterMin","Output filter minimum Hz",20,20000,120);
  f("outputFilterMax","Output filter maximum Hz",20,20000,16000);
  f("outputFilterAmount","Output filter modulation",0,1,1);
+ f("outputFilterResonance","Output filter resonance Q",0.5,12,0.70710678f);
+ f("outputFilterDrive","Output filter drive",0,1,0);
+ p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"outputFilterSlope",1},
+     "Output filter slope",juce::StringArray{"12 dB","24 dB"},0));
  p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"outputFilterOn",1},"Output filter enabled",false));
- p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"outputFilterType",1},"Output filter type",juce::StringArray{"Low Pass","High Pass"},0));
+ p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"outputFilterType",1},"Output filter type",juce::StringArray{"Low Pass","High Pass","Band Pass","Notch"},0));
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"mode",1},"Frequency mode",juce::StringArray{"Full","Low","High","Band"},0));
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"trigger",1},"Trigger mode",juce::StringArray{"Audio + MIDI","Audio only","MIDI only"},0));
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"playbackMode",1},"Envelope playback",juce::StringArray{"One Shot","Loop"},0));
@@ -28,7 +32,10 @@ bool DISidechainProcessor::isBusesLayoutSupported(const BusesLayout& b) const {r
 void DISidechainProcessor::prepareToPlay(double sampleRate,int maxBlock){
  sr=sampleRate;phase=1;detector=0;armed=true;refractory=0;smoothGain=1;
  detectorHpPreviousInput=0.;detectorHpPreviousOutput=0.;
- outputFilterLowState.fill(0.f);outputFilterBlend=0.f;visualFilterCutoffHz.store(20000.f);
+ for(auto& channel:outputFilterStages)
+  for(auto& stage:channel)stage={};
+ outputFilterBlend=0.f;smoothedFilterQ=.70710678f;smoothedFilterDrive=0.f;
+ visualFilterCutoffHz.store(20000.f);
  juce::dsp::ProcessSpec spec{sampleRate,(juce::uint32)juce::jmax(1,maxBlock),1};
  for(auto& c:filters){
   auto init=[&](juce::dsp::LinkwitzRileyFilter<float>& filter,
@@ -176,13 +183,17 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  const int playbackMode=juce::jlimit(0,1,juce::roundToInt(get("playbackMode")));
  const float detectorHP=juce::jlimit(0.f,2000.f,get("detectorHP"));
  const bool filterEnabled=get("outputFilterOn")>.5f;
- const int outputFilterType=juce::jlimit(0,1,juce::roundToInt(get("outputFilterType")));
+ const int outputFilterType=juce::jlimit(0,3,juce::roundToInt(get("outputFilterType")));
+ const int outputFilterSlope=juce::jlimit(0,1,juce::roundToInt(get("outputFilterSlope")));
+ const float targetFilterQ=juce::jlimit(.5f,12.f,get("outputFilterResonance"));
+ const float targetFilterDrive=juce::jlimit(0.f,1.f,get("outputFilterDrive"));
  const float filterAmount=juce::jlimit(0.f,1.f,get("outputFilterAmount"));
  const float cutoffMin=juce::jlimit(20.f,(float)(sr*.45),get("outputFilterMin"));
  const float cutoffMax=juce::jlimit(cutoffMin,(float)(sr*.45),
                                     juce::jmax(cutoffMin,get("outputFilterMax")));
  const float filterLogRange=std::log(juce::jmax(1.0001f,cutoffMax/cutoffMin));
  const float filterFadeStep=1.f/(float)juce::jmax(1.0,sr*.005);
+ const float filterParameterCoefficient=1.f-std::exp(-1.f/(float)(sr*.005));
  const double hpCoefficient=detectorHP>1.f ? std::exp(-juce::MathConstants<double>::twoPi*(double)detectorHP/sr) : 0.;
  const int midiNote=juce::jlimit(-1,127,juce::roundToInt(get("midiNote")));
  const int midiChannel=juce::jlimit(0,16,juce::roundToInt(get("midiChannel")));
@@ -279,8 +290,15 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  // Amount 0 makes the cutoff static at maximum; independent of volume depth.
  const float shaped=1.f-filterAmount*(1.f-juce::jlimit(0.f,1.f,env));
  const float cutoff=cutoffMin*std::exp(filterLogRange*shaped);
- const float lpCoefficient=std::exp(-juce::MathConstants<float>::twoPi*
-                                    cutoff/(float)sr);
+ // Topology-preserving bilinear transform coefficients.
+ // 0.45 * sample rate prevents tan(pi/2) singularity near Nyquist.
+ const float g=std::tan(juce::MathConstants<float>::pi*cutoff/(float)sr);
+ smoothedFilterQ+=filterParameterCoefficient*(targetFilterQ-smoothedFilterQ);
+ smoothedFilterDrive+=filterParameterCoefficient*(targetFilterDrive-smoothedFilterDrive);
+ const float k=1.f/juce::jmax(.5f,smoothedFilterQ);
+ const float a1=1.f/(1.f+g*(g+k));
+ const float a2=g*a1;
+ const float a3=g*a2;
  outputFilterBlend=juce::jlimit(0.f,1.f,outputFilterBlend+
     (filterEnabled?filterFadeStep:-filterFadeStep));
  if(i==n-1)visualFilterCutoffHz.store(cutoff,std::memory_order_relaxed);
@@ -304,13 +322,39 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
                   dry+(1.f-smoothGain)*(keep-dry);
   const float outUnclamped=dry+(wet-dry)*mix;
   float out=std::isfinite(outUnclamped)?outUnclamped:dry;
-  // Keep the filter state warm even when disabled, and crossfade the
-  // enable switch over 5 ms to prevent a discontinuity in the output.
-  auto& lowState=outputFilterLowState[(size_t)ch];
-  lowState=(1.f-lpCoefficient)*out+lpCoefficient*lowState;
-  const float filtered=outputFilterType==0?lowState:out-lowState;
+  // Pre-filter soft saturation: DRIVE 0 is exactly transparent. At higher
+  // settings the soft-clipping signal excites the resonant filter harmonics.
+  float filteredInput=out;
+  if(smoothedFilterDrive>0.00001f){
+   const float driveGain=1.f+15.f*smoothedFilterDrive*smoothedFilterDrive;
+   const float saturation=std::tanh(out*driveGain)/
+       juce::jmax(.001f,std::tanh(driveGain));
+   filteredInput=out+smoothedFilterDrive*(saturation-out);
+  }
+  auto processSVF=[&](OutputSVFStage& stage,float x){
+   const float v3=x-stage.ic2;
+   const float v1=a1*stage.ic1+a2*v3;
+   const float v2=stage.ic2+a2*stage.ic1+a3*v3;
+   stage.ic1=2.f*v1-stage.ic1;
+   stage.ic2=2.f*v2-stage.ic2;
+   const float lp=v2;
+   const float hp=x-k*v1-v2;
+   if(outputFilterType==0)return lp;
+   if(outputFilterType==1)return hp;
+   if(outputFilterType==2)return v1;
+   return lp+hp; // Notch
+  };
+  auto& svf=outputFilterStages[(size_t)ch];
+  float filtered=processSVF(svf[0],filteredInput);
+  // Keep the second stage continuously conditioned so switching 12/24 dB
+  // doesn't activate an uninitialized or stale filter memory.
+  const float secondStage=processSVF(svf[1],filtered);
+  if(outputFilterSlope==1)filtered=secondStage;
   out+=outputFilterBlend*(filtered-out);
-  if(!std::isfinite(out)){out=dry;lowState=0.f;}
+  if(!std::isfinite(out)){
+   out=dry;
+   for(auto& stage:svf)stage={};
+  }
   main.setSample(ch,i,out);
   peak=juce::jmax(peak,std::abs(out));
  }
