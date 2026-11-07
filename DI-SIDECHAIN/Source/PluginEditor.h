@@ -32,6 +32,8 @@ private:
     std::unique_ptr<juce::ToggleButton> outputFilterToggle;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> outputFilterAttachment;
     std::unique_ptr<juce::ComboBox> outputFilterType;
+    std::unique_ptr<juce::ComboBox> outputFilterSlope;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> outputFilterSlopeAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> outputFilterTypeAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> ba;
     juce::LookAndFeel_V4 skin;
