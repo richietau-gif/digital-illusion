@@ -19,12 +19,13 @@ public:
   const float b=filter(up,upIndex,0.f,2.f);
   const float processedA=processFx(a,drive,type);
   const float processedB=processFx(b,drive,type);
-  filter(down,downIndex,processedA,1.f);
-  return filter(down,downIndex,processedB,1.f);
+  const float output=filter(down,downIndex,processedA,1.f);
+  filter(down,downIndex,processedB,1.f);
+  return output;
  }
 private:
  // Symmetric half-band lowpass at pi/2, normalized to unity DC.
- // Polyphase output selects the odd 2x phase; group delay is 7 base-rate samples.
+ // Select the even 2x output phase for an integer 7-sample base-rate delay.
  static constexpr std::array<float,15> taps{
   -0.00365145f,0.f,0.01617925f,0.f,-0.06841178f,0.f,
   0.30476398f,0.50224000f,0.30476398f,0.f,-0.06841178f,
