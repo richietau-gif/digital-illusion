@@ -5,6 +5,7 @@
 #include "PeakDetector.h"
 #include "SidechainPeak.h"
 #include "TransportContinuity.h"
+#include "TriggerLogic.h"
 #include <cmath>
 static juce::AudioProcessorValueTreeState::ParameterLayout layoutParams(){
  std::vector<std::unique_ptr<juce::RangedAudioParameter>> p;
@@ -100,15 +101,18 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  double step=1.0/juce::jmax(1.0,envelopeLength*sr);int holdoff=(int)(get("retrigger")*.001*sr);float threshold=juce::Decibels::decibelsToGain(get("threshold"));float coeff=std::exp(-1.f/(float)(juce::jmax(.1f,get("smooth"))*.001*sr));
  const double detectorRelease=di::peakReleaseCoefficient(sr);
  juce::MidiBuffer::Iterator it(midi);juce::MidiMessage msg;int midiPos=0;bool hasEvent=it.getNextEvent(msg,midiPos);float peak=0;
- for(int i=0;i<n;++i){bool fire=false;
+ for(int i=0;i<n;++i){bool midiNoteOn=false,audioPeak=false;
  fxBlend=fxTarget+(fxBlend-fxTarget)*fxSmoothing;
  if(!std::isfinite(smoothedFxDrive))smoothedFxDrive=drive;
  if(!std::isfinite(smoothedFxWet))smoothedFxWet=fxWet;
  smoothedFxDrive=drive+(smoothedFxDrive-drive)*fxParameterSmoothing;
  smoothedFxWet=fxWet+(smoothedFxWet-fxWet)*fxParameterSmoothing;
  smoothedFxType=(float)fxType+(smoothedFxType-(float)fxType)*fxSmoothing;
- while(hasEvent&&midiPos<=i){if(msg.isNoteOn()&&msg.getVelocity()>0&&trig!=1)fire=true;hasEvent=it.getNextEvent(msg,midiPos);}
- if(hasSide&&trig!=2&&side.getNumSamples()>=n){const float v=di::sidechainPeak(side.getSample(0,i),side.getNumChannels()>1?side.getSample(1,i):0.f,side.getNumChannels()>1);detector=di::followPeak(detector,(double)v,detectorRelease);if(detector<threshold*.65)armed=true;if(armed&&detector>=threshold&&refractory==0){fire=true;armed=false;}}
+ while(hasEvent&&midiPos<=i){if(msg.isNoteOn()&&msg.getVelocity()>0)midiNoteOn=true;hasEvent=it.getNextEvent(msg,midiPos);}
+ if(hasSide&&trig!=2&&side.getNumSamples()>=n){const float v=di::sidechainPeak(side.getSample(0,i),side.getNumChannels()>1?side.getSample(1,i):0.f,side.getNumChannels()>1);detector=di::followPeak(detector,(double)v,detectorRelease);if(detector<threshold*.65)armed=true;if(armed&&detector>=threshold)audioPeak=true;}
+ const bool audioFired=trig!=2&&audioPeak&&armed&&refractory<=0;
+ const bool fire=di::shouldFireTrigger(midiNoteOn,audioPeak,armed,refractory,trig);
+ if(audioFired)armed=false;
  if(refractory>0)--refractory;
  if(fire){
   phase=0;
