@@ -87,7 +87,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
    if(playing){
     if(auto sample=pos->getTimeInSamples()){
      if(di::transportDiscontinuity(expectedTransportSample,*sample))discontinuity=true;
-     expectedTransportSample=*sample+n;
+     expectedTransportSample=di::nextTransportSample(*sample,n);
     }else expectedTransportSample=-1;
    }else expectedTransportSample=-1;
    if(discontinuity){sequencer.reset();for(auto& lane:modulationSequencers)lane.reset();activeSequenceStep.store(0,std::memory_order_relaxed);phase=0;}
