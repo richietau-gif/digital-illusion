@@ -109,7 +109,8 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
   b->setColour(juce::ToggleButton::textColourId,juce::Colours::white);
  }
  presetButton=std::make_unique<juce::TextButton>("PRESETS  -  Custom");
- setupButton=std::make_unique<juce::TextButton>("SETUP");
+ setupButton=std::make_unique<juce::TextButton>("");
+ setupButton->setTooltip("SETUP - Plugin settings");
  setupBounds={1427,32,92,41};
  buttonStyle(*setupButton);addAndMakeVisible(*setupButton);
  setupButton->onClick=[this]{showSetupMenu();};
@@ -580,6 +581,57 @@ void DISidechainEditor::showShapeMenu() {
  menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(shapePresetButton.get()),[safe](int choice){if(safe&&choice>0)safe->applyShapePreset(choice-1);});
 }
 
+
+void DISidechainEditor::selectUiScale(int index) {
+ index=juce::jlimit(0,2,index);
+ if(auto* param=proc.state.getParameter("uiScale")){
+  param->beginChangeGesture();
+  param->setValueNotifyingHost(param->convertTo0to1((float)index));
+  param->endChangeGesture();
+ }
+ uiScale=index==0?0.5f:index==1?0.75f:1.f;
+ setSize(juce::roundToInt(designWidth*uiScale),juce::roundToInt(designHeight*uiScale));
+ repaint();
+}
+void DISidechainEditor::selectRenderQuality(int index) {
+ index=juce::jlimit(0,2,index);
+ if(auto* param=proc.state.getParameter("renderQuality")){
+  param->beginChangeGesture();
+  param->setValueNotifyingHost(param->convertTo0to1((float)index));
+  param->endChangeGesture();
+ }
+ renderQuality=index;
+ repaint();
+}
+void DISidechainEditor::showSetupMenu() {
+ // A native popup lives on top of the plugin only while open. Nothing is
+ // permanently laid over the editor, including when its size is reduced.
+ juce::PopupMenu menu;
+ juce::PopupMenu scale;
+ const int currentScale=uiScale<0.6f?0:uiScale<0.9f?1:2;
+ scale.addItem(101,"50%",true,currentScale==0);
+ scale.addItem(102,"75%",true,currentScale==1);
+ scale.addItem(103,"100%",true,currentScale==2);
+ menu.addSubMenu("UI size",scale);
+ juce::PopupMenu quality;
+ quality.addItem(201,"Economy",true,renderQuality==0);
+ quality.addItem(202,"Standard",true,renderQuality==1);
+ quality.addItem(203,"High",true,renderQuality==2);
+ menu.addSubMenu("Curve rendering quality",quality);
+ juce::PopupMenu oversampling;
+ oversampling.addItem(301,"2x (current processing mode)",false,true);
+ oversampling.addItem(302,"4x (not implemented yet)",false,false);
+ menu.addSubMenu("DSP oversampling",oversampling);
+ menu.addSeparator();
+ menu.addItem(401,"Close settings");
+ juce::Component::SafePointer<DISidechainEditor> safe(this);
+ menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(setupButton.get()),
+  [safe](int chosen){
+   if(!safe)return;
+   if(chosen>=101&&chosen<=103)safe->selectUiScale(chosen-101);
+   else if(chosen>=201&&chosen<=203)safe->selectRenderQuality(chosen-201);
+  });
+}
 void DISidechainEditor::saveUserPreset() {
  const auto destination=juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("DI-Sidechain.dipreset");
  presetChooser=std::make_unique<juce::FileChooser>("Save DI SIDECHAIN preset",destination,"*.dipreset");
