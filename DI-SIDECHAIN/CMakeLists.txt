@@ -30,6 +30,9 @@ if(BUILD_TESTING)
  add_executable(di_filter_cutoff_smoke Tests/FilterCutoffSmoke.cpp)
  target_compile_features(di_filter_cutoff_smoke PRIVATE cxx_std_17)
  add_test(NAME di_filter_cutoff_smoke COMMAND di_filter_cutoff_smoke)
+ add_executable(di_fx_combination_smoke Tests/FxCombinationSmoke.cpp)
+ target_compile_features(di_fx_combination_smoke PRIVATE cxx_std_17)
+ add_test(NAME di_fx_combination_smoke COMMAND di_fx_combination_smoke)
  # Treat warnings as errors for all standalone DSP regression executables,
  # matching the standalone Tests/CMakeLists.txt configuration.
  foreach(smoke_target IN ITEMS
@@ -38,7 +41,8 @@ if(BUILD_TESTING)
    di_fx_waveshaper_smoke
    di_peak_detector_smoke
    di_oversampled_fx_smoke
-   di_filter_cutoff_smoke)
+   di_filter_cutoff_smoke
+   di_fx_combination_smoke)
   if(MSVC)
    target_compile_options(${smoke_target} PRIVATE /W4 /WX)
   else()
