@@ -424,39 +424,57 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  for(int i=0;i<db.size();++i)text(g,db[i],{1496,781+i*20,39,16},10,faint);
 }
 void DISidechainEditor::resized() {
- graph={77,185,getWidth()-100,184};
- stepStrip={77,386,getWidth()-100,46};
- sequencerPanel={12,460,418,243};
- detailGraph={465,548,490,102};
- filterPanel={12,713,1177,225};
- outputPanel={1201,713,323,225};
- if(sequenceToggle)sequenceToggle->setBounds(407,111,110,29);
- if(sequenceCount)sequenceCount->setBounds(522,111,82,29);
- if(sync)sync->setBounds(745,111,110,29);
- if(sequencePrev)sequencePrev->setBounds(40,560,45,34);
- if(sequenceNext)sequenceNext->setBounds(360,560,45,34);
- if(presetButton)presetButton->setBounds(548,24,390,40);
- if(shapePresetButton)shapePresetButton->setBounds(992,507,183,31);
- if(copyStep)copyStep->setBounds(969,544,208,33);
- if(pasteStep)pasteStep->setBounds(969,586,208,33);
- if(resetStep)resetStep->setBounds(969,628,208,33);
- if(shapeOffset){shapeOffset->setBounds(1100,665,77,28);shapeOffset->setEnabled(selectedLane==0);}
- if(fxTypeBox)fxTypeBox->setBounds(870,111,140,29);
- if(fxToggle)fxToggle->setBounds(1045,111,65,29);
- if(saturatorToggle)saturatorToggle->setBounds(1210,111,70,29);
- if(fxSliders[0])fxSliders[0]->setBounds(1340,105,85,42);
- if(fxSliders[1])fxSliders[1]->setBounds(1430,105,85,42);
- for(int i=0;i<3;++i)if(laneTabs[i]){laneTabs[i]->setBounds(1225+i*92,527,86,30);laneTabs[i]->setToggleState(selectedLane==i,juce::dontSendNotification);}
- if(laneSliders[0])laneSliders[0]->setBounds(1225,588,275,28);
- if(laneSliders[1])laneSliders[1]->setBounds(1225,646,275,28);
- if(undoButton)undoButton->setBounds(706,508,76,30);
- if(redoButton)redoButton->setBounds(788,508,76,30);
- if(snapButton)snapButton->setBounds(869,508,116,30);
- if(combos.size()==3){combos[0]->setBounds(0,0,0,0);combos[1]->setBounds(290,790,215,31);combos[2]->setBounds(617,111,125,29);}
- for(int i=0;i<4;++i)if(filterButtons[i])filterButtons[i]->setBounds(35+i*58,790,54,31);
- if(sliders.size()!=8||labels.size()!=8)return;
- const int xs[]={1230,1360,35,165,295,425,555,685};
- for(int i=0;i<8;++i){labels[i]->setBounds(xs[i],831,115,20);sliders[i]->setBounds(xs[i],851,110,78);}
+ // All child component bounds use design pixels. The parent editor, graph
+ // renderer and pointer handling use the same scale to avoid mismatched hitboxes.
+ graph={79,203,1428,157};
+ stepStrip={78,380,1430,53};
+ detailGraph={230,549,488,110};
+ sequencerPanel={12,456,873,240};
+ filterPanel={12,706,1110,232};
+ outputPanel={1132,706,392,232};
+ if(presetButton)presetButton->setBounds(538,30,395,45);
+ if(setupButton)setupButton->setBounds(setupBounds);
+ if(sequenceToggle)sequenceToggle->setBounds(360,124,137,32);
+ if(sequenceCount)sequenceCount->setBounds(506,124,87,30);
+ if(combos.size()==3){
+  combos[0]->setBounds(0,0,0,0); // filter mode uses premium segment buttons
+  combos[1]->setBounds(376,769,204,30);
+  combos[2]->setBounds(603,124,120,29);
+ }
+ if(sync)sync->setBounds(739,123,119,30);
+ if(fxTypeBox)fxTypeBox->setBounds(866,124,124,30);
+ if(fxToggle)fxToggle->setBounds(1036,123,65,31);
+ if(saturatorToggle)saturatorToggle->setBounds(1215,123,65,31);
+ if(fxSliders[0])fxSliders[0]->setBounds(1324,123,89,30);
+ if(fxSliders[1])fxSliders[1]->setBounds(1443,123,71,30);
+ if(sequencePrev)sequencePrev->setBounds(33,533,47,34);
+ if(sequenceNext)sequenceNext->setBounds(156,533,47,34);
+ if(copyStep)copyStep->setBounds(230,499,75,32);
+ if(pasteStep)pasteStep->setBounds(310,499,75,32);
+ if(resetStep)resetStep->setBounds(390,499,75,32);
+ if(undoButton)undoButton->setBounds(470,499,75,32);
+ if(redoButton)redoButton->setBounds(550,499,75,32);
+ if(snapButton)snapButton->setBounds(630,499,85,32);
+ if(shapePresetButton)shapePresetButton->setBounds(727,499,151,32);
+ if(shapeOffset)shapeOffset->setBounds(1320,543,184,31);
+ if(laneSliders[0])laneSliders[0]->setBounds(1320,593,184,31);
+ if(laneSliders[1])laneSliders[1]->setBounds(1320,640,184,31);
+ for(int i=0;i<3;++i)if(laneTabs[i]){
+  laneTabs[i]->setBounds(919,510+i*60,101,39);
+  laneTabs[i]->setToggleState(i==selectedLane,juce::dontSendNotification);
+ }
+ for(int i=0;i<4;++i)if(filterButtons[i])filterButtons[i]->setBounds(31+i*78,768,73,30);
+ if(sliders.size()==8 && labels.size()==8){
+  const int xs[]={1163,1290,28,144,260,376,492,608};
+  for(int i=0;i<8;++i){
+   labels[i]->setVisible(false); // titles are painted in the aligned premium panel
+   sliders[i]->setBounds(xs[i],i<2?791:809,111,110);
+  }
+ }
+ // Scaling all child components preserves native keyboard and pointer input.
+ const auto transform=juce::AffineTransform::scale(uiScale);
+ for(int i=0;i<getNumChildComponents();++i)
+  if(auto* child=getChildComponent(i))child->setTransform(transform);
 }
 void DISidechainEditor::updatePoint(const juce::MouseEvent& e) {
  if(!detailGraph.contains(e.getPosition()))return;
