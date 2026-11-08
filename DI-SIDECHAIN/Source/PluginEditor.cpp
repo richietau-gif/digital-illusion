@@ -301,7 +301,17 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  text(g,"D I G I T A L   I L L U S I O N",{120,72,310,16},12,faint);
  g.setColour(juce::Colour(0xff2d5668));g.drawVerticalLine(435,30.f,80.f);
  text(g,"PRESET",{450,43,80,21},12,faint,true);
- text(g,"SETUP",{1350,44,75,23},14,cyan,true);
+ text(g,"SETUP",{1351,44,70,23},13,cyan,true);
+ // Crisp vector cog: the actual settings menu is a separate hidden popup.
+ const auto gear=juce::Point<float>(1470.f,51.f);
+ g.setColour(cyan.withAlpha(.18f));g.fillEllipse(gear.x-17.f,gear.y-17.f,34.f,34.f);
+ g.setColour(cyan);g.drawEllipse(gear.x-13.f,gear.y-13.f,26.f,26.f,1.5f);
+ g.drawEllipse(gear.x-4.5f,gear.y-4.5f,9.f,9.f,2.f);
+ for(int tooth=0;tooth<8;++tooth){
+  const float a=juce::MathConstants<float>::twoPi*tooth/8.f;
+  g.drawLine(gear.x+std::cos(a)*13.f,gear.y+std::sin(a)*13.f,
+             gear.x+std::cos(a)*17.f,gear.y+std::sin(a)*17.f,2.f);
+ }
  // Toolbar / sequencer: dark glass and green active states.
  const auto nav=juce::Rectangle<float>(12,108,1512,62);
  g.setColour(juce::Colour(0xff102a37));g.fillRoundedRectangle(nav,11.f);
