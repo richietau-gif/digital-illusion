@@ -47,7 +47,22 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  // Keep sidechain as a non-owning view; never allocate or copy a buffer on the audio thread.
  juce::AudioBuffer<float> side; if(hasSide){auto view=getBusBuffer(buffer,true,1);side.setDataToReferTo(view.getArrayOfWritePointers(),view.getNumChannels(),view.getNumSamples());}
  auto get=[&](const char* id){return state.getRawParameterValue(id)->load();};
- int mode=(int)get("mode"),trig=(int)get("trigger");float depth=get("depth"),mix=get("mix"),shapeOffset=get("shapeOffset"),panMod=get("panMod"),filterMod=get("filterMod"),fxDrive=get("fxDrive"),fxMix=get("fxMix"),lo=get("low"),hi=juce::jmax(lo+10,get("high"));
+ // Validate host automation before integer casts, filter coefficients and smoothers.
+ auto bounded=[&](const char* id,float low,float high,float fallback){
+  const float value=get(id);
+  return std::isfinite(value)?juce::jlimit(low,high,value):fallback;
+ };
+ const int mode=(int)bounded("mode",0.f,3.f,0.f);
+ const int trig=(int)bounded("trigger",0.f,2.f,0.f);
+ const float depth=bounded("depth",0.f,1.f,1.f);
+ const float mix=bounded("mix",0.f,1.f,1.f);
+ const float shapeOffset=bounded("shapeOffset",-1.f,1.f,0.f);
+ const float panMod=bounded("panMod",-1.f,1.f,0.f);
+ const float filterMod=bounded("filterMod",0.f,1.f,0.f);
+ const float fxDrive=bounded("fxDrive",0.f,24.f,0.f);
+ const float fxMix=bounded("fxMix",0.f,1.f,1.f);
+ const float lo=bounded("low",25.f,1500.f,120.f);
+ const float hi=juce::jmax(lo+10.f,bounded("high",60.f,18000.f,400.f));
  const float filterRange=juce::jlimit(0.f,1.f,filterMod);
  const bool fxEnabled=get("fxEnabled")>0.5f;
  const int fxType=juce::jlimit(0,1,(int)get("fxType"));
@@ -84,8 +99,9 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  envelopeLength=get("sync")>0.5?60.0/bpm*divisions[divisionIndex]:lengthSeconds;
  const bool tempoSync=get("sync")>0.5f;
  const bool sequenceOn=get("sequenceEnabled")>0.5f;
- sequencer.setSteps((int)get("sequenceSteps"));
- for(auto& lane:modulationSequencers)lane.setSteps((int)get("sequenceSteps"));
+ const int sequenceSteps=(int)bounded("sequenceSteps",1.f,32.f,16.f);
+ sequencer.setSteps(sequenceSteps);
+ for(auto& lane:modulationSequencers)lane.setSteps(sequenceSteps);
  // Re-anchor each audio block to the DAW's PPQ timeline when tempo sync is enabled.
  // This corrects accumulated drift and aligns loop restarts to musical bars.
  if(sequenceOn&&tempoSync&&hasPlayingPpq){
@@ -98,7 +114,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
   di::ShapeSequencer::Shape shape{};for(int j=0;j<8;++j)shape[j]=getSequencePoint(k,j);sequencer.setShape(k,shape);
   for(int lane=0;lane<2;++lane){di::ShapeSequencer::Shape mod{};for(int j=0;j<8;++j)mod[j]=getModulationPoint(lane,k,j);modulationSequencers[lane].setShape(k,mod);}
  }
- double step=1.0/juce::jmax(1.0,envelopeLength*sr);int holdoff=(int)(get("retrigger")*.001*sr);float threshold=juce::Decibels::decibelsToGain(get("threshold"));float coeff=std::exp(-1.f/(float)(juce::jmax(.1f,get("smooth"))*.001*sr));
+ double step=1.0/juce::jmax(1.0,envelopeLength*sr);int holdoff=(int)(bounded("retrigger",1.f,250.f,35.f)*.001*sr);float threshold=juce::Decibels::decibelsToGain(bounded("threshold",-60.f,0.f,-22.f));float coeff=std::exp(-1.f/(float)(bounded("smooth",.1f,20.f,2.f)*.001*sr));
  const double detectorRelease=di::peakReleaseCoefficient(sr);
  juce::MidiBuffer::Iterator it(midi);juce::MidiMessage msg;int midiPos=0;bool hasEvent=it.getNextEvent(msg,midiPos);float peak=0;
  for(int i=0;i<n;++i){bool midiNoteOn=false,audioPeak=false;
