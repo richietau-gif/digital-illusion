@@ -386,7 +386,7 @@ void DISidechainEditor::applyFactoryPreset(int index) {
   {0.f,0.f,.25f,.6f,.95f,1.f,1.f,1.f}
  };
  index=juce::jlimit(0,4,index);
- const auto* names[]={"Classic Duck","Deep Pump","Sidechain 4/4","Breakbeat Pump","Pump Rise"};
+ const char* names[]={"Classic Duck","Deep Pump","Sidechain 4/4","Breakbeat Pump","Pump Rise"};
  presetName=names[index];presetButton->setButtonText("PRESETS  -  "+presetName);
  for(int step=0;step<16;++step) {
   auto before=captureShape(step,true),after=before;
