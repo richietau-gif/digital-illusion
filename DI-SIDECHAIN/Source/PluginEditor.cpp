@@ -1,5 +1,6 @@
 #include "PluginEditor.h"
 #include <cmath>
+#include <limits>
 
 namespace {
 const auto bg=juce::Colour(0xff0d1117), panel=juce::Colour(0xff161d26);
@@ -729,12 +730,21 @@ void DISidechainEditor::selectRenderQuality(int index) {
 void DISidechainEditor::captureAB(int slot) {
  slot=juce::jlimit(0,1,slot);
  proc.getStateInformation(abSnapshots[(size_t)slot]);
+ // A/B state is generated internally, but keep a hard bound so a malformed
+ // future state extension cannot retain an unbounded editor-side allocation.
+ if(abSnapshots[(size_t)slot].getSize()>4u*1024u*1024u){
+  abSnapshots[(size_t)slot].reset();
+  abStored[(size_t)slot]=false;
+  return;
+ }
  abStored[(size_t)slot]=true;
  if(abButtons[(size_t)slot]) abButtons[(size_t)slot]->setButtonText(slot==0?"A*":"B*");
 }
 void DISidechainEditor::recallAB(int slot) {
  slot=juce::jlimit(0,1,slot);
- if(!abStored[(size_t)slot]||abSnapshots[(size_t)slot].isEmpty()) return;
+ if(!abStored[(size_t)slot]||abSnapshots[(size_t)slot].isEmpty()||
+    abSnapshots[(size_t)slot].getSize()>4u*1024u*1024u||
+    abSnapshots[(size_t)slot].getSize()>static_cast<size_t>(std::numeric_limits<int>::max())) return;
  proc.setStateInformation(abSnapshots[(size_t)slot].getData(),(int)abSnapshots[(size_t)slot].getSize());
  repaint();
 }
