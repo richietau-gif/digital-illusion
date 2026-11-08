@@ -15,6 +15,7 @@ void buttonStyle(juce::TextButton& b) {
 }
 }
 DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEditor(&p),proc(p) {
+ setLookAndFeel(&theme);
  const char* ids[]={"depth","mix","threshold","length","smooth","low","high","retrigger"};
  const char* names[]={"DEPTH","MIX","SENSITIVITY","LENGTH MS","SMOOTH MS","LOW HZ","HIGH HZ","RETRIGGER MS"};
  for(int i=0;i<8;++i) {
@@ -65,8 +66,24 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  copyStep->onClick=[this]{for(int i=0;i<8;++i)clipboard[i]=proc.getSequencePoint(selectedStep,i);hasClipboard=true;};
  pasteStep->onClick=[this]{if(hasClipboard){for(int i=0;i<8;++i)proc.setSequencePoint(selectedStep,i,clipboard[i]);repaint();}};
  resetStep->onClick=[this]{const float defaults[]={1,.92f,.08f,.02f,.32f,.75f,.95f,1};for(int i=0;i<8;++i)proc.setSequencePoint(selectedStep,i,defaults[i]);repaint();};
+ const char* filterNames[]={"FULL","LOW","HIGH","BAND"};
+ for(int i=0;i<4;++i){filterButtons[i]=std::make_unique<juce::TextButton>(filterNames[i]);filterButtons[i]->onClick=[this,i]{selectFilter(i);};addAndMakeVisible(*filterButtons[i]);}
+ if(combos.size()>0)combos[0]->setVisible(false);
+ refreshFilterButtons();
  setSize(1536,950);
  startTimerHz(24);
+}
+void DISidechainEditor::selectFilter(int index) {
+ if(auto* p=proc.state.getParameter("mode")){
+  const float normalized=p->convertTo0to1((float)juce::jlimit(0,3,index));
+  p->beginChangeGesture();p->setValueNotifyingHost(normalized);p->endChangeGesture();
+ }
+ refreshFilterButtons();
+}
+void DISidechainEditor::refreshFilterButtons(){
+ const auto* raw=proc.state.getRawParameterValue("mode");
+ const int selected=raw?juce::jlimit(0,3,(int)raw->load()):0;
+ for(int i=0;i<4;++i)if(filterButtons[i])filterButtons[i]->setToggleState(i==selected,juce::dontSendNotification);
 }
 void DISidechainEditor::paintPanel(juce::Graphics& g,juce::Rectangle<int> r,const juce::String& name) {
  g.setColour(panel);g.fillRoundedRectangle(r.toFloat(),12.f);
@@ -188,7 +205,8 @@ void DISidechainEditor::resized() {
  if(copyStep)copyStep->setBounds(969,544,208,33);
  if(pasteStep)pasteStep->setBounds(969,586,208,33);
  if(resetStep)resetStep->setBounds(969,628,208,33);
- for(int i=0;i<3&&i<(int)combos.size();++i)combos[i]->setBounds(35+i*250,790,215,31);
+ if(combos.size()==3){combos[0]->setBounds(0,0,0,0);combos[1]->setBounds(290,790,215,31);combos[2]->setBounds(540,790,215,31);}
+ for(int i=0;i<4;++i)if(filterButtons[i])filterButtons[i]->setBounds(35+i*58,790,54,31);
  if(sliders.size()!=8||labels.size()!=8)return;
  const int xs[]={1230,1360,35,165,295,425,555,685};
  for(int i=0;i<8;++i){labels[i]->setBounds(xs[i],831,115,20);sliders[i]->setBounds(xs[i],851,110,78);}
