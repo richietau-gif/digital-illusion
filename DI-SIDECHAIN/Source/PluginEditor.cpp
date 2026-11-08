@@ -83,6 +83,19 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
   addAndMakeVisible(*laneSliders[i]);
   laneAttachments[i]=std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(p.state,laneIds[i],*laneSliders[i]);
  }
+ fxToggle=std::make_unique<juce::ToggleButton>("SATURATION");
+ addAndMakeVisible(*fxToggle);
+ fxToggleAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(p.state,"fxEnabled",*fxToggle);
+ const char* fxIds[]={"fxDrive","fxMix"};
+ for(int i=0;i<2;++i){
+  fxSliders[i]=std::make_unique<juce::Slider>(juce::Slider::LinearHorizontal,juce::Slider::TextBoxRight);
+  fxSliders[i]->setColour(juce::Slider::trackColourId,juce::Colour(0xffffb84d));
+  fxSliders[i]->setColour(juce::Slider::thumbColourId,juce::Colour(0xffffb84d));
+  fxSliders[i]->setColour(juce::Slider::textBoxTextColourId,juce::Colours::white);
+  fxSliders[i]->setColour(juce::Slider::textBoxOutlineColourId,juce::Colours::transparentBlack);
+  addAndMakeVisible(*fxSliders[i]);
+  fxAttachments[i]=std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(p.state,fxIds[i],*fxSliders[i]);
+ }
  copyStep=std::make_unique<juce::TextButton>("COPY STEP");
  pasteStep=std::make_unique<juce::TextButton>("PASTE STEP");
  resetStep=std::make_unique<juce::TextButton>("RESET STEP");
@@ -192,8 +205,9 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  g.fillRoundedRectangle(juce::Rectangle<float>(207,98,185,47),9.f);
  text(g,"SEQUENCER", {233,105,153,31},19,sequenceToggle->getToggleState()?bg:muted,true);
  text(g,"MULTI-LANE  ·  3 ACTIVE LANES", {424,106,305,32},16,green);
- text(g,"FX  ·  COMING SOON", {755,106,245,32},16,muted);
- text(g,"TRIGGER", {1055,106,100,32},15,muted,true);
+ text(g,"FX  /  SATURATOR", {755,106,230,32},16,juce::Colour(0xffffb84d),true);
+ text(g,"DRIVE dB", {1090,96,110,18},11,muted);
+ text(g,"WET", {1284,96,70,18},11,muted);
  text(g,"DI SIDECHAIN 4.0  •  EXPERIMENTAL", {1160,52,340,22},13,muted);
  auto graphPanel=juce::Rectangle<int>(12,165,getWidth()-24,282);
  g.setColour(panel);g.fillRoundedRectangle(graphPanel.toFloat(),12.f);
@@ -271,6 +285,9 @@ void DISidechainEditor::resized() {
  if(pasteStep)pasteStep->setBounds(969,586,208,33);
  if(resetStep)resetStep->setBounds(969,628,208,33);
  if(shapeOffset){shapeOffset->setBounds(1100,665,77,28);shapeOffset->setEnabled(selectedLane==0);}
+ if(fxToggle)fxToggle->setBounds(928,112,154,30);
+ if(fxSliders[0])fxSliders[0]->setBounds(1080,116,190,28);
+ if(fxSliders[1])fxSliders[1]->setBounds(1280,116,190,28);
  for(int i=0;i<3;++i)if(laneTabs[i]){laneTabs[i]->setBounds(1225+i*92,527,86,30);laneTabs[i]->setToggleState(selectedLane==i,juce::dontSendNotification);}
  if(laneSliders[0])laneSliders[0]->setBounds(1225,588,275,28);
  if(laneSliders[1])laneSliders[1]->setBounds(1225,646,275,28);
