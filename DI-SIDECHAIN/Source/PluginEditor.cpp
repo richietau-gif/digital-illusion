@@ -70,7 +70,7 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  const char* laneNames[]={"VOLUME","FILTER","PAN"};
  for(int i=0;i<3;++i){
   laneTabs[i]=std::make_unique<juce::TextButton>(laneNames[i]);
-  laneTabs[i]->onClick=[this,i]{selectedLane=i;repaint();};
+  laneTabs[i]->onClick=[this,i]{selectedLane=i;for(int j=0;j<3;++j)laneTabs[j]->setToggleState(j==selectedLane,juce::dontSendNotification);repaint();};
   addAndMakeVisible(*laneTabs[i]);
  }
  const char* laneIds[]={"filterMod","panMod"};
@@ -158,7 +158,7 @@ void DISidechainEditor::paintShape(juce::Graphics& g,juce::Rectangle<int> r,int 
  for(int i=1;i<8;++i){const int x=r.getX()+r.getWidth()*i/8;g.drawVerticalLine(x,(float)r.getY(),(float)r.getBottom());}
  for(int i=1;i<4;++i){const int y=r.getY()+r.getHeight()*i/4;g.drawHorizontalLine(y,(float)r.getX(),(float)r.getRight());}
  const bool seq=sequenceToggle->getToggleState();
- const float offset=seq&&shapeOffset? (float)shapeOffset->getValue():0.f;
+ const float offset=seq&&selectedLane==0&&shapeOffset? (float)shapeOffset->getValue():0.f;
  auto value=[&](int i){return seq?(selectedLane==0?proc.getSequencePoint(step,i):proc.getModulationPoint(selectedLane-1,step,i)):proc.points[i].load();};
  juce::Path p;
  for(int j=0;j<=140;++j){
