@@ -24,7 +24,23 @@ jobs:
       - name: Validate VST3 with pluginval
         shell: pwsh
         run: |
-          Invoke-WebRequest -Uri "https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_Windows.zip" -OutFile pluginval.zip
+          # GitHub releases sometimes transiently return 502/504 ("Unicorn").
+          # Retry only the external binary download, never ignore validation.
+          $pluginvalUrl = "https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_Windows.zip"
+          $downloaded = $false
+          for ($attempt = 1; $attempt -le 5; $attempt++) {
+            try {
+              if (Test-Path pluginval.zip) { Remove-Item pluginval.zip -Force }
+              Invoke-WebRequest -Uri $pluginvalUrl -OutFile pluginval.zip -TimeoutSec 90 -ErrorAction Stop
+              if ((Get-Item pluginval.zip).Length -lt 100000) { throw "pluginval ZIP too small" }
+              $downloaded = $true
+              break
+            } catch {
+              Write-Warning "pluginval download failed ($attempt/5): $($_.Exception.Message)"
+              if ($attempt -lt 5) { Start-Sleep -Seconds (3 * $attempt) }
+            }
+          }
+          if (-not $downloaded) { throw "pluginval download failed after 5 attempts" }
           Expand-Archive pluginval.zip -DestinationPath pluginval -Force
           $exe = Get-ChildItem pluginval -Recurse -Filter pluginval.exe | Select-Object -First 1 -ExpandProperty FullName
           if (-not $exe) { throw "pluginval.exe not found" }
