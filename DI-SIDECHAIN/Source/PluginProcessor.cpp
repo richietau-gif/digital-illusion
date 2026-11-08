@@ -32,7 +32,7 @@ float DISidechainProcessor::getModulationPoint(int lane,int step,int node) const
   ?modulationPoints[lane][step][node].load(std::memory_order_relaxed):(lane==1?0.5f:1.f);
 }
 bool DISidechainProcessor::isBusesLayoutSupported(const BusesLayout& b) const {return b.getMainInputChannelSet()==juce::AudioChannelSet::stereo()&&b.getMainOutputChannelSet()==juce::AudioChannelSet::stereo()&&(b.inputBuses.size()<2||b.inputBuses[1].isDisabled()||b.inputBuses[1]==juce::AudioChannelSet::mono()||b.inputBuses[1]==juce::AudioChannelSet::stereo());}
-void DISidechainProcessor::prepareToPlay(double sampleRate,int maxBlock){sr=sampleRate;phase=1;sequencer.reset();for(auto& lane:modulationSequencers)lane.reset();activeSequenceStep.store(0);detector=0;armed=true;refractory=0;smoothGain=1;juce::dsp::ProcessSpec spec{sampleRate,(juce::uint32)juce::jmax(1,maxBlock),1};for(auto& c:filters){c.low.prepare(spec);c.high.prepare(spec);c.low.setType(juce::dsp::LinkwitzRileyFilterType::lowpass);c.high.setType(juce::dsp::LinkwitzRileyFilterType::highpass);c.low.reset();c.high.reset();}}
+void DISidechainProcessor::prepareToPlay(double sampleRate,int maxBlock){sr=sampleRate;phase=1;sequencer.reset();for(auto& lane:modulationSequencers)lane.reset();activeSequenceStep.store(0);detector=0;armed=true;refractory=0;smoothGain=1;fxBlend=state.getRawParameterValue("fxEnabled")->load()>0.5f?1.f:0.f;juce::dsp::ProcessSpec spec{sampleRate,(juce::uint32)juce::jmax(1,maxBlock),1};for(auto& c:filters){c.low.prepare(spec);c.high.prepare(spec);c.low.setType(juce::dsp::LinkwitzRileyFilterType::lowpass);c.high.setType(juce::dsp::LinkwitzRileyFilterType::highpass);c.low.reset();c.high.reset();}}
 float DISidechainProcessor::curve(double t) const {t=juce::jlimit(0.0,1.0,t);double x=t*7;int i=juce::jmin(6,(int)x);float a=points[i].load(),b=points[i+1].load();float u=(float)(x-i);u=u*u*(3-2*u);return a+(b-a)*u;}
 void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::MidiBuffer& midi){
  juce::ScopedNoDenormals noDenormals;
@@ -47,6 +47,8 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  const int fxType=juce::jlimit(0,1,(int)get("fxType"));
  const float drive=juce::Decibels::decibelsToGain(fxDrive);
  const float fxWet=juce::jlimit(0.f,1.f,fxMix);
+ const float fxTarget=fxEnabled?1.f:0.f;
+ const float fxSmoothing=std::exp(-1.f/(float)(0.01*sr));
  const float saturationNorm=1.f/std::tanh(juce::jmax(1.f,drive));
  for(auto& c:filters){c.low.setCutoffFrequency(lo);c.high.setCutoffFrequency(mode==3?hi:lo);}
  double bpm=120; if(auto* ph=getPlayHead()){if(auto pos=ph->getPosition()){if(auto b=pos->getBpm())bpm=*b;}}
@@ -62,6 +64,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  double step=1.0/juce::jmax(1.0,envelopeLength*sr);int holdoff=(int)(get("retrigger")*.001*sr);float threshold=juce::Decibels::decibelsToGain(get("threshold"));float coeff=std::exp(-1.f/(float)(juce::jmax(.1f,get("smooth"))*.001*sr));
  juce::MidiBuffer::Iterator it(midi);juce::MidiMessage msg;int midiPos=0;bool hasEvent=it.getNextEvent(msg,midiPos);float peak=0;
  for(int i=0;i<n;++i){bool fire=false;
+ fxBlend=fxTarget+(fxBlend-fxTarget)*fxSmoothing;
  while(hasEvent&&midiPos<=i){if(msg.isNoteOn()&&msg.getVelocity()>0&&trig!=1)fire=true;hasEvent=it.getNextEvent(msg,midiPos);}
  if(hasSide&&trig!=2&&side.getNumSamples()>=n){float v=0;for(int ch=0;ch<side.getNumChannels();++ch)v=juce::jmax(v,std::abs(side.getSample(ch,i)));detector=std::max((double)v,detector*.995);if(detector<threshold*.65)armed=true;if(armed&&detector>=threshold&&refractory==0){fire=true;armed=false;}}
  if(refractory>0)--refractory;if(fire){phase=0;if(sequenceOn){sequencer.trigger();for(auto& lane:modulationSequencers)lane.trigger();}refractory=holdoff;}
@@ -84,9 +87,9 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  // Filter lane affects the selected frequency band, while Full mode remains full-band.
  if(filterRange>0.f&&mode!=0)out=dry+(out-dry)*filterLaneGain;
  if(panMod!=0.f)out*=ch==0?panLeft:panRight;
- if(fxEnabled&&fxDrive>0.f&&fxWet>0.f){const float driven=out*drive;
+ if(fxBlend>0.00001f&&fxDrive>0.f&&fxWet>0.f){const float driven=out*drive;
        const float saturated=fxType==0 ? std::tanh(driven)*saturationNorm : (driven<=-1.5f?-1.f:driven>=1.5f?1.f:driven-(4.f/27.f)*driven*driven*driven);
-       out+=fxWet*(saturated-out);}
+       out+=(fxWet*fxBlend)*(saturated-out);}
  if(!std::isfinite(out))out=dry;main.setSample(ch,i,out);peak=juce::jmax(peak,std::abs(out));}
  }
  meter.store(peak);midi.clear();
