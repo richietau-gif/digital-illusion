@@ -70,6 +70,28 @@ int main(){
   check(impulsePeak==di::OversampledFx2x::latencySamples,
         "Wet/dry mixing must preserve fixed latency");
  }
+ // DI SIDECHAIN 4.1 uses two independent 2x stages. All four ON/OFF
+ // combinations must keep the same 14-sample host-reported latency.
+ constexpr int combinedLatency=2*di::OversampledFx2x::latencySamples;
+ for(int enableFx=0;enableFx<2;++enableFx){
+  for(int enableSat=0;enableSat<2;++enableSat){
+   di::OversampledFx2x first,second;
+   di::FixedDelay<di::OversampledFx2x::latencySamples> firstDry,secondDry;
+   int maxIndex=-1;float maxMagnitude=0.f;
+   for(int i=0;i<48;++i){
+    const float input=i==0?0.0001f:0.f;
+    const float stageOne=di::mixAlignedFx(firstDry.process(input),
+      first.process(input,1.f,1.f),static_cast<float>(enableFx));
+    const float output=di::mixAlignedFx(secondDry.process(stageOne),
+      second.process(stageOne,1.f,0.f),static_cast<float>(enableSat));
+    check(std::isfinite(output),"Two-stage FX must always remain finite");
+    if(std::abs(output)>maxMagnitude){
+     maxMagnitude=std::abs(output);maxIndex=i;
+    }
+   }
+   check(maxIndex==combinedLatency,"FX and saturator combinations must retain 14-sample latency");
+  }
+ }
  // Per-channel state must remain independent under stereo processing.
  di::OversampledFx2x left,right,reference;
  for(int i=0;i<256;++i){
