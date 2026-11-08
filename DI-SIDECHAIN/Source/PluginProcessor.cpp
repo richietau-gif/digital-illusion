@@ -130,7 +130,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  // Filter lane affects the selected frequency band, while Full mode remains full-band.
  if(filterRange>0.f&&mode!=0)out=dry+(out-dry)*filterLaneGain;
  if(panMod!=0.f)out*=ch==0?panLeft:panRight;
- if(fxBlend>0.00001f&&smoothedFxDrive>1.00001f&&smoothedFxWet>0.f){const float saturated=di::processFx(out,smoothedFxDrive,smoothedFxType);
+ if(fxBlend>0.00001f&&smoothedFxWet>0.f){const float saturated=di::processFx(out,smoothedFxDrive,smoothedFxType);
        out+=(smoothedFxWet*fxBlend)*(saturated-out);}
  if(!std::isfinite(out))out=dry;main.setSample(ch,i,out);peak=juce::jmax(peak,std::abs(out));}
  }
