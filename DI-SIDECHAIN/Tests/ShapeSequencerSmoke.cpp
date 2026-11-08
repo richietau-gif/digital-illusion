@@ -3,6 +3,7 @@
 #include <iostream>
 static void check(bool condition, const char* message) { if (!condition) { std::cerr << message << '\n'; std::exit(1); } }
 #include <cmath>
+#include <limits>
 int main() {
  di::ShapeSequencer seq;
  check(seq.getSteps()==16, "Sequencer check failed: seq.getSteps()==16");
@@ -59,5 +60,15 @@ int main() {
   syncPattern.render(1.);
  }
  check(syncPattern.getCurrentStep()==1,"Dense triggers must not pin synced pattern to step zero");
+ di::ShapeSequencer timeline;
+ timeline.setSteps(16);
+ timeline.seekToStepPosition(17.5);
+ check(timeline.getCurrentStep()==1,"PPQ seek must wrap after 16 steps");
+ timeline.seekToStepPosition(-0.25);
+ check(timeline.getCurrentStep()==15,"Negative PPQ preroll must wrap");
+ timeline.seekToStepPosition(4.0);
+ check(timeline.getCurrentStep()==4,"Exact PPQ step boundary");
+ timeline.seekToStepPosition(std::numeric_limits<double>::quiet_NaN());
+ check(timeline.getCurrentStep()==4,"Invalid PPQ must not corrupt step");
  return 0;
 }
