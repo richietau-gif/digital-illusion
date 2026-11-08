@@ -16,8 +16,9 @@ static juce::AudioProcessorValueTreeState::ParameterLayout layoutParams(){
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"trigger",1},"Trigger mode",juce::StringArray{"Audio + MIDI","Audio only","MIDI only"},0));
  p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"sequenceEnabled",1},"Shape sequencer enabled",false));
  p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"fxEnabled",1},"FX enabled",false));
+ p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"saturatorEnabled",1},"Independent saturator enabled",false));
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"fxType",1},"FX type",juce::StringArray{"Saturator","Soft Clipper"},0));
- p.push_back(std::make_unique<juce::AudioParameterInt>(juce::ParameterID{"sequenceSteps",1},"Sequence steps",1,32,16));
+ p.push_back(std::make_unique<juce::AudioParameterInt>(juce::ParameterID{"sequenceSteps",1},"Sequence steps",1,16,16));
  p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"sync",1},"Tempo sync",true));
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"division",1},"Beat division",juce::StringArray{"1/32","1/16","1/8","1/4","1/2","1 bar","2 bars"},2));
  return {p.begin(),p.end()};
@@ -39,7 +40,7 @@ float DISidechainProcessor::getModulationPoint(int lane,int step,int node) const
   ?modulationPoints[lane][step][node].load(std::memory_order_relaxed):(lane==1?0.5f:1.f);
 }
 bool DISidechainProcessor::isBusesLayoutSupported(const BusesLayout& b) const {return b.getMainInputChannelSet()==juce::AudioChannelSet::stereo()&&b.getMainOutputChannelSet()==juce::AudioChannelSet::stereo()&&(b.inputBuses.size()<2||b.inputBuses[1].isDisabled()||b.inputBuses[1]==juce::AudioChannelSet::mono()||b.inputBuses[1]==juce::AudioChannelSet::stereo());}
-void DISidechainProcessor::prepareToPlay(double sampleRate,int maxBlock){sr=sampleRate;setLatencySamples(di::OversampledFx2x::latencySamples);for(auto& fx:oversampledFx)fx.reset();for(auto& delay:fxDryDelay)delay.reset();phase=1;sequencer.reset();for(auto& lane:modulationSequencers)lane.reset();activeSequenceStep.store(0);detector=0;armed=true;refractory=0;smoothGain=1;expectedTransportSample=-1;wasTransportPlaying=false;fxBlend=state.getRawParameterValue("fxEnabled")->load()>0.5f?1.f:0.f;const auto safeInitial=[this](const char* id,float low,float high,float fallback){const float value=state.getRawParameterValue(id)->load();return std::isfinite(value)?juce::jlimit(low,high,value):fallback;};smoothedFxDrive=juce::Decibels::decibelsToGain(safeInitial("fxDrive",0.f,24.f,0.f));smoothedFxWet=safeInitial("fxMix",0.f,1.f,1.f);smoothedFxType=safeInitial("fxType",0.f,1.f,0.f);juce::dsp::ProcessSpec spec{sampleRate,(juce::uint32)juce::jmax(1,maxBlock),1};for(auto& c:filters){c.low.prepare(spec);c.high.prepare(spec);c.low.setType(juce::dsp::LinkwitzRileyFilterType::lowpass);c.high.setType(juce::dsp::LinkwitzRileyFilterType::highpass);c.low.reset();c.high.reset();}}
+void DISidechainProcessor::prepareToPlay(double sampleRate,int maxBlock){sr=sampleRate;setLatencySamples(2*di::OversampledFx2x::latencySamples);for(auto& fx:oversampledFx)fx.reset();for(auto& fx:saturatorFx)fx.reset();for(auto& delay:fxDryDelay)delay.reset();for(auto& delay:saturatorDryDelay)delay.reset();saturatorBlend=state.getRawParameterValue("saturatorEnabled")->load()>0.5f?1.f:0.f;phase=1;sequencer.reset();for(auto& lane:modulationSequencers)lane.reset();activeSequenceStep.store(0);detector=0;armed=true;refractory=0;smoothGain=1;expectedTransportSample=-1;wasTransportPlaying=false;fxBlend=state.getRawParameterValue("fxEnabled")->load()>0.5f?1.f:0.f;const auto safeInitial=[this](const char* id,float low,float high,float fallback){const float value=state.getRawParameterValue(id)->load();return std::isfinite(value)?juce::jlimit(low,high,value):fallback;};smoothedFxDrive=juce::Decibels::decibelsToGain(safeInitial("fxDrive",0.f,24.f,0.f));smoothedFxWet=safeInitial("fxMix",0.f,1.f,1.f);smoothedFxType=safeInitial("fxType",0.f,1.f,0.f);juce::dsp::ProcessSpec spec{sampleRate,(juce::uint32)juce::jmax(1,maxBlock),1};for(auto& c:filters){c.low.prepare(spec);c.high.prepare(spec);c.low.setType(juce::dsp::LinkwitzRileyFilterType::lowpass);c.high.setType(juce::dsp::LinkwitzRileyFilterType::highpass);c.low.reset();c.high.reset();}}
 float DISidechainProcessor::curve(double t) const {if(!std::isfinite(t))t=0.;t=juce::jlimit(0.0,1.0,t);double x=t*7;int i=juce::jmin(6,(int)x);const auto safePoint=[this](int node){const float value=points[node].load(std::memory_order_relaxed);return std::isfinite(value)?juce::jlimit(0.f,1.f,value):1.f;};float a=safePoint(i),b=safePoint(i+1);float u=(float)(x-i);u=u*u*(3-2*u);return a+(b-a)*u;}
 void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::MidiBuffer& midi){
  juce::ScopedNoDenormals noDenormals;
@@ -68,11 +69,13 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  const float hi=cutoffs.high;
  const float filterRange=juce::jlimit(0.f,1.f,filterMod);
  const bool fxEnabled=get("fxEnabled")>0.5f;
+ const bool saturatorEnabled=get("saturatorEnabled")>0.5f;
  const int fxType=(int)bounded("fxType",0.f,1.f,0.f);
  // Guard automation and restored host state before values enter persistent smoothers.
  const float drive=juce::Decibels::decibelsToGain(std::isfinite(fxDrive)?juce::jlimit(0.f,24.f,fxDrive):0.f);
  const float fxWet=std::isfinite(fxMix)?juce::jlimit(0.f,1.f,fxMix):0.f;
  const float fxTarget=fxEnabled?1.f:0.f;
+ const float saturatorTarget=saturatorEnabled?1.f:0.f;
  const float fxSmoothing=std::exp(-1.f/(float)(0.01*sr));
  const float fxParameterSmoothing=std::exp(-1.f/(float)(0.005*sr));
  for(auto& c:filters){c.low.setCutoffFrequency(lo);c.high.setCutoffFrequency(mode==3?hi:lo);}
@@ -102,7 +105,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  envelopeLength=get("sync")>0.5?60.0/bpm*divisions[divisionIndex]:lengthSeconds;
  const bool tempoSync=get("sync")>0.5f;
  const bool sequenceOn=get("sequenceEnabled")>0.5f;
- const int sequenceSteps=(int)bounded("sequenceSteps",1.f,32.f,16.f);
+ const int sequenceSteps=(int)bounded("sequenceSteps",1.f,16.f,16.f);
  sequencer.setSteps(sequenceSteps);
  for(auto& lane:modulationSequencers)lane.setSteps(sequenceSteps);
  // Re-anchor each audio block to the DAW's PPQ timeline when tempo sync is enabled.
@@ -122,6 +125,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  juce::MidiBuffer::Iterator it(midi);juce::MidiMessage msg;int midiPos=0;bool hasEvent=it.getNextEvent(msg,midiPos);float peak=0;
  for(int i=0;i<n;++i){bool midiNoteOn=false,audioPeak=false;
  fxBlend=fxTarget+(fxBlend-fxTarget)*fxSmoothing;
+ saturatorBlend=saturatorTarget+(saturatorBlend-saturatorTarget)*fxSmoothing;
  if(!std::isfinite(smoothedFxDrive))smoothedFxDrive=drive;
  if(!std::isfinite(smoothedFxWet))smoothedFxWet=fxWet;
  smoothedFxDrive=drive+(smoothedFxDrive-drive)*fxParameterSmoothing;
@@ -167,8 +171,13 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  // Run both branches continuously so automation/bypass does not reset FIR history.
  // Fixed 7-sample latency is reported to the host and shared by dry and wet.
  const float fxDry=fxDryDelay[ch].process(out);
- const float fxProcessed=oversampledFx[ch].process(out,smoothedFxDrive,smoothedFxType);
+ const float fxProcessed=oversampledFx[ch].process(out,smoothedFxDrive,1.f); // FX: soft clipper
  out=di::mixAlignedFx(fxDry,fxProcessed,smoothedFxWet*fxBlend);
+ // Saturator is a separate, independently bypassable stage. Both oversampled
+ // processors always run and both dry paths are latency-aligned to avoid clicks.
+ const float satDry=saturatorDryDelay[ch].process(out);
+ const float satProcessed=saturatorFx[ch].process(out,smoothedFxDrive,0.f);
+ out=di::mixAlignedFx(satDry,satProcessed,smoothedFxWet*saturatorBlend);
  if(!std::isfinite(out))out=0.f;main.setSample(ch,i,out);peak=juce::jmax(peak,std::abs(out));}
  }
  meter.store(peak);midi.clear();
