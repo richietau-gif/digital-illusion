@@ -48,6 +48,17 @@ public:
  // Signed phase displacement: positive = delayed/right, negative = early/left.
  // ONE SHOT clamps to endpoints; LOOP wraps within the beat cycle.
  float evaluateShiftedEnvelope(double normalizedPhase,bool loop) const noexcept;
+ // Filter's own editable A/B envelope banks; default LINK uses volume shape
+ // so existing sessions retain their exact filter modulation.
+ static constexpr int filterEnvelopePoints=8;
+ float getFilterEnvelopePoint(int bank,int index) const noexcept;
+ void setFilterEnvelopePoint(int bank,int index,float value) noexcept;
+ float evaluateFilterEnvelope(double phase,bool loop) const noexcept;
+ float evaluateFilterBank(int bank,double phase,bool loop) const noexcept;
+ void copyVolumeShapeToFilterBanks() noexcept;
+ float getVisualFollowerLevel() const noexcept {
+     return visualFollowerLevel.load(std::memory_order_relaxed);
+ }
  float getVisualFilterCutoffHz() const noexcept {
      return visualFilterCutoffHz.load(std::memory_order_relaxed);
  }
@@ -66,6 +77,9 @@ private:
  // Cubic Bezier easing factor per segment [-1, 1], 0 = smoothstep.
  std::array<std::atomic<float>,maxEnvelopeNodes> nodeCurve {};
  std::atomic<int> activeNodeCount {0}; // 0 selects legacy 8-point envelope
+ std::array<std::array<std::atomic<float>,filterEnvelopePoints>,2> filterEnvelopeBanks {};
+ std::atomic<float> visualFollowerLevel {0.f};
+ float followerLevel=0.f;
  void adoptLegacyPoints() noexcept;
  double sr=44100, phase=1, envelopeLength=0.25, detector=0;
  // Detector high-pass state is independent from audio-output crossover filters.
