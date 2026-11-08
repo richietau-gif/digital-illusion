@@ -1,6 +1,7 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include "FxWaveshaper.h"
+#include "FxWetMix.h"
 #include "PeakDetector.h"
 #include <cmath>
 static juce::AudioProcessorValueTreeState::ParameterLayout layoutParams(){
@@ -137,7 +138,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  // Fixed 7-sample latency is reported to the host and shared by dry and wet.
  const float fxDry=fxDryDelay[ch].process(out);
  const float fxProcessed=oversampledFx[ch].process(out,smoothedFxDrive,smoothedFxType);
- out=fxDry+(smoothedFxWet*fxBlend)*(fxProcessed-fxDry);
+ out=di::mixAlignedFx(fxDry,fxProcessed,smoothedFxWet*fxBlend);
  if(!std::isfinite(out))out=dry;main.setSample(ch,i,out);peak=juce::jmax(peak,std::abs(out));}
  }
  meter.store(peak);midi.clear();
