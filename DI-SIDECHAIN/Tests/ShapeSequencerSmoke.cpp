@@ -111,5 +111,12 @@ int main() {
  check(di::transportDiscontinuity(1024,1027),"Small seek must reset");
  check(di::transportDiscontinuity(1024,1000),"Short loop jump must reset");
  check(di::transportDiscontinuity(1024,0),"Rewind must reset");
+ check(di::transportDiscontinuity(std::numeric_limits<std::int64_t>::max(),
+                                  std::numeric_limits<std::int64_t>::min()),
+       "Extreme host transport positions must not overflow");
+ check(!di::transportDiscontinuity(std::numeric_limits<std::int64_t>::max()-1,
+                                   std::numeric_limits<std::int64_t>::max()),
+       "Near-limit transport advance must remain contiguous");
+
  return 0;
 }
