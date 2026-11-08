@@ -1,9 +1,6 @@
 name: DI SIDECHAIN 4 Windows validation
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - feature/di-sidechain-4-sequencer
 jobs:
   build-and-test:
     runs-on: windows-2022
