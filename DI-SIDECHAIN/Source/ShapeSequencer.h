@@ -46,6 +46,7 @@ public:
    return result;
  }
  static float evaluate(const Shape& shape, double position) noexcept {
+   if (!std::isfinite(position)) position = 0.;
    const double x = std::clamp(position, 0., 1.) * (nodesPerStep - 1);
    const int i = std::min(nodesPerStep - 2, static_cast<int>(x));
    float t = static_cast<float>(x - i);
