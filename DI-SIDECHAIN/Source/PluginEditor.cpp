@@ -394,7 +394,7 @@ void DISidechainEditor::paint(juce::Graphics& g){
     text(g,"LIVE TRIGGER INPUT",9,{29,527,207,15},muted);
 
     // CENTER: preset / source / mode / length and huge editable orange curve.
-    text(g,"ENVELOPE",12,{280,131,142,21},pale);
+    text(g,filterView?"FILTER SHAPE":"VOLUME SHAPE",12,{280,131,145,21},pale);
     text(g,"PRESET",9,{687,136,62,14},muted);
     text(g,"SOURCE",9,{278,165,175,14},muted);
     text(g,"MODE",9,{512,165,175,14},muted);
@@ -427,7 +427,13 @@ void DISidechainEditor::paint(juce::Graphics& g){
     const float offsetPercent=proc.state.getRawParameterValue("envelopeOffset")->load();
     const float offsetPhase=offsetPercent*.01f;
     const bool loop=proc.state.getRawParameterValue("playbackMode")->load()>.5f;
+    const bool linked=proc.state.getRawParameterValue("filterEnvelopeLink")->load()>.5f;
     const auto timing=juce::Colour(0xff35dce7);
+    const auto shapeColor=filterView?timing:curveAccent;
+    if(filterView){
+        const auto mode=linked?"LINKED TO VOLUME":(editedFilterBank==0?"EDITING FILTER A":"EDITING FILTER B");
+        text(g,mode,10,{944,164,148,16},linked?muted:timing,juce::Justification::centredRight);
+    }
     if(std::abs(offsetPhase)>.00001f){
         // The ghost is the unshifted editable waveform. The bright orange
         // path is the actual timing used for gain and filter modulation.
@@ -449,19 +455,22 @@ void DISidechainEditor::paint(juce::Graphics& g){
     for(int i=0;i<=350;++i){
         const float phase=(float)i/350.f;
         const float x=graph.getX()+graph.getWidth()*phase;
-        const float y=graph.getBottom()-proc.evaluateShiftedEnvelope(phase,loop)*graph.getHeight();
+        const float value=filterView&&!linked ?
+            proc.evaluateFilterBank(editedFilterBank,phase,loop):
+            proc.evaluateShiftedEnvelope(phase,loop);
+        const float y=graph.getBottom()-value*graph.getHeight();
         if(i==0)curve.startNewSubPath(x,y);else curve.lineTo(x,y);
     }
     juce::Path fill(curve);
     fill.lineTo(graph.getRight(),graph.getBottom());
     fill.lineTo(graph.getX(),graph.getBottom());fill.closeSubPath();
-    g.setGradientFill(juce::ColourGradient(curveAccent.withAlpha(.29f),
-         graph.getCentreX(),graph.getY(),curveAccent.withAlpha(.02f),
+    g.setGradientFill(juce::ColourGradient(shapeColor.withAlpha(.29f),
+         graph.getCentreX(),graph.getY(),shapeColor.withAlpha(.02f),
          graph.getCentreX(),graph.getBottom(),false));
     g.fillPath(fill);
-    g.setColour(curveAccent.withAlpha(.15f));
+    g.setColour(shapeColor.withAlpha(.15f));
     g.strokePath(curve,juce::PathStrokeType(9.f));
-    g.setColour(curveAccent);
+    g.setColour(shapeColor);
     g.strokePath(curve,juce::PathStrokeType(3.0f));
     const float phase=juce::jlimit(0.f,1.f,proc.visualPhase.load());
     if(phase<1.f){
@@ -469,29 +478,52 @@ void DISidechainEditor::paint(juce::Graphics& g){
         g.setColour(cyan.withAlpha(.75f));g.drawLine(cursor,graph.getY(),
             cursor,graph.getBottom(),1.2f);
     }
-    for(int i=0;i<proc.getEnvelopeNodeCount();++i){
-        const auto node=proc.getEnvelopeNode(i);
+    // In filter edit mode, draw the selected eight-point A/B bank.
+    // Linked mode displays the Volume nodes and cannot edit the Filter bank.
+    const int nodes=filterView&&!linked?DISidechainProcessor::filterEnvelopePoints:
+                                    proc.getEnvelopeNodeCount();
+    for(int i=0;i<nodes;++i){
+        const float px=filterView&&!linked ?
+           (float)i/(DISidechainProcessor::filterEnvelopePoints-1):
+           proc.getEnvelopeNode(i).x;
+        const float py=filterView&&!linked ?
+           proc.getFilterEnvelopePoint(editedFilterBank,i):
+           proc.getEnvelopeNode(i).y;
         if(std::abs(offsetPhase)>.00001f){
-            const float x0=graph.getX()+node.x*graph.getWidth();
-            const float y0=graph.getBottom()-node.y*graph.getHeight();
+            const float x0=graph.getX()+px*graph.getWidth();
+            const float y0=graph.getBottom()-py*graph.getHeight();
             g.setColour(timing.withAlpha(.62f));g.drawEllipse(x0-4,y0-4,8,8,1.f);
         }
-        float shifted=node.x+offsetPhase;
+        float shifted=px+offsetPhase;
         if(loop){
             shifted=std::fmod(shifted,1.f);
             if(shifted<0)shifted+=1.f;
         }
         if(shifted<0.f||shifted>1.f)continue;
         const float x=graph.getX()+shifted*graph.getWidth();
-        const float y=graph.getBottom()-node.y*graph.getHeight();
-        g.setColour(curveAccent.withAlpha(.25f));g.fillEllipse(x-11,y-11,22,22);
-        g.setColour(curveAccent);g.fillEllipse(x-7,y-7,14,14);
+        const float y=graph.getBottom()-py*graph.getHeight();
+        g.setColour(shapeColor.withAlpha(.25f));g.fillEllipse(x-11,y-11,22,22);
+        g.setColour(shapeColor);g.fillEllipse(x-7,y-7,14,14);
         g.setColour(juce::Colour(0xfffcfaf0));g.fillEllipse(x-3,y-3,6,6);
+    }
+    if(filterView&&!linked){
+        // Display what DSP actually hears when Morph is between A and B.
+        juce::Path morphed;
+        for(int i=0;i<=200;++i){
+            const float t=(float)i/200.f;
+            const float x=graph.getX()+t*graph.getWidth();
+            const float y=graph.getBottom()-
+                proc.evaluateFilterEnvelope(t,loop)*graph.getHeight();
+            if(i==0)morphed.startNewSubPath(x,y);else morphed.lineTo(x,y);
+        }
+        g.setColour(juce::Colour(0xffaf8bff).withAlpha(.70f));
+        g.strokePath(morphed,juce::PathStrokeType(1.6f));
     }
     text(g,"1.1",9,{287,481,45,17},muted);
     text(g,"2.1",9,{669,481,45,17},muted);
     text(g,"END",9,{1040,481,40,17},muted,juce::Justification::centredRight);
-    text(g,"ORANGE: ACTIVE CURVE  ·  CYAN DASH: ORIGINAL",
+    text(g,filterView?"CYAN: EDIT BANK  ·  VIOLET: MORPHED RESULT":
+         "ORANGE: VOLUME  ·  CYAN DASH: ORIGINAL",
          9,{287,493,435,18},timing.withAlpha(.87f));
     text(g,"GR "+juce::String(proc.visualGainReductionDb.load(),1)+" dB",
          11,{955,136,127,18},accent,juce::Justification::centredRight);
@@ -538,6 +570,7 @@ void DISidechainEditor::paint(juce::Graphics& g){
     }
 
     // BOTTOM FILTER: interactive controls and an actual modeled response.
+    text(g,"A / B CURVE",9,{739,642,113,15},juce::Colour(0xffaf8bff));
     const bool filterEnabled=proc.state.getRawParameterValue("outputFilterOn")->load()>.5f;
     text(g,"FILTER",11,{28,663,60,20},pale);
     text(g,filterEnabled?"ACTIVE":"BYPASSED",9,{85,664,79,18},
@@ -587,6 +620,8 @@ void DISidechainEditor::paint(juce::Graphics& g){
          juce::Justification::centredRight);
     text(g,"DRIVE  ·  RESONANCE  ·  CUTOFF SWEEP",9,{32,825,635,15},muted);
 
+    text(g,"FOLLOW "+juce::String(proc.getVisualFollowerLevel(),2),9,{944,652,394,15},
+         juce::Colour(0xff4ba8ec),juce::Justification::centredRight);
     // BOTTOM RIGHT: all additional parameters remain accessible, compact.
     text(g,"AUDIO DETECTOR / MIDI / MULTIBAND",10,{942,663,410,16},muted);
     g.restoreState();
