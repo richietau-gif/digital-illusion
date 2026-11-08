@@ -242,6 +242,11 @@ void DISidechainEditor::refreshFxButtons() {
 }
 void DISidechainEditor::syncUiPreferences() {
  // Host state restore may occur while an existing editor stays open.
+ const auto restoredName=proc.state.state.getProperty("presetName","Custom").toString();
+ if(restoredName!=presetName){
+  presetName=restoredName;
+  if(presetButton)presetButton->setButtonText("PRESETS  -  "+presetName);
+ }
  if(auto* scale=proc.state.getRawParameterValue("uiScale")) {
   const int index=juce::jlimit(0,2,(int)scale->load(std::memory_order_relaxed));
   const float target=index==0?.5f:index==1?.75f:1.f;
@@ -755,8 +760,10 @@ void DISidechainEditor::saveUserPreset() {
    safe->proc.state.state.setProperty("presetName",safe->presetName,nullptr);
    juce::MemoryBlock data;safe->proc.getStateInformation(data);
    if(file.replaceWithData(data.getData(),data.getSize())) {
-    safe->presetName=file.getFileNameWithoutExtension();
     safe->presetButton->setButtonText("PRESETS  -  "+safe->presetName);
+   } else {
+    juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon,
+      "DI SIDECHAIN", "Could not save the preset file. Check folder permissions.");
    }
   });
 }
@@ -787,6 +794,9 @@ void DISidechainEditor::loadUserPreset() {
     safe->proc.state.state.setProperty("presetName",safe->presetName,nullptr);
     safe->presetButton->setButtonText("PRESETS  -  "+safe->presetName);
     safe->repaint();
+   } else {
+    juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon,
+      "DI SIDECHAIN", "Could not read this preset file.");
    }
   });
 }
