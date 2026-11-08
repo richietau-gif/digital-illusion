@@ -314,7 +314,7 @@ void DISidechainEditor::resized() {
  if(pasteStep)pasteStep->setBounds(969,586,208,33);
  if(resetStep)resetStep->setBounds(969,628,208,33);
  if(shapeOffset){shapeOffset->setBounds(1100,665,77,28);shapeOffset->setEnabled(selectedLane==0);}
- if(fxTypeBox)fxTypeBox->setBounds(0,0,0,0);
+ if(fxTypeBox)fxTypeBox->setBounds(870,111,140,29);
  if(fxToggle)fxToggle->setBounds(1045,111,65,29);
  if(saturatorToggle)saturatorToggle->setBounds(1210,111,132,29);
  if(fxSliders[0])fxSliders[0]->setBounds(1340,105,85,42);
