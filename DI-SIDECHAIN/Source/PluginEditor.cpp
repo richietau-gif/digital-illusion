@@ -52,7 +52,7 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  addAndMakeVisible(*sequenceToggle);
  sequenceAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(p.state,"sequenceEnabled",*sequenceToggle);
  sequenceCount=std::make_unique<juce::Slider>(juce::Slider::LinearHorizontal,juce::Slider::TextBoxRight);
- sequenceCount->setRange(1,32,1);
+ sequenceCount->setRange(1,16,1);
  sequenceCount->setColour(juce::Slider::trackColourId,green);
  sequenceCount->setColour(juce::Slider::thumbColourId,green);
  sequenceCount->setColour(juce::Slider::textBoxTextColourId,juce::Colours::white);
@@ -90,9 +90,25 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  fxTypeBox->setColour(juce::ComboBox::outlineColourId,edge);
  addAndMakeVisible(*fxTypeBox);
  fxTypeAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(p.state,"fxType",*fxTypeBox);
- fxToggle=std::make_unique<juce::ToggleButton>("FX ON");
+ fxToggle=std::make_unique<juce::ToggleButton>("FX");
  addAndMakeVisible(*fxToggle);
  fxToggleAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(p.state,"fxEnabled",*fxToggle);
+ saturatorToggle=std::make_unique<juce::ToggleButton>("SATURATOR");addAndMakeVisible(*saturatorToggle);
+ saturatorAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(p.state,"saturatorEnabled",*saturatorToggle);
+ // Two independent switches: their state is owned by the processor and saved by the host.
+ for(auto* b:{fxToggle.get(),saturatorToggle.get(),sequenceToggle.get(),sync.get()}){
+  b->setColour(juce::ToggleButton::tickColourId,green);
+  b->setColour(juce::ToggleButton::textColourId,juce::Colours::white);
+ }
+ presetButton=std::make_unique<juce::TextButton>("PRESETS  -  Custom");
+ shapePresetButton=std::make_unique<juce::TextButton>("SHAPE PRESETS");
+ sequencePrev=std::make_unique<juce::TextButton>("<");
+ sequenceNext=std::make_unique<juce::TextButton>(">");
+ for(auto* b:{presetButton.get(),shapePresetButton.get(),sequencePrev.get(),sequenceNext.get()}){buttonStyle(*b);addAndMakeVisible(*b);}
+ presetButton->onClick=[this]{showPresetMenu();};
+ shapePresetButton->onClick=[this]{showShapeMenu();};
+ sequencePrev->onClick=[this]{selectedStep=(selectedStep+15)%16;repaint();};
+ sequenceNext->onClick=[this]{selectedStep=(selectedStep+1)%16;repaint();};
  const char* fxIds[]={"fxDrive","fxMix"};
  for(int i=0;i<2;++i){
   fxSliders[i]=std::make_unique<juce::Slider>(juce::Slider::LinearHorizontal,juce::Slider::TextBoxRight);
@@ -200,10 +216,10 @@ void DISidechainEditor::paintShape(juce::Graphics& g,juce::Rectangle<int> r,int 
 }
 void DISidechainEditor::paint(juce::Graphics& g) {
  g.fillAll(bg);
- text(g,"◉", {18,12,55,45},34,orange,true);
+ text(g,"~", {18,12,55,45},34,juce::Colour(0xff21d6e9),true);
  text(g,"DI SIDECHAIN", {76,8,325,46},33,juce::Colours::white,true);
  text(g,"4.0", {398,11,70,43},29,orange,true);
- text(g,"D I G I T A L   I L L U S I O N", {78,49,340,19},12,muted);
+ text(g,"DIGITAL ILLUSION", {78,49,340,19},12,muted);
  g.setColour(edge);g.drawHorizontalLine(77,0.f,(float)getWidth());
  auto nav=juce::Rectangle<int>(12,90,getWidth()-24,64);
  g.setColour(panel);g.fillRoundedRectangle(nav.toFloat(),12.f);
@@ -211,11 +227,13 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  g.setColour(sequenceToggle->getToggleState()?green:edge);
  g.fillRoundedRectangle(juce::Rectangle<float>(207,98,185,47),9.f);
  text(g,"SEQUENCER", {233,105,153,31},19,sequenceToggle->getToggleState()?bg:muted,true);
- text(g,"MULTI-LANE  ·  3 ACTIVE LANES", {424,106,305,32},16,green);
- text(g,"FX", {755,106,70,32},16,juce::Colour(0xffffb84d),true);
+ text(g,"STEPS", {414,99,80,17},12,muted);
+ text(g,"LENGTH / RATE", {578,99,135,17},12,muted);
+ text(g,"FX", {1015,104,35,32},15,juce::Colour(0xffffb84d),true);
+ text(g,"SATURATOR", {1103,104,110,32},15,juce::Colour(0xffffb84d),true);
  text(g,"DRIVE dB", {1090,96,110,18},11,muted);
  text(g,"WET", {1284,96,70,18},11,muted);
- text(g,"DI SIDECHAIN 4.0  •  EXPERIMENTAL", {1160,52,340,22},13,muted);
+ text(g,"DI SIDECHAIN 4.1", {1280,52,240,22},13,muted);
  auto graphPanel=juce::Rectangle<int>(12,165,getWidth()-24,282);
  g.setColour(panel);g.fillRoundedRectangle(graphPanel.toFloat(),12.f);
  g.setColour(edge);g.drawRoundedRectangle(graphPanel.toFloat(),12.f,1.f);
@@ -226,7 +244,7 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  const bool sequenced=sequenceToggle->getToggleState();
  if(sequenced) {
   // Four successive shapes across the overview, with a live step cursor.
-  const int total=juce::jlimit(1,32,(int)sequenceCount->getValue());
+  const int total=juce::jlimit(1,16,(int)sequenceCount->getValue());
   const int first=(selectedStep/4)*4;
   for(int k=0;k<4;++k) {
    auto cell=juce::Rectangle<int>(graph.getX()+k*graph.getWidth()/4,graph.getY(),graph.getWidth()/4,graph.getHeight());
@@ -236,7 +254,7 @@ void DISidechainEditor::paint(juce::Graphics& g) {
    }
   }
  } else paintShape(g,graph,selectedStep,false);
- const int count=juce::jlimit(1,32,(int)sequenceCount->getValue());
+ const int count=juce::jlimit(1,16,(int)sequenceCount->getValue());
  const int playing=proc.activeSequenceStep.load(std::memory_order_relaxed);
  for(int i=0;i<count;++i){
   const float w=(float)stepStrip.getWidth()/count;
@@ -253,22 +271,22 @@ void DISidechainEditor::paint(juce::Graphics& g) {
    g.setColour(selectedColour);g.strokePath(mini,juce::PathStrokeType(1.5f));
   }
  }
- paintPanel(g,sequencerPanel,"SEQUENCER");
+ paintPanel(g,sequencerPanel,"STEP NAVIGATION / WORKFLOW");
  paintPanel(g,juce::Rectangle<int>(442,460,752,243),"STEP EDIT  /  ENVELOPE & SHAPE");
  paintPanel(g,juce::Rectangle<int>(1206,460,318,243),"MODULATION LANES");
  paintPanel(g,filterPanel,"FILTER  /  ALWAYS VISIBLE");
  paintPanel(g,outputPanel,"OUTPUT  /  SIDECHAIN");
- text(g,"STEPS", {35,520,100,23},14,muted);
- text(g,"LENGTH / RATE", {215,520,180,23},14,muted);
+ text(g,"SELECT STEP", {35,520,160,23},14,muted);
+ text(g,"Edit one of 16 steps. Choose a lane, then drag nodes.", {35,607,382,46},13,muted);
  const juce::String selectedName=selectedLane==0?"VOLUME":selectedLane==1?"FILTER":"PAN";
  text(g,selectedName+"  /  STEP "+juce::String(selectedStep+1), {463,518,230,22},14,selectedColour,true);
  paintShape(g,detailGraph,selectedStep,true);
- text(g,"Drag nodes to edit  •  Copy / Paste / Reset", {464,664,480,23},13,muted);
+ text(g,"Drag vertically to edit nearest node. SNAP rounds to 1/16.", {464,664,480,23},13,muted);
  text(g,"OFFSET ±  (VOLUME)", {970,665,175,23},12,orange,true);
  text(g,"LANE EDITOR", {1225,505,230,18},12,muted);
  text(g,"SEQUENCED", {1370,523,130,24},14,sequenceToggle->getToggleState()?green:muted,true);
- text(g,"FILTER  •  DUCK DEPTH", {1225,566,280,23},14,juce::Colour(0xff44bbff));
- text(g,"PAN  •  BIPOLAR", {1225,623,280,23},14,juce::Colour(0xffc55bff));
+ text(g,"FILTER - DUCK DEPTH", {1225,566,280,23},14,juce::Colour(0xff44bbff));
+ text(g,"PAN - BIPOLAR", {1225,623,280,23},14,juce::Colour(0xffc55bff));
  text(g,"FILTER MODE", {35,763,170,20},13,muted);
  text(g,"TRIGGER SOURCE", {290,763,180,20},13,muted);
  text(g,"BEAT DIVISION", {540,763,180,20},13,muted);
@@ -285,24 +303,29 @@ void DISidechainEditor::resized() {
  detailGraph={465,548,490,102};
  filterPanel={12,713,1177,225};
  outputPanel={1201,713,323,225};
- if(sequenceToggle)sequenceToggle->setBounds(38,562,184,30);
- if(sequenceCount)sequenceCount->setBounds(36,602,348,38);
- if(sync)sync->setBounds(235,652,165,28);
+ if(sequenceToggle)sequenceToggle->setBounds(407,111,110,29);
+ if(sequenceCount)sequenceCount->setBounds(522,111,82,29);
+ if(sync)sync->setBounds(745,111,110,29);
+ if(sequencePrev)sequencePrev->setBounds(40,560,45,34);
+ if(sequenceNext)sequenceNext->setBounds(360,560,45,34);
+ if(presetButton)presetButton->setBounds(548,24,390,40);
+ if(shapePresetButton)shapePresetButton->setBounds(992,507,183,31);
  if(copyStep)copyStep->setBounds(969,544,208,33);
  if(pasteStep)pasteStep->setBounds(969,586,208,33);
  if(resetStep)resetStep->setBounds(969,628,208,33);
  if(shapeOffset){shapeOffset->setBounds(1100,665,77,28);shapeOffset->setEnabled(selectedLane==0);}
- if(fxTypeBox)fxTypeBox->setBounds(800,112,125,30);
- if(fxToggle)fxToggle->setBounds(935,112,110,30);
- if(fxSliders[0])fxSliders[0]->setBounds(1080,116,190,28);
- if(fxSliders[1])fxSliders[1]->setBounds(1280,116,190,28);
+ if(fxTypeBox)fxTypeBox->setBounds(0,0,0,0);
+ if(fxToggle)fxToggle->setBounds(1045,111,65,29);
+ if(saturatorToggle)saturatorToggle->setBounds(1210,111,132,29);
+ if(fxSliders[0])fxSliders[0]->setBounds(1340,105,85,42);
+ if(fxSliders[1])fxSliders[1]->setBounds(1430,105,85,42);
  for(int i=0;i<3;++i)if(laneTabs[i]){laneTabs[i]->setBounds(1225+i*92,527,86,30);laneTabs[i]->setToggleState(selectedLane==i,juce::dontSendNotification);}
  if(laneSliders[0])laneSliders[0]->setBounds(1225,588,275,28);
  if(laneSliders[1])laneSliders[1]->setBounds(1225,646,275,28);
  if(undoButton)undoButton->setBounds(706,508,76,30);
  if(redoButton)redoButton->setBounds(788,508,76,30);
  if(snapButton)snapButton->setBounds(869,508,116,30);
- if(combos.size()==3){combos[0]->setBounds(0,0,0,0);combos[1]->setBounds(290,790,215,31);combos[2]->setBounds(540,790,215,31);}
+ if(combos.size()==3){combos[0]->setBounds(0,0,0,0);combos[1]->setBounds(290,790,215,31);combos[2]->setBounds(617,111,125,29);}
  for(int i=0;i<4;++i)if(filterButtons[i])filterButtons[i]->setBounds(35+i*58,790,54,31);
  if(sliders.size()!=8||labels.size()!=8)return;
  const int xs[]={1230,1360,35,165,295,425,555,685};
@@ -324,7 +347,7 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
  if(juce::Rectangle<int>(25,98,173,47).contains(e.getPosition())){sequenceToggle->setToggleState(false,juce::sendNotificationSync);selectedLane=0;repaint();return;}
  if(juce::Rectangle<int>(207,98,185,47).contains(e.getPosition())){sequenceToggle->setToggleState(true,juce::sendNotificationSync);repaint();return;}
  if(stepStrip.contains(e.getPosition())){
-  const int count=juce::jlimit(1,32,(int)sequenceCount->getValue());
+  const int count=juce::jlimit(1,16,(int)sequenceCount->getValue());
   selectedStep=juce::jlimit(0,count-1,(e.getPosition().x-stepStrip.getX())*count/juce::jmax(1,stepStrip.getWidth()));
   repaint();return;
  }
@@ -339,4 +362,55 @@ void DISidechainEditor::mouseUp(const juce::MouseEvent&) {
  if(!draggingShape)return;
  draggingShape=false;
  pushEdit(dragStep,dragSequence,dragBefore,captureShape(dragStep,dragSequence));
+}
+
+void DISidechainEditor::applyFactoryPreset(int index) {
+ const float shapes[][8]={
+  {1.f,.85f,.4f,.02f,.12f,.55f,.88f,1.f},
+  {1.f,.2f,.02f,.02f,.08f,.32f,.75f,1.f},
+  {1.f,.9f,.15f,.03f,.35f,.8f,.95f,1.f},
+  {1.f,.75f,.05f,.35f,.08f,.7f,.9f,1.f},
+  {0.f,0.f,.25f,.6f,.95f,1.f,1.f,1.f}
+ };
+ index=juce::jlimit(0,4,index);
+ const auto* names[]={"Classic Duck","Deep Pump","Sidechain 4/4","Breakbeat Pump","Pump Rise"};
+ presetName=names[index];presetButton->setButtonText("PRESETS  -  "+presetName);
+ for(int step=0;step<16;++step) {
+  auto before=captureShape(step,true),after=before;
+  for(int j=0;j<8;++j)after[j]=shapes[index][j];
+  applyShape(step,true,after);pushEdit(step,true,before,after);
+ }
+ if(auto* parameter=proc.state.getParameter("sequenceEnabled")){
+  parameter->beginChangeGesture();parameter->setValueNotifyingHost(index==0?0.f:1.f);parameter->endChangeGesture();
+ }
+ repaint();
+}
+void DISidechainEditor::applyShapePreset(int index) {
+ const float shapes[][8]={
+  {1.f,.82f,.4f,.05f,.13f,.42f,.79f,1.f},
+  {0.f,.04f,.14f,.32f,.68f,.92f,1.f,1.f},
+  {1.f,1.f,.98f,.9f,.7f,.42f,.15f,0.f},
+  {0.f,0.f,0.f,0.f,1.f,1.f,1.f,1.f},
+  {1.f,.8f,.4f,.1f,.1f,.4f,.8f,1.f},
+  {0.f,.14f,.28f,.43f,.57f,.72f,.86f,1.f}
+ };
+ index=juce::jlimit(0,5,index);
+ const bool seq=sequenceToggle->getToggleState();
+ const int key=selectedStep+(seq?selectedLane*32:0);
+ auto before=captureShape(key,seq),after=before;
+ for(int i=0;i<8;++i)after[i]=shapes[index][i];
+ applyShape(key,seq,after);pushEdit(key,seq,before,after);
+ repaint();
+}
+void DISidechainEditor::showPresetMenu() {
+ juce::PopupMenu menu;const juce::StringArray names{"Classic Duck","Deep Pump","Sidechain 4/4","Breakbeat Pump","Pump Rise"};
+ for(int i=0;i<names.size();++i)menu.addItem(i+1,names[i]);
+ juce::Component::SafePointer<DISidechainEditor> safe(this);
+ menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(presetButton.get()),[safe](int choice){if(safe&&choice>0)safe->applyFactoryPreset(choice-1);});
+}
+void DISidechainEditor::showShapeMenu() {
+ juce::PopupMenu menu;const juce::StringArray names{"Classic Duck","Pump Rise","Pump Fall","Gate","Wave","Linear Rise"};
+ for(int i=0;i<names.size();++i)menu.addItem(i+1,names[i]);
+ juce::Component::SafePointer<DISidechainEditor> safe(this);
+ menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(shapePresetButton.get()),[safe](int choice){if(safe&&choice>0)safe->applyShapePreset(choice-1);});
 }
