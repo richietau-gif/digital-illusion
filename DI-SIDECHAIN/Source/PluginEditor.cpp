@@ -637,6 +637,8 @@ void DISidechainEditor::applyFactoryPreset(int index) {
   parameter->endChangeGesture();
  }
  selectedLane=0;
+ for(int lane=0;lane<3;++lane)if(laneTabs[lane])
+  laneTabs[lane]->setToggleState(lane==0,juce::dontSendNotification);
  if(shapeOffset)shapeOffset->setEnabled(true);
  repaint();
 }
