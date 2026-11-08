@@ -64,10 +64,16 @@ void DIStudioSkin::drawLinearSlider(juce::Graphics& g,int x,int y,int width,int 
     const auto active=slider.findColour(juce::Slider::thumbColourId);
     g.setColour(active.withAlpha(.18f));
     g.drawLine(left,cy,right,cy,4.f);
+    const bool bipolar=slider.getComponentID()=="envelopeOffset";
+    const float start=bipolar?(left+right)*.5f:left;
+    if(bipolar){
+        g.setColour(juce::Colour(0xffc0dbe3).withAlpha(.65f));
+        g.drawLine(start,cy-9.f,start,cy+9.f,1.6f);
+    }
     g.setColour(active.withAlpha(.27f));
-    g.drawLine(left,cy,sliderPos,cy,7.f);
+    g.drawLine(start,cy,sliderPos,cy,7.f);
     g.setColour(active);
-    g.drawLine(left,cy,sliderPos,cy,3.f);
+    g.drawLine(start,cy,sliderPos,cy,3.f);
     g.setColour(active.brighter(.18f));
     g.fillEllipse(sliderPos-5,cy-5,10,10);
 }
