@@ -1,4 +1,5 @@
 #include "../Source/PeakDetector.h"
+#include "../Source/SidechainPeak.h"
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
@@ -16,5 +17,10 @@ int main(){
  check(di::followPeak(1.,0.,0.5)==0.5,"release decay");
  check(di::followPeak(std::numeric_limits<double>::quiet_NaN(),0.4,0.5)==0.4,"invalid previous");
  check(di::followPeak(0.4,std::numeric_limits<double>::infinity(),0.5)==0.2,"invalid input");
+ check(di::sidechainPeak(-0.4f,0.7f,true)==0.7f,"Stereo peak");
+ check(di::sidechainPeak(-0.4f,0.7f,false)==0.4f,"Mono peak");
+ check(di::sidechainPeak(std::numeric_limits<float>::quiet_NaN(),0.6f,true)==0.6f,"NaN left ignored");
+ check(di::sidechainPeak(0.3f,std::numeric_limits<float>::infinity(),true)==0.3f,"Inf right ignored");
+ check(di::sidechainPeak(std::numeric_limits<float>::quiet_NaN(),std::numeric_limits<float>::infinity(),true)==0.f,"Invalid stereo silence");
  return 0;
 }
