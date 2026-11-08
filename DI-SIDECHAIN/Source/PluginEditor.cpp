@@ -685,6 +685,17 @@ void DISidechainEditor::loadUserPreset() {
    juce::MemoryBlock data;
    if(file.loadFileAsData(data) && data.getSize()>0){
     safe->proc.setStateInformation(data.getData(),(int)data.getSize());
+    // A preset may contain GUI scale and curve rendering preferences.
+    // Apply them to this editor immediately, not only after reopening it.
+    if(auto* scale=safe->proc.state.getRawParameterValue("uiScale")) {
+     const int index=juce::jlimit(0,2,(int)scale->load());
+     safe->uiScale=index==0?.5f:index==1?.75f:1.f;
+     safe->setSize(juce::roundToInt(designWidth*safe->uiScale),
+                   juce::roundToInt(designHeight*safe->uiScale));
+    }
+    if(auto* quality=safe->proc.state.getRawParameterValue("renderQuality"))
+     safe->renderQuality=juce::jlimit(0,2,(int)quality->load());
+    safe->selectedStep=juce::jlimit(0,juce::jlimit(1,16,(int)safe->sequenceCount->getValue())-1,safe->selectedStep);
     safe->presetName=file.getFileNameWithoutExtension();
     safe->presetButton->setButtonText("PRESETS  -  "+safe->presetName);
     safe->repaint();
