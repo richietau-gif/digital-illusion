@@ -756,12 +756,15 @@ void DISidechainEditor::saveUserPreset() {
    if(!safe)return;
    const auto file=chooser.getResult();
    if(file==juce::File())return;
-   safe->presetName=file.getFileNameWithoutExtension();
-   safe->proc.state.state.setProperty("presetName",safe->presetName,nullptr);
+   const auto name=file.getFileNameWithoutExtension();
+   const auto oldName=safe->presetName;
+   safe->proc.state.state.setProperty("presetName",name,nullptr);
    juce::MemoryBlock data;safe->proc.getStateInformation(data);
    if(file.replaceWithData(data.getData(),data.getSize())) {
-    safe->presetButton->setButtonText("PRESETS  -  "+safe->presetName);
+    safe->presetName=name;
+    safe->presetButton->setButtonText("PRESETS  -  "+name);
    } else {
+    safe->proc.state.state.setProperty("presetName",oldName,nullptr);
     juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon,
       "DI SIDECHAIN", "Could not save the preset file. Check folder permissions.");
    }
