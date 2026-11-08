@@ -67,6 +67,12 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  shapeOffset->setColour(juce::Slider::textBoxOutlineColourId,juce::Colours::transparentBlack);
  addAndMakeVisible(*shapeOffset);
  shapeOffsetAttachment=std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(p.state,"shapeOffset",*shapeOffset);
+ const char* laneNames[]={"VOLUME","FILTER","PAN"};
+ for(int i=0;i<3;++i){
+  laneTabs[i]=std::make_unique<juce::TextButton>(laneNames[i]);
+  laneTabs[i]->onClick=[this,i]{selectedLane=i;repaint();};
+  addAndMakeVisible(*laneTabs[i]);
+ }
  const char* laneIds[]={"filterMod","panMod"};
  for(int i=0;i<2;++i){
   laneSliders[i]=std::make_unique<juce::Slider>(juce::Slider::LinearHorizontal,juce::Slider::TextBoxRight);
@@ -88,9 +94,9 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  snapButton->setClickingTogglesState(true);
  undoButton->onClick=[this]{undoEdit();};
  redoButton->onClick=[this]{redoEdit();};
- copyStep->onClick=[this]{for(int i=0;i<8;++i)clipboard[i]=proc.getSequencePoint(selectedStep,i);hasClipboard=true;};
- pasteStep->onClick=[this]{if(hasClipboard){auto before=captureShape(selectedStep,true);applyShape(selectedStep,true,clipboard);pushEdit(selectedStep,true,before,clipboard);repaint();}};
- resetStep->onClick=[this]{auto before=captureShape(selectedStep,true);di::ShapeSequencer::Shape defaults{1.f,.92f,.08f,.02f,.32f,.75f,.95f,1.f};applyShape(selectedStep,true,defaults);pushEdit(selectedStep,true,before,defaults);repaint();};
+ copyStep->onClick=[this]{clipboard=captureShape(selectedStep+selectedLane*32,true);hasClipboard=true;};
+ pasteStep->onClick=[this]{if(hasClipboard){const int key=selectedStep+selectedLane*32;auto before=captureShape(key,true);applyShape(key,true,clipboard);pushEdit(key,true,before,clipboard);repaint();}};
+ resetStep->onClick=[this]{const int key=selectedStep+selectedLane*32;auto before=captureShape(key,true);di::ShapeSequencer::Shape defaults=selectedLane==0?di::ShapeSequencer::Shape{1.f,.92f,.08f,.02f,.32f,.75f,.95f,1.f}:di::ShapeSequencer::Shape{1.f,1.f,1.f,1.f,1.f,1.f,1.f,1.f};applyShape(key,true,defaults);pushEdit(key,true,before,defaults);repaint();};
  const char* filterNames[]={"FULL","LOW","HIGH","BAND"};
  for(int i=0;i<4;++i){filterButtons[i]=std::make_unique<juce::TextButton>(filterNames[i]);filterButtons[i]->onClick=[this,i]{selectFilter(i);};addAndMakeVisible(*filterButtons[i]);}
  if(combos.size()>0)combos[0]->setVisible(false);
@@ -100,11 +106,13 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
 }
 di::ShapeSequencer::Shape DISidechainEditor::captureShape(int step,bool sequence) const {
  di::ShapeSequencer::Shape shape{};
- for(int i=0;i<8;++i)shape[i]=sequence?proc.getSequencePoint(step,i):proc.points[i].load();
+ const int lane=step/32, actualStep=step%32;
+ for(int i=0;i<8;++i)shape[i]=sequence?(lane==0?proc.getSequencePoint(actualStep,i):proc.getModulationPoint(lane-1,actualStep,i)):proc.points[i].load();
  return shape;
 }
 void DISidechainEditor::applyShape(int step,bool sequence,const di::ShapeSequencer::Shape& shape) {
- for(int i=0;i<8;++i){if(sequence)proc.setSequencePoint(step,i,shape[i]);else proc.points[i].store(shape[i]);}
+ const int lane=step/32, actualStep=step%32;
+ for(int i=0;i<8;++i){if(sequence){if(lane==0)proc.setSequencePoint(actualStep,i,shape[i]);else proc.setModulationPoint(lane-1,actualStep,i,shape[i]);}else proc.points[i].store(shape[i]);}
 }
 void DISidechainEditor::pushEdit(int step,bool sequence,const di::ShapeSequencer::Shape& before,const di::ShapeSequencer::Shape& after) {
  if(before==after)return;
@@ -151,7 +159,7 @@ void DISidechainEditor::paintShape(juce::Graphics& g,juce::Rectangle<int> r,int 
  for(int i=1;i<4;++i){const int y=r.getY()+r.getHeight()*i/4;g.drawHorizontalLine(y,(float)r.getX(),(float)r.getRight());}
  const bool seq=sequenceToggle->getToggleState();
  const float offset=seq&&shapeOffset? (float)shapeOffset->getValue():0.f;
- auto value=[&](int i){return seq?proc.getSequencePoint(step,i):proc.points[i].load();};
+ auto value=[&](int i){return seq?(selectedLane==0?proc.getSequencePoint(step,i):proc.getModulationPoint(selectedLane-1,step,i)):proc.points[i].load();};
  juce::Path p;
  for(int j=0;j<=140;++j){
   const double t=j/140.0;const double x=t*7;const int k=juce::jmin(6,(int)x);
@@ -232,7 +240,7 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  paintShape(g,detailGraph,selectedStep,true);
  text(g,"Drag nodes to edit  •  Copy / Paste / Reset", {464,664,480,23},13,muted);
  text(g,"OFFSET ±", {970,665,90,23},13,orange,true);
- text(g,"VOLUME", {1225,523,120,24},16,orange,true);
+ text(g,"LANE EDITOR", {1225,505,230,18},12,muted);
  text(g,"SEQUENCED", {1370,523,130,24},14,sequenceToggle->getToggleState()?green:muted,true);
  text(g,"FILTER  •  DUCK DEPTH", {1225,566,280,23},14,juce::Colour(0xff44bbff));
  text(g,"PAN  •  BIPOLAR", {1225,623,280,23},14,juce::Colour(0xffc55bff));
@@ -259,6 +267,7 @@ void DISidechainEditor::resized() {
  if(pasteStep)pasteStep->setBounds(969,586,208,33);
  if(resetStep)resetStep->setBounds(969,628,208,33);
  if(shapeOffset)shapeOffset->setBounds(1050,665,127,28);
+ for(int i=0;i<3;++i)if(laneTabs[i]){laneTabs[i]->setBounds(1225+i*92,527,86,30);laneTabs[i]->setToggleState(selectedLane==i,juce::dontSendNotification);}
  if(laneSliders[0])laneSliders[0]->setBounds(1225,588,275,28);
  if(laneSliders[1])laneSliders[1]->setBounds(1225,646,275,28);
  if(undoButton)undoButton->setBounds(706,508,76,30);
@@ -276,7 +285,7 @@ void DISidechainEditor::updatePoint(const juce::MouseEvent& e) {
  const int i=juce::jlimit(0,7,juce::roundToInt((e.position.x-r.getX())/juce::jmax(1,r.getWidth())*7.f));
  float v=juce::jlimit(0.f,1.f,(r.getBottom()-e.position.y)/(float)juce::jmax(1,r.getHeight()));
  if(snapButton&&snapButton->getToggleState())v=juce::jlimit(0.f,1.f,std::round(v*16.f)/16.f);
- if(sequenceToggle->getToggleState())proc.setSequencePoint(selectedStep,i,v);else proc.points[i]=v;
+ if(sequenceToggle->getToggleState()){if(selectedLane==0)proc.setSequencePoint(selectedStep,i,v);else proc.setModulationPoint(selectedLane-1,selectedStep,i,v);}else proc.points[i]=v;
  repaint();
 }
 void DISidechainEditor::updateDetailPoint(const juce::MouseEvent& e){updatePoint(e);}
@@ -289,7 +298,7 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
   repaint();return;
  }
  if(detailGraph.contains(e.getPosition())){
-  draggingShape=true;dragStep=selectedStep;dragSequence=sequenceToggle->getToggleState();
+  draggingShape=true;dragStep=selectedStep+(sequenceToggle->getToggleState()?selectedLane*32:0);dragSequence=sequenceToggle->getToggleState();
   dragBefore=captureShape(dragStep,dragSequence);
  }
  updatePoint(e);
