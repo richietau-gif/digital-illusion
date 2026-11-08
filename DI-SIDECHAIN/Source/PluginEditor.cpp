@@ -566,7 +566,7 @@ void DISidechainEditor::updatePoint(const juce::MouseEvent& e) {
  if(!detailGraph.contains((e.position/uiScale).toInt()))return;
  const auto r=detailGraph;
  const auto point=e.position/uiScale;
- const int i=juce::jlimit(0,7,juce::roundToInt((point.x-r.getX())/juce::jmax(1,r.getWidth())*7.f));
+ const int i=draggingShape&&dragNode>=0?dragNode:juce::jlimit(0,7,juce::roundToInt((point.x-r.getX())/juce::jmax(1,r.getWidth())*7.f));
  float v=juce::jlimit(0.f,1.f,(r.getBottom()-point.y)/(float)juce::jmax(1,r.getHeight()));
  if(sequenceToggle->getToggleState()&&selectedLane==0&&shapeOffset)
   v=juce::jlimit(0.f,1.f,v-(float)shapeOffset->getValue());
@@ -589,7 +589,10 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
   repaint();return;
  }
  if(detailGraph.contains(pos)){
-  draggingShape=true;dragStep=selectedStep+(sequenceToggle->getToggleState()?selectedLane*32:0);dragSequence=sequenceToggle->getToggleState();
+  draggingShape=true;
+  dragNode=juce::jlimit(0,7,juce::roundToInt((pos.x-detailGraph.getX())*7.f/juce::jmax(1,detailGraph.getWidth())));
+  dragStep=selectedStep+(sequenceToggle->getToggleState()?selectedLane*32:0);
+  dragSequence=sequenceToggle->getToggleState();
   dragBefore=captureShape(dragStep,dragSequence);
  }
  updatePoint(e);
@@ -598,6 +601,7 @@ void DISidechainEditor::mouseDrag(const juce::MouseEvent& e){updatePoint(e);}
 void DISidechainEditor::mouseUp(const juce::MouseEvent&) {
  if(!draggingShape)return;
  draggingShape=false;
+ dragNode=-1;
  pushEdit(dragStep,dragSequence,dragBefore,captureShape(dragStep,dragSequence));
 }
 
