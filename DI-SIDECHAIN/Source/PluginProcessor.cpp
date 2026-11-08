@@ -86,7 +86,18 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  smoothedFxType=(float)fxType+(smoothedFxType-(float)fxType)*fxSmoothing;
  while(hasEvent&&midiPos<=i){if(msg.isNoteOn()&&msg.getVelocity()>0&&trig!=1)fire=true;hasEvent=it.getNextEvent(msg,midiPos);}
  if(hasSide&&trig!=2&&side.getNumSamples()>=n){float v=0;for(int ch=0;ch<side.getNumChannels();++ch)v=juce::jmax(v,std::abs(side.getSample(ch,i)));detector=std::max((double)v,detector*.995);if(detector<threshold*.65)armed=true;if(armed&&detector>=threshold&&refractory==0){fire=true;armed=false;}}
- if(refractory>0)--refractory;if(fire){phase=0;if(sequenceOn){sequencer.trigger();for(auto& lane:modulationSequencers)lane.trigger();}refractory=holdoff;}
+ if(refractory>0)--refractory;
+ if(fire){
+  phase=0;
+  // In tempo-sync mode, incoming kicks/notes trigger the ducking envelope,
+  // not the song-position sequencer. Otherwise frequent notes pin it to step 1.
+  // Free-running (millisecond) mode retains explicit retrigger behaviour.
+  if(sequenceOn&&get("sync")<=0.5f){
+   sequencer.trigger();
+   for(auto& lane:modulationSequencers)lane.trigger();
+  }
+  refractory=holdoff;
+ }
  float env;float filterEnv=1.f,panEnv=0.5f;
  if(sequenceOn){env=sequencer.render(envelopeLength*sr);
   filterEnv=modulationSequencers[0].render(envelopeLength*sr);
