@@ -7,7 +7,7 @@ static void check(bool ok,const char* message) {
  if(!ok){std::cerr<<message<<'\n';std::exit(1);}
 }
 int main(){
- for(double sr:{8000.,22050.,44100.,48000.,96000.,192000.}){
+ for(double sr:{8000.,11025.,22050.,32000.,44100.,48000.,88200.,96000.,192000.}){
   for(float low:{25.f,120.f,1500.f,18000.f}){
    for(float high:{60.f,400.f,18000.f}){
     const auto c=di::safeFilterCutoffs(sr,low,high);
