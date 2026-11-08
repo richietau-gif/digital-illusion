@@ -375,11 +375,32 @@ void DISidechainEditor::paint(juce::Graphics& g){
         text(g,juce::String(-i*6)+" dB",9,{262,y-6,22,14},muted,
              juce::Justification::centredRight);
     }
+    const float offsetPercent=proc.state.getRawParameterValue("envelopeOffset")->load();
+    const float offsetPhase=offsetPercent*.01f;
+    const bool loop=proc.state.getRawParameterValue("playbackMode")->load()>.5f;
+    const auto timing=juce::Colour(0xff35dce7);
+    if(std::abs(offsetPhase)>.00001f){
+        // The ghost is the unshifted editable waveform. The bright orange
+        // path is the actual timing used for gain and filter modulation.
+        juce::Path reference;
+        for(int i=0;i<=350;++i){
+            const float t=(float)i/350.f;
+            const float x=graph.getX()+t*graph.getWidth();
+            const float y=graph.getBottom()-proc.evaluateEnvelope(t)*graph.getHeight();
+            if(i==0)reference.startNewSubPath(x,y);else reference.lineTo(x,y);
+        }
+        const float dashes[]={4.f,6.f};
+        juce::Path dashed;
+        juce::PathStrokeType(1.3f).createDashedStroke(dashed,reference,dashes,2);
+        g.setColour(timing.withAlpha(.50f));g.strokePath(dashed,juce::PathStrokeType(1.2f));
+    }
+    text(g,"OFFSET "+juce::String(offsetPercent>0?"+":"")+juce::String(offsetPercent,1)+"%",
+        11,{907,490,182,18},timing,juce::Justification::centredRight);
     juce::Path curve;
     for(int i=0;i<=350;++i){
         const float phase=(float)i/350.f;
         const float x=graph.getX()+graph.getWidth()*phase;
-        const float y=graph.getBottom()-proc.evaluateEnvelope(phase)*graph.getHeight();
+        const float y=graph.getBottom()-proc.evaluateShiftedEnvelope(phase,loop)*graph.getHeight();
         if(i==0)curve.startNewSubPath(x,y);else curve.lineTo(x,y);
     }
     juce::Path fill(curve);
@@ -401,7 +422,18 @@ void DISidechainEditor::paint(juce::Graphics& g){
     }
     for(int i=0;i<proc.getEnvelopeNodeCount();++i){
         const auto node=proc.getEnvelopeNode(i);
-        const float x=graph.getX()+node.x*graph.getWidth();
+        if(std::abs(offsetPhase)>.00001f){
+            const float x0=graph.getX()+node.x*graph.getWidth();
+            const float y0=graph.getBottom()-node.y*graph.getHeight();
+            g.setColour(timing.withAlpha(.62f));g.drawEllipse(x0-4,y0-4,8,8,1.f);
+        }
+        float shifted=node.x+offsetPhase;
+        if(loop){
+            shifted=std::fmod(shifted,1.f);
+            if(shifted<0)shifted+=1.f;
+        }
+        if(shifted<0.f||shifted>1.f)continue;
+        const float x=graph.getX()+shifted*graph.getWidth();
         const float y=graph.getBottom()-node.y*graph.getHeight();
         g.setColour(curveAccent.withAlpha(.25f));g.fillEllipse(x-11,y-11,22,22);
         g.setColour(curveAccent);g.fillEllipse(x-7,y-7,14,14);
@@ -410,8 +442,8 @@ void DISidechainEditor::paint(juce::Graphics& g){
     text(g,"1.1",9,{287,481,45,17},muted);
     text(g,"2.1",9,{669,481,45,17},muted);
     text(g,"END",9,{1040,481,40,17},muted,juce::Justification::centredRight);
-    text(g,"DOUBLE-CLICK: ADD POINT  ·  ALT-DRAG: CURVE  ·  RIGHT CLICK: REMOVE",
-         10,{441,493,592,18},muted,juce::Justification::centred);
+    text(g,"ORANGE: ACTIVE CURVE  ·  CYAN DASH: ORIGINAL",
+         9,{287,493,435,18},timing.withAlpha(.87f));
     text(g,"GR "+juce::String(proc.visualGainReductionDb.load(),1)+" dB",
          11,{955,136,127,18},accent,juce::Justification::centredRight);
 
