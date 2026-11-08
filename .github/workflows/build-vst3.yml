@@ -1,8 +1,6 @@
 name: Build DI SIDECHAIN VST3
 on:
   workflow_dispatch:
-  push:
-    branches: [di-sidechain-5.0-dev]
 jobs:
   windows-vst3:
     runs-on: windows-2022
