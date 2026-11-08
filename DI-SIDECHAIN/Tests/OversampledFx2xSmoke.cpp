@@ -1,5 +1,7 @@
 #include "../Source/OversampledFx2x.h"
 #include "../Source/FixedDelay.h"
+#include "../Source/FxWetMix.h"
+#include <limits>
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
@@ -38,10 +40,15 @@ int main(){
   const float input=std::sin(static_cast<float>(i)*0.137f);
   const float drySignal=dry.process(input);
   const float processed=fx.process(input,12.f,1.f);
-  const float mixed=drySignal; // zero-wet branch must not evaluate potentially nonfinite wet math
+  const float mixed=di::mixAlignedFx(drySignal,processed,0.f);
   check(std::isfinite(processed),"Oversampled FX must remain finite");
   check(mixed==drySignal,"Zero-wet bypass must equal delayed dry exactly");
  }
+ check(di::mixAlignedFx(0.25f,0.75f,0.f)==0.25f,"Bypass preserves dry");
+ check(di::mixAlignedFx(0.25f,0.75f,1.f)==0.75f,"Full wet preserves processed");
+ check(di::mixAlignedFx(0.25f,0.75f,0.5f)==0.5f,"Half wet interpolates");
+ check(di::mixAlignedFx(0.25f,std::numeric_limits<float>::quiet_NaN(),1.f)==0.25f,"Nonfinite wet must not leak");
+ check(di::mixAlignedFx(0.25f,0.75f,std::numeric_limits<float>::quiet_NaN())==0.25f,"Nonfinite mix must bypass");
  // Per-channel state must remain independent under stereo processing.
  di::OversampledFx2x left,right,reference;
  for(int i=0;i<256;++i){
