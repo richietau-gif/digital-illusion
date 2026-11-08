@@ -28,6 +28,8 @@ private:
  std::unique_ptr<juce::ToggleButton> sequenceToggle;
  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> sequenceAttachment;
  std::unique_ptr<juce::Slider> sequenceCount;
+ std::unique_ptr<juce::Slider> shapeOffset;
+ std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> shapeOffsetAttachment;
  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> sequenceCountAttachment;
  std::vector<std::unique_ptr<juce::Slider>> sliders;
  std::vector<std::unique_ptr<juce::Label>> labels;
