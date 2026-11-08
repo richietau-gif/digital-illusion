@@ -126,8 +126,14 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  for(auto* b:{presetButton.get(),shapePresetButton.get(),sequencePrev.get(),sequenceNext.get()}){buttonStyle(*b);addAndMakeVisible(*b);}
  presetButton->onClick=[this]{showPresetMenu();};
  shapePresetButton->onClick=[this]{showShapeMenu();};
- sequencePrev->onClick=[this]{selectedStep=(selectedStep+15)%16;repaint();};
- sequenceNext->onClick=[this]{selectedStep=(selectedStep+1)%16;repaint();};
+ sequencePrev->onClick=[this]{
+  const int count=juce::jlimit(1,16,(int)sequenceCount->getValue());
+  selectedStep=(selectedStep+count-1)%count;repaint();
+ };
+ sequenceNext->onClick=[this]{
+  const int count=juce::jlimit(1,16,(int)sequenceCount->getValue());
+  selectedStep=(selectedStep+1)%count;repaint();
+ };
  const char* fxIds[]={"fxDrive","fxMix"};
  for(int i=0;i<2;++i){
   fxSliders[i]=std::make_unique<juce::Slider>(juce::Slider::LinearHorizontal,juce::Slider::TextBoxRight);
@@ -149,9 +155,32 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  snapButton->setClickingTogglesState(true);
  undoButton->onClick=[this]{undoEdit();};
  redoButton->onClick=[this]{redoEdit();};
- copyStep->onClick=[this]{clipboard=captureShape(selectedStep+selectedLane*32,true);hasClipboard=true;};
- pasteStep->onClick=[this]{if(hasClipboard){const int key=selectedStep+selectedLane*32;auto before=captureShape(key,true);applyShape(key,true,clipboard);pushEdit(key,true,before,clipboard);repaint();}};
- resetStep->onClick=[this]{const int key=selectedStep+selectedLane*32;auto before=captureShape(key,true);di::ShapeSequencer::Shape defaults=selectedLane==0?di::ShapeSequencer::Shape{1.f,.92f,.08f,.02f,.32f,.75f,.95f,1.f}:di::ShapeSequencer::Shape{selectedLane==2?0.5f:1.f,selectedLane==2?0.5f:1.f,selectedLane==2?0.5f:1.f,selectedLane==2?0.5f:1.f,selectedLane==2?0.5f:1.f,selectedLane==2?0.5f:1.f,selectedLane==2?0.5f:1.f,selectedLane==2?0.5f:1.f};applyShape(key,true,defaults);pushEdit(key,true,before,defaults);repaint();};
+ copyStep->onClick=[this]{
+  const bool seq=sequenceToggle->getToggleState();
+  clipboard=captureShape(seq?selectedStep+selectedLane*32:0,seq);
+  hasClipboard=true;
+ };
+ pasteStep->onClick=[this]{
+  if(!hasClipboard)return;
+  const bool seq=sequenceToggle->getToggleState();
+  const int key=seq?selectedStep+selectedLane*32:0;
+  const auto before=captureShape(key,seq);
+  applyShape(key,seq,clipboard);
+  pushEdit(key,seq,before,clipboard);repaint();
+ };
+ resetStep->onClick=[this]{
+  const bool seq=sequenceToggle->getToggleState();
+  const int key=seq?selectedStep+selectedLane*32:0;
+  const auto before=captureShape(key,seq);
+  constexpr di::ShapeSequencer::Shape volume{1.f,.92f,.08f,.02f,.32f,.75f,.95f,1.f};
+  const di::ShapeSequencer::Shape defaults=seq&&selectedLane>0
+   ? di::ShapeSequencer::Shape{selectedLane==2?.5f:1.f,selectedLane==2?.5f:1.f,
+       selectedLane==2?.5f:1.f,selectedLane==2?.5f:1.f,selectedLane==2?.5f:1.f,
+       selectedLane==2?.5f:1.f,selectedLane==2?.5f:1.f,selectedLane==2?.5f:1.f}
+   : volume;
+  applyShape(key,seq,defaults);
+  pushEdit(key,seq,before,defaults);repaint();
+ };
  const char* filterNames[]={"FULL","LOW","HIGH","BAND"};
  for(int i=0;i<4;++i){filterButtons[i]=std::make_unique<juce::TextButton>(filterNames[i]);filterButtons[i]->onClick=[this,i]{selectFilter(i);};addAndMakeVisible(*filterButtons[i]);}
  if(combos.size()>0)combos[0]->setVisible(false);
