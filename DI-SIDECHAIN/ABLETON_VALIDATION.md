@@ -27,6 +27,9 @@ Use a **copy** of an Ableton project. Do not replace an installed stable VST3 un
 - [ ] Use SETUP gear: verify menu is hidden by default, overlays the plugin only while open, and dismisses when clicking elsewhere.
 - [ ] Change GUI scaling between 100%, 75% and 50%; verify all controls remain aligned/clickable after repeated changes, project reopen, and user preset import.
 - [ ] Save/load user .dipreset file and verify 16-step shapes, modulation curves, active FX/SATURATOR states, and editor preferences persist.
+- [ ] Reopen a project after choosing a factory preset: the preset name in the toolbar must match the saved host state, even if the editor remained open during host restore.
+- [ ] Test preset Save into a read-only location and Load of a missing file: an error should be shown and the previous preset label should remain intact.
+- [ ] Drag one envelope node far left/right and outside the graph: only the captured node should change and a single Undo should restore it.
 - [ ] Verify Economy/Standard/High curve rendering and check 2x oversampling is accurately labeled (no unimplemented 4x processing claim).
 - [ ] Check 16 steps and reduced step counts: selected step must stay within the current range.
 - [ ] Check CPU use with multiple instances and confirm no audio-thread allocations in a profiler.
