@@ -2,6 +2,8 @@
 #include <JuceHeader.h>
 #include <array>
 #include "ShapeSequencer.h"
+#include "OversampledFx2x.h"
+#include "FixedDelay.h"
 class DISidechainProcessor : public juce::AudioProcessor {
 public:
  DISidechainProcessor();
@@ -37,6 +39,8 @@ private:
  static juce::AudioProcessorValueTreeState::ParameterLayout makeParams();
  struct FilterChannel {juce::dsp::LinkwitzRileyFilter<float> low, high;};
  std::array<FilterChannel,2> filters;
+ std::array<di::OversampledFx2x,2> oversampledFx;
+ std::array<di::FixedDelay<di::OversampledFx2x::latencySamples>,2> fxDryDelay;
  di::ShapeSequencer sequencer;
  std::array<di::ShapeSequencer,2> modulationSequencers;
  double sr=44100, phase=1, envelopeLength=0.25, detector=0;
