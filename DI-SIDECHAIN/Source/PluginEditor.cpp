@@ -288,12 +288,14 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  paintPanel(g,filterPanel,"FILTER  /  ALWAYS VISIBLE");
  paintPanel(g,outputPanel,"OUTPUT  /  SIDECHAIN");
  text(g,"SELECT STEP", {35,520,160,23},14,muted);
- text(g,"Edit one of 16 steps. Choose a lane, then drag nodes.", {35,607,382,46},13,muted);
+ text(g,juce::String(selectedStep+1)+" / 16", {112,559,240,38},25,juce::Colours::white,true);
+ text(g,"Choose a step above or use the arrows.", {35,607,382,30},13,muted);
+ text(g,"Select VOLUME / FILTER / PAN, then drag nodes.", {35,642,382,30},13,muted);
  const juce::String selectedName=selectedLane==0?"VOLUME":selectedLane==1?"FILTER":"PAN";
  text(g,selectedName+"  /  STEP "+juce::String(selectedStep+1), {463,518,230,22},14,selectedColour,true);
  paintShape(g,detailGraph,selectedStep,true);
  text(g,"Drag vertically to edit nearest node. SNAP rounds to 1/16.", {464,664,480,23},13,muted);
- text(g,"OFFSET ±  (VOLUME)", {970,665,175,23},12,orange,true);
+ text(g,"OFFSET +/-  (VOLUME)", {970,665,175,23},12,orange,true);
  text(g,"LANE EDITOR", {1225,505,230,18},12,muted);
  text(g,"SEQUENCED", {1370,523,130,24},14,sequenceToggle->getToggleState()?green:muted,true);
  text(g,"FILTER - DUCK DEPTH", {1225,566,280,23},14,juce::Colour(0xff44bbff));
