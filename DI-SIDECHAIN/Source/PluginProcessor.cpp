@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "FxWaveshaper.h"
 #include <cmath>
 static juce::AudioProcessorValueTreeState::ParameterLayout layoutParams(){
  std::vector<std::unique_ptr<juce::RangedAudioParameter>> p;
@@ -105,11 +106,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  // Filter lane affects the selected frequency band, while Full mode remains full-band.
  if(filterRange>0.f&&mode!=0)out=dry+(out-dry)*filterLaneGain;
  if(panMod!=0.f)out*=ch==0?panLeft:panRight;
- if(fxBlend>0.00001f&&smoothedFxDrive>1.00001f&&smoothedFxWet>0.f){const float driven=out*smoothedFxDrive;
-       const float saturationNorm=1.f/std::tanh(juce::jmax(1.f,smoothedFxDrive));
-       const float saturator=std::tanh(driven)*saturationNorm;
-       const float softClipper=driven<=-1.5f?-1.f:driven>=1.5f?1.f:driven-(4.f/27.f)*driven*driven*driven;
-       const float saturated=saturator+(softClipper-saturator)*juce::jlimit(0.f,1.f,smoothedFxType);
+ if(fxBlend>0.00001f&&smoothedFxDrive>1.00001f&&smoothedFxWet>0.f){const float saturated=di::processFx(out,smoothedFxDrive,smoothedFxType);
        out+=(smoothedFxWet*fxBlend)*(saturated-out);}
  if(!std::isfinite(out))out=dry;main.setSample(ch,i,out);peak=juce::jmax(peak,std::abs(out));}
  }
