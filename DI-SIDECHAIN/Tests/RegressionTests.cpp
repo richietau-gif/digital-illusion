@@ -23,7 +23,7 @@ static void editorLifecycle(DISidechainProcessor& p)
         std::unique_ptr<juce::AudioProcessorEditor> editor(p.createEditor());
         require(editor != nullptr, "Editor creation failed");
         require(editor->getWidth() == 1380 && editor->getHeight() == 860, "Initial editor size");
-        require(editor->getNumChildComponents() == 62, "Missing editor controls");
+        require(editor->getNumChildComponents() == 70, "Missing editor controls");
         int sliders = 0, combos = 0, buttons = 0;
         for (auto* child : editor->getChildren())
         {
@@ -32,7 +32,7 @@ static void editorLifecycle(DISidechainProcessor& p)
             combos += dynamic_cast<juce::ComboBox*>(child) != nullptr;
             buttons += dynamic_cast<juce::ToggleButton*>(child) != nullptr;
         }
-        require(sliders == 22 && combos == 4 && buttons == 2, "Control types changed");
+        require(sliders == 24 && combos == 4 && buttons == 3, "Control types changed");
         editor->setSize(1500, 860);
         editor->setSize(1380, 860);
         require(editor->createComponentSnapshot(editor->getLocalBounds()).isValid(), "Editor paint failed");
@@ -82,6 +82,73 @@ static void envelopeTimingOffsetRegression()
     DISidechainProcessor legacy;
     require(std::abs(legacy.state.getRawParameterValue("envelopeOffset")->load())<.000001f,
             "Default offset must be neutral for older Ableton sets");
+}
+
+static void independentFilterAndFollowerRegression()
+{
+    DISidechainProcessor p;
+    require(p.state.getRawParameterValue("filterEnvelopeLink")->load()>.5f,
+            "Legacy Ableton sets must default to linked Volume/Filter shapes");
+    require(std::abs(p.state.getRawParameterValue("filterEnvelopeMorph")->load())<.00001f,
+            "Morph must default to A");
+    require(std::abs(p.state.getRawParameterValue("filterEnvelopeFollower")->load())<.00001f,
+            "Follower must be inactive by default");
+    p.applyEnvelopePreset(4);
+    const float reference=p.evaluateShiftedEnvelope(.39,false);
+    require(std::abs(p.evaluateFilterEnvelope(.39,false)-reference)<.000001f,
+            "Linked filter curve deviated from the original Volume curve");
+    p.copyVolumeShapeToFilterBanks();
+    set(p,"filterEnvelopeLink",0.f);
+    p.setFilterEnvelopePoint(0,3,.0f);
+    p.setFilterEnvelopePoint(1,3,1.f);
+    set(p,"filterEnvelopeMorph",0.f);
+    const float a=p.evaluateFilterEnvelope(3./7.,false);
+    set(p,"filterEnvelopeMorph",1.f);
+    const float b=p.evaluateFilterEnvelope(3./7.,false);
+    set(p,"filterEnvelopeMorph",.5f);
+    const float halfway=p.evaluateFilterEnvelope(3./7.,false);
+    require(b>a+.8f,"Editable filter A/B banks are not independent");
+    require(std::abs(halfway-.5f*(a+b))<.005f,
+            "Filter morph does not interpolate A/B without zipper steps");
+    const float volumeBefore=p.evaluateEnvelope(3./7.);
+    p.setFilterEnvelopePoint(0,3,.9f);
+    require(std::abs(p.evaluateEnvelope(3./7.)-volumeBefore)<.001f,
+            "Editing Filter A modified the Volume envelope");
+
+    set(p,"filterEnvelopeFollower",-.6f);
+    juce::MemoryBlock saved;
+    p.getStateInformation(saved);
+    DISidechainProcessor restored;
+    restored.setStateInformation(saved.getData(),(int)saved.getSize());
+    require(std::abs(restored.getFilterEnvelopePoint(0,3)-.9f)<.0001f &&
+            std::abs(restored.getFilterEnvelopePoint(1,3)-1.f)<.0001f,
+            "Filter A/B envelope nodes did not survive Ableton state roundtrip");
+    require(std::abs(restored.state.getRawParameterValue("filterEnvelopeMorph")->load()-.5f)<.001f &&
+            std::abs(restored.state.getRawParameterValue("filterEnvelopeFollower")->load()+.6f)<.001f,
+            "Filter morph/follower automation values were not restored");
+    for(int bank=0;bank<2;++bank)
+        for(int i=0;i<8;++i)
+            require(std::isfinite(restored.getFilterEnvelopePoint(bank,i)) &&
+                    restored.getFilterEnvelopePoint(bank,i)>=0.f &&
+                    restored.getFilterEnvelopePoint(bank,i)<=1.f,
+                    "Invalid Filter bank point after state restore");
+    // External/signal level follower is measured independently of the
+    // ducking gain. No changes to Volume Depth are required.
+    restored.prepareToPlay(48000.,256);
+    set(restored,"outputFilterOn",1.f);
+    set(restored,"trigger",2.f);
+    set(restored,"playbackMode",1.f);
+    set(restored,"sync",0.f);
+    juce::AudioBuffer<float> audio(2,256);
+    juce::MidiBuffer midi;
+    for(int block=0;block<10;++block){
+        for(int sample=0;sample<256;++sample)
+            for(int ch=0;ch<2;++ch)audio.setSample(ch,sample,.55f);
+        restored.processBlock(audio,midi);
+    }
+    require(restored.getVisualFollowerLevel()>.30f,
+            "Envelope follower is not responding to incoming audio");
+    restored.releaseResources();
 }
 
 static void factoryEnvelopePresetsRegression()
@@ -172,7 +239,7 @@ static void factoryPresetGuiRegression()
         if(id.startsWith("filter-slope-"))++slopeButtons;
         if(id.startsWith("factory-preset-"))++factoryButtons;
     }
-    require(visibleSliders==22,
+    require(visibleSliders==24,
             "Filter and sidechain knobs must always be simultaneously visible");
     juce::Slider* offsetSlider=nullptr;
     for(auto* child:editor->getChildren())
@@ -188,6 +255,27 @@ static void factoryPresetGuiRegression()
 
     require(rotary==8,"Studio master and filter must have eight rotary controls");
     require(factoryButtons==6,"Studio preset bank should have six one-click buttons");
+    int viewButtons=0,bankButtons=0;juce::ToggleButton* linkButton=nullptr;
+    juce::Slider* morphControl=nullptr,*followerControl=nullptr;
+    for(auto* child:editor->getChildren()){
+        const auto id=child->getComponentID();
+        if(id.startsWith("curve-view-"))++viewButtons;
+        if(id.startsWith("filter-bank-"))++bankButtons;
+        if(id=="filter-envelope-link")linkButton=dynamic_cast<juce::ToggleButton*>(child);
+    }
+    require(viewButtons==2&&bankButtons==2&&linkButton!=nullptr,
+            "Missing Volume/Filter tabs, filter bank shortcuts or LINK switch");
+    require(linkButton->getToggleState(),"LINK must be enabled by default");
+    // Use the two parameter names even if their slider components are not tagged.
+    for(auto* parameter:processor.getParameters()){
+        if(parameter->getParameterID()=="filterEnvelopeMorph")
+            morphControl=dynamic_cast<juce::Slider*>(editor->getChildComponent(0));
+        if(parameter->getParameterID()=="filterEnvelopeFollower")
+            followerControl=dynamic_cast<juce::Slider*>(editor->getChildComponent(1));
+    }
+    require(morphControl!=nullptr&&followerControl!=nullptr,
+            "Morph and follower parameters are not registered");
+
     require(filterButtons==4&&slopeButtons==2&&bandPass!=nullptr,
             "Filter must expose four compact type and two slope buttons");
     // V3 visual contract: neon lime interaction, orange exclusive to the
@@ -1098,6 +1186,7 @@ int main()
         envelopeInterpolationRegression();
         factoryEnvelopePresetsRegression();
         envelopeTimingOffsetRegression();
+        independentFilterAndFollowerRegression();
         factoryPresetGuiRegression();
         editableEnvelopeRoundtrip();
         concurrentEnvelopeEditingStress();
