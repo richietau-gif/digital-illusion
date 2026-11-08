@@ -59,7 +59,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  double hostPpq=0.;bool hasPlayingPpq=false;
  if(auto* ph=getPlayHead()){
   if(auto pos=ph->getPosition()){
-   if(auto b=pos->getBpm())bpm=*b;
+   if(auto b=pos->getBpm())if(std::isfinite(*b)&&*b>0.)bpm=*b;
    const bool playing=pos->getIsPlaying();
    if(playing){if(auto ppq=pos->getPpqPosition()){hostPpq=*ppq;hasPlayingPpq=std::isfinite(hostPpq);}}
    bool discontinuity=playing&&!wasTransportPlaying;
@@ -74,7 +74,11 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
   }
  }
  const double divisions[]={0.125,0.25,0.5,1,2,4,8};
- envelopeLength=get("sync")>0.5?60.0/juce::jmax(1.0,bpm)*divisions[juce::jlimit(0,6,(int)get("division"))]:get("length")/1000.0;
+ const float divisionRaw=get("division");
+ const int divisionIndex=std::isfinite(divisionRaw)?juce::jlimit(0,6,(int)divisionRaw):2;
+ const float lengthRaw=get("length");
+ const double lengthSeconds=std::isfinite(lengthRaw)?juce::jlimit(10.f,2000.f,lengthRaw)/1000.0:0.25;
+ envelopeLength=get("sync")>0.5?60.0/bpm*divisions[divisionIndex]:lengthSeconds;
  const bool tempoSync=get("sync")>0.5f;
  const bool sequenceOn=get("sequenceEnabled")>0.5f;
  sequencer.setSteps((int)get("sequenceSteps"));
@@ -82,7 +86,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  // Re-anchor each audio block to the DAW's PPQ timeline when tempo sync is enabled.
  // This corrects accumulated drift and aligns loop restarts to musical bars.
  if(sequenceOn&&tempoSync&&hasPlayingPpq){
-  const double beatsPerStep=divisions[juce::jlimit(0,6,(int)get("division"))];
+  const double beatsPerStep=divisions[divisionIndex];
   const double position=hostPpq/beatsPerStep;
   sequencer.seekToStepPosition(position);
   for(auto& lane:modulationSequencers)lane.seekToStepPosition(position);
