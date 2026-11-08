@@ -266,12 +266,11 @@ static void factoryPresetGuiRegression()
     require(viewButtons==2&&bankButtons==2&&linkButton!=nullptr,
             "Missing Volume/Filter tabs, filter bank shortcuts or LINK switch");
     require(linkButton->getToggleState(),"LINK must be enabled by default");
-    // Use the two parameter names even if their slider components are not tagged.
-    for(auto* parameter:processor.getParameters()){
-        if(parameter->getParameterID()=="filterEnvelopeMorph")
-            morphControl=dynamic_cast<juce::Slider*>(editor->getChildComponent(0));
-        if(parameter->getParameterID()=="filterEnvelopeFollower")
-            followerControl=dynamic_cast<juce::Slider*>(editor->getChildComponent(1));
+    for(auto* child:editor->getChildren()){
+        if(child->getComponentID()=="filterEnvelopeMorph")
+            morphControl=dynamic_cast<juce::Slider*>(child);
+        if(child->getComponentID()=="filterEnvelopeFollower")
+            followerControl=dynamic_cast<juce::Slider*>(child);
     }
     require(morphControl!=nullptr&&followerControl!=nullptr,
             "Morph and follower parameters are not registered");
