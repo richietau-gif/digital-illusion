@@ -192,11 +192,51 @@ void DISidechainEditor::refreshFxButtons() {
  if(saturatorToggle)saturatorToggle->setButtonText(saturatorToggle->getToggleState()?"ON":"OFF");
 }
 void DISidechainEditor::paintPanel(juce::Graphics& g,juce::Rectangle<int> r,const juce::String& name) {
- g.setColour(panel);g.fillRoundedRectangle(r.toFloat(),12.f);
- g.setColour(edge);g.drawRoundedRectangle(r.toFloat().reduced(.5f),12.f,1.f);
- auto header=r.removeFromTop(42);
- g.setColour(juce::Colour(0xff202a35));g.fillRoundedRectangle(header.toFloat(),10.f);
- text(g,name,header.reduced(17,4),16,juce::Colours::white,true);
+ const auto f=r.toFloat();
+ g.setColour(juce::Colour(0xff030b12).withAlpha(.5f));
+ g.fillRoundedRectangle(f.translated(1.f,3.f),12.f);
+ juce::ColourGradient body(juce::Colour(0xff0b2533),f.getX(),f.getY(),
+                           juce::Colour(0xff06131d),f.getRight(),f.getBottom(),false);
+ g.setGradientFill(body);g.fillRoundedRectangle(f,11.f);
+ g.setColour(juce::Colour(0xff22617a));g.drawRoundedRectangle(f.reduced(.5f),11.f,1.f);
+ auto top=r.removeFromTop(39).toFloat().reduced(1.f);
+ juce::ColourGradient header(juce::Colour(0xff163b51),top.getX(),top.getY(),
+                             juce::Colour(0xff0a1b27),top.getX(),top.getBottom(),false);
+ g.setGradientFill(header);g.fillRoundedRectangle(top,10.f);
+ g.setColour(juce::Colour(0xff1a9ab0).withAlpha(.55f));g.drawHorizontalLine((int)top.getY()+1,top.getX()+14.f,top.getRight()-14.f);
+ text(g,name,juce::Rectangle<int>((int)f.getX()+19,(int)f.getY()+7,(int)f.getWidth()-30,27),16,juce::Colours::white,true);
+}
+void DISidechainEditor::paintFrequencyResponse(juce::Graphics& g,juce::Rectangle<int> rect) {
+ if(rect.isEmpty())return;
+ g.setColour(juce::Colour(0xff091722));g.fillRoundedRectangle(rect.toFloat(),5.f);
+ g.setColour(juce::Colour(0xff1c3c4b));
+ for(int k=1;k<8;++k)g.drawVerticalLine(rect.getX()+rect.getWidth()*k/8,(float)rect.getY(),(float)rect.getBottom());
+ for(int k=1;k<4;++k)g.drawHorizontalLine(rect.getY()+rect.getHeight()*k/4,(float)rect.getX(),(float)rect.getRight());
+ const int mode=juce::jlimit(0,3,(int)proc.state.getRawParameterValue("mode")->load());
+ const float cutoff=juce::jlimit(25.f,18000.f,proc.state.getRawParameterValue("low")->load());
+ const float high=juce::jlimit(60.f,18000.f,proc.state.getRawParameterValue("high")->load());
+ const auto position=[](float hz){return juce::jlimit(0.f,1.f,(std::log(hz)-std::log(20.f))/(std::log(20000.f)-std::log(20.f)));};
+ juce::Path curve;
+ for(int i=0;i<=170;++i){
+  const float x=i/170.f;
+  const float f=20.f*std::pow(1000.f,x);
+  const auto sigmoid=[](float z){return 1.f/(1.f+std::exp(-z));};
+  const float lowpass=1.f-sigmoid((std::log(f)-std::log(cutoff))*9.f);
+  const float highpass=1.f-lowpass;
+  const float band=highpass*(1.f-sigmoid((std::log(f)-std::log(juce::jmax(cutoff+1.f,high)))*9.f));
+  const float value=mode==0?1.f:mode==1?lowpass:mode==2?highpass:band;
+  const float px=rect.getX()+x*rect.getWidth();
+  const float py=rect.getBottom()-5.f-value*(rect.getHeight()-10.f);
+  if(i==0)curve.startNewSubPath(px,py);else curve.lineTo(px,py);
+ }
+ juce::Path fill(curve);fill.lineTo((float)rect.getRight(),(float)rect.getBottom());fill.lineTo((float)rect.getX(),(float)rect.getBottom());fill.closeSubPath();
+ g.setColour(juce::Colour(0xffff8b19).withAlpha(.15f));g.fillPath(fill);
+ g.setColour(juce::Colour(0xffffa126).withAlpha(.20f));g.strokePath(curve,juce::PathStrokeType(6.f));
+ g.setColour(juce::Colour(0xffff981b));g.strokePath(curve,juce::PathStrokeType(2.5f));
+ const float knobX=rect.getX()+position(cutoff)*rect.getWidth();
+ g.setColour(juce::Colours::white);g.fillEllipse(knobX-4.f,rect.getY()+4.f,8.f,8.f);
+ const juce::StringArray ticks{"20","50","100","200","500","1k","2k","5k","10k","20k"};
+ for(int i=0;i<ticks.size();++i)text(g,ticks[i],{rect.getX()+i*rect.getWidth()/10,rect.getBottom()+2,35,14},10,juce::Colour(0xff8bafc1));
 }
 void DISidechainEditor::paintShape(juce::Graphics& g,juce::Rectangle<int> r,int step,bool drawNodes) {
  if(r.isEmpty())return;
@@ -209,8 +249,9 @@ void DISidechainEditor::paintShape(juce::Graphics& g,juce::Rectangle<int> r,int 
  const float offset=seq&&selectedLane==0&&shapeOffset? (float)shapeOffset->getValue():0.f;
  auto value=[&](int i){return seq?(selectedLane==0?proc.getSequencePoint(step,i):proc.getModulationPoint(selectedLane-1,step,i)):proc.points[i].load();};
  juce::Path p;
- for(int j=0;j<=140;++j){
-  const double t=j/140.0;const double x=t*7;const int k=juce::jmin(6,(int)x);
+ const int segments=renderQuality==0?42:renderQuality==2?420:140;
+ for(int j=0;j<=segments;++j){
+  const double t=(double)j/segments;const double x=t*7;const int k=juce::jmin(6,(int)x);
   float u=(float)(x-k);u=u*u*(3-2*u);
   const float v=juce::jlimit(0.f,1.f,value(k)+(value(k+1)-value(k))*u+offset);
   const float px=r.getX()+t*r.getWidth(),py=r.getBottom()-v*r.getHeight();
