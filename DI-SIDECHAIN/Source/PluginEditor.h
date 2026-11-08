@@ -40,6 +40,8 @@ private:
  void applyFactoryPreset(int);
  void applyShapePreset(int);
  void showPresetMenu();
+ void saveUserPreset();
+ void loadUserPreset();
  void showShapeMenu();
  int selectedStep=0;
  int selectedLane=0;
@@ -63,6 +65,7 @@ private:
  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> saturatorAttachment;
  std::unique_ptr<juce::TextButton> presetButton, shapePresetButton, sequencePrev, sequenceNext;
  juce::String presetName {"Custom"};
+ std::unique_ptr<juce::FileChooser> presetChooser;
  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> fxToggleAttachment;
  std::array<std::unique_ptr<juce::Slider>,2> fxSliders;
  std::array<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>,2> fxAttachments;
