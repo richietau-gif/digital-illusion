@@ -120,6 +120,12 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  }
  presetName=p.state.state.getProperty("presetName","Custom").toString();
  presetButton=std::make_unique<juce::TextButton>("PRESETS  -  "+presetName);
+ for(int i=0;i<2;++i){
+  abButtons[i]=std::make_unique<juce::TextButton>(i==0?"A":"B");
+  buttonStyle(*abButtons[i]);
+  addAndMakeVisible(*abButtons[i]);
+  abButtons[i]->onClick=[this,i]{ if(abStored[i]) recallAB(i); else captureAB(i); };
+ }
  setupButton=std::make_unique<TransparentTextButton>();
  setupButton->setTooltip("SETUP - Plugin settings");
  setupBounds={1449,31,61,45};
@@ -520,6 +526,8 @@ void DISidechainEditor::resized() {
  filterPanel={12,706,1110,232};
  outputPanel={1132,706,392,232};
  if(presetButton)presetButton->setBounds(538,30,395,45);
+ if(abButtons[0])abButtons[0]->setBounds(940,36,36,32);
+ if(abButtons[1])abButtons[1]->setBounds(980,36,36,32);
  if(setupButton)setupButton->setBounds(setupBounds);
  if(sequenceToggle)sequenceToggle->setBounds(360,124,137,32);
  if(sequenceCount)sequenceCount->setBounds(506,124,87,30);
@@ -716,6 +724,18 @@ void DISidechainEditor::selectRenderQuality(int index) {
   param->endChangeGesture();
  }
  renderQuality=index;
+ repaint();
+}
+void DISidechainEditor::captureAB(int slot) {
+ slot=juce::jlimit(0,1,slot);
+ proc.getStateInformation(abSnapshots[(size_t)slot]);
+ abStored[(size_t)slot]=true;
+ if(abButtons[(size_t)slot]) abButtons[(size_t)slot]->setButtonText(slot==0?"A*":"B*");
+}
+void DISidechainEditor::recallAB(int slot) {
+ slot=juce::jlimit(0,1,slot);
+ if(!abStored[(size_t)slot]||abSnapshots[(size_t)slot].isEmpty()) return;
+ proc.setStateInformation(abSnapshots[(size_t)slot].getData(),(int)abSnapshots[(size_t)slot].getSize());
  repaint();
 }
 void DISidechainEditor::showSetupMenu() {
