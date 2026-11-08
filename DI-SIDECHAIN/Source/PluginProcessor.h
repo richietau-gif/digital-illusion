@@ -27,6 +27,9 @@ public:
  std::array<std::atomic<float>,8> points;
  std::atomic<float> meter {0};
  std::atomic<int> activeSequenceStep {0};
+ std::array<std::array<std::atomic<float>,8>,32> sequencePoints;
+ void setSequencePoint(int step,int node,float value) noexcept;
+ float getSequencePoint(int step,int node) const noexcept;
 private:
  static juce::AudioProcessorValueTreeState::ParameterLayout makeParams();
  struct FilterChannel {juce::dsp::LinkwitzRileyFilter<float> low, high;};
