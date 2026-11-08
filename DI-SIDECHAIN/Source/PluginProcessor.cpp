@@ -17,11 +17,20 @@ juce::AudioProcessorValueTreeState::ParameterLayout DISidechainProcessor::makePa
 DISidechainProcessor::DISidechainProcessor():AudioProcessor(BusesProperties().withInput("Input",juce::AudioChannelSet::stereo(),true).withInput("Sidechain",juce::AudioChannelSet::stereo(),false).withOutput("Output",juce::AudioChannelSet::stereo(),true)),state(*this,nullptr,"PARAMS",makeParams()){
  const float defaults[8]={1,0.92f,0.08f,0.02f,0.32f,0.75f,0.95f,1};for(int i=0;i<8;++i)points[i]=defaults[i];
  for(auto& shape:sequencePoints)for(int i=0;i<8;++i)shape[i].store(defaults[i]);
+ for(auto& lane:modulationPoints)for(auto& shape:lane)for(int i=0;i<8;++i)shape[i].store(1.f);
 }
 void DISidechainProcessor::setSequencePoint(int step,int node,float value) noexcept {if(step>=0&&step<32&&node>=0&&node<8&&std::isfinite(value))sequencePoints[step][node].store(juce::jlimit(0.f,1.f,value),std::memory_order_relaxed);}
 float DISidechainProcessor::getSequencePoint(int step,int node) const noexcept {return step>=0&&step<32&&node>=0&&node<8?sequencePoints[step][node].load(std::memory_order_relaxed):1.f;}
+void DISidechainProcessor::setModulationPoint(int lane,int step,int node,float value) noexcept {
+ if(lane>=0&&lane<2&&step>=0&&step<32&&node>=0&&node<8&&std::isfinite(value))
+  modulationPoints[lane][step][node].store(juce::jlimit(0.f,1.f,value),std::memory_order_relaxed);
+}
+float DISidechainProcessor::getModulationPoint(int lane,int step,int node) const noexcept {
+ return lane>=0&&lane<2&&step>=0&&step<32&&node>=0&&node<8
+  ?modulationPoints[lane][step][node].load(std::memory_order_relaxed):1.f;
+}
 bool DISidechainProcessor::isBusesLayoutSupported(const BusesLayout& b) const {return b.getMainInputChannelSet()==juce::AudioChannelSet::stereo()&&b.getMainOutputChannelSet()==juce::AudioChannelSet::stereo()&&(b.inputBuses.size()<2||b.inputBuses[1].isDisabled()||b.inputBuses[1]==juce::AudioChannelSet::mono()||b.inputBuses[1]==juce::AudioChannelSet::stereo());}
-void DISidechainProcessor::prepareToPlay(double sampleRate,int maxBlock){sr=sampleRate;phase=1;sequencer.reset();activeSequenceStep.store(0);detector=0;armed=true;refractory=0;smoothGain=1;juce::dsp::ProcessSpec spec{sampleRate,(juce::uint32)juce::jmax(1,maxBlock),1};for(auto& c:filters){c.low.prepare(spec);c.high.prepare(spec);c.low.setType(juce::dsp::LinkwitzRileyFilterType::lowpass);c.high.setType(juce::dsp::LinkwitzRileyFilterType::highpass);c.low.reset();c.high.reset();}}
+void DISidechainProcessor::prepareToPlay(double sampleRate,int maxBlock){sr=sampleRate;phase=1;sequencer.reset();for(auto& lane:modulationSequencers)lane.reset();activeSequenceStep.store(0);detector=0;armed=true;refractory=0;smoothGain=1;juce::dsp::ProcessSpec spec{sampleRate,(juce::uint32)juce::jmax(1,maxBlock),1};for(auto& c:filters){c.low.prepare(spec);c.high.prepare(spec);c.low.setType(juce::dsp::LinkwitzRileyFilterType::lowpass);c.high.setType(juce::dsp::LinkwitzRileyFilterType::highpass);c.low.reset();c.high.reset();}}
 float DISidechainProcessor::curve(double t) const {t=juce::jlimit(0.0,1.0,t);double x=t*7;int i=juce::jmin(6,(int)x);float a=points[i].load(),b=points[i+1].load();float u=(float)(x-i);u=u*u*(3-2*u);return a+(b-a)*u;}
 void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::MidiBuffer& midi){
  juce::ScopedNoDenormals noDenormals;
@@ -38,23 +47,30 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  envelopeLength=get("sync")>0.5?60.0/juce::jmax(1.0,bpm)*divisions[juce::jlimit(0,6,(int)get("division"))]:get("length")/1000.0;
  const bool sequenceOn=get("sequenceEnabled")>0.5f;
  sequencer.setSteps((int)get("sequenceSteps"));
- if(sequenceOn)for(int k=0;k<32;++k){di::ShapeSequencer::Shape shape{};for(int j=0;j<8;++j)shape[j]=getSequencePoint(k,j);sequencer.setShape(k,shape);}
+ for(auto& lane:modulationSequencers)lane.setSteps((int)get("sequenceSteps"));
+ if(sequenceOn)for(int k=0;k<32;++k){
+  di::ShapeSequencer::Shape shape{};for(int j=0;j<8;++j)shape[j]=getSequencePoint(k,j);sequencer.setShape(k,shape);
+  for(int lane=0;lane<2;++lane){di::ShapeSequencer::Shape mod{};for(int j=0;j<8;++j)mod[j]=getModulationPoint(lane,k,j);modulationSequencers[lane].setShape(k,mod);}
+ }
  double step=1.0/juce::jmax(1.0,envelopeLength*sr);int holdoff=(int)(get("retrigger")*.001*sr);float threshold=juce::Decibels::decibelsToGain(get("threshold"));float coeff=std::exp(-1.f/(float)(juce::jmax(.1f,get("smooth"))*.001*sr));
  juce::MidiBuffer::Iterator it(midi);juce::MidiMessage msg;int midiPos=0;bool hasEvent=it.getNextEvent(msg,midiPos);float peak=0;
  for(int i=0;i<n;++i){bool fire=false;
  while(hasEvent&&midiPos<=i){if(msg.isNoteOn()&&msg.getVelocity()>0&&trig!=1)fire=true;hasEvent=it.getNextEvent(msg,midiPos);}
  if(hasSide&&trig!=2&&side.getNumSamples()>=n){float v=0;for(int ch=0;ch<side.getNumChannels();++ch)v=juce::jmax(v,std::abs(side.getSample(ch,i)));detector=std::max((double)v,detector*.995);if(detector<threshold*.65)armed=true;if(armed&&detector>=threshold&&refractory==0){fire=true;armed=false;}}
- if(refractory>0)--refractory;if(fire){phase=0;if(sequenceOn)sequencer.trigger();refractory=holdoff;}
- float env;
- if(sequenceOn){env=sequencer.render(envelopeLength*sr);activeSequenceStep.store(sequencer.getCurrentStep(),std::memory_order_relaxed);}
+ if(refractory>0)--refractory;if(fire){phase=0;if(sequenceOn){sequencer.trigger();for(auto& lane:modulationSequencers)lane.trigger();}refractory=holdoff;}
+ float env;float filterEnv=1.f,panEnv=1.f;
+ if(sequenceOn){env=sequencer.render(envelopeLength*sr);
+  filterEnv=modulationSequencers[0].render(envelopeLength*sr);
+  panEnv=modulationSequencers[1].render(envelopeLength*sr);
+  activeSequenceStep.store(sequencer.getCurrentStep(),std::memory_order_relaxed);}
  else {env=phase>=1?1:curve(phase);phase=juce::jmin(1.0,phase+step);}
  if(sequenceOn)env=juce::jlimit(0.f,1.f,env+shapeOffset);
  float target=1-depth*(1-env);smoothGain=coeff*smoothGain+(1-coeff)*target;
  // Independent, opt-in modulation lanes; neutral defaults preserve legacy patches.
- const float pan=juce::jlimit(-1.f,1.f,panMod*(2.f*env-1.f));
+ const float pan=juce::jlimit(-1.f,1.f,panMod*(2.f*panEnv-1.f));
  const float panLeft=pan>0.f?std::cos(pan*juce::MathConstants<float>::halfPi):1.f;
  const float panRight=pan<0.f?std::cos(-pan*juce::MathConstants<float>::halfPi):1.f;
- const float filterLaneGain=1.f-filterRange*(1.f-env);
+ const float filterLaneGain=1.f-filterRange*(1.f-filterEnv);
  for(int ch=0;ch<2;++ch){float dry=main.getSample(ch,i),wet=dry*smoothGain;
  if(mode!=0){auto& f=filters[ch];float low=f.low.processSample(0,dry),high=f.high.processSample(0,dry);float affected=mode==1?low:mode==2?high:dry-low-high;wet=dry+affected*(smoothGain-1);}
  float out=dry+(wet-dry)*mix;
@@ -65,7 +81,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  }
  meter.store(peak);midi.clear();
 }
-void DISidechainProcessor::getStateInformation(juce::MemoryBlock& dest){auto tree=state.copyState();for(int i=0;i<8;++i)tree.setProperty("point"+juce::String(i),points[i].load(),nullptr);for(int k=0;k<32;++k)for(int j=0;j<8;++j)tree.setProperty("seq_"+juce::String(k)+"_"+juce::String(j),getSequencePoint(k,j),nullptr);if(auto xml=tree.createXml())copyXmlToBinary(*xml,dest);}
-void DISidechainProcessor::setStateInformation(const void* data,int bytes){if(auto xml=getXmlFromBinary(data,bytes)){auto tree=juce::ValueTree::fromXml(*xml);if(tree.isValid()){for(int i=0;i<8;++i)points[i]=(float)tree.getProperty("point"+juce::String(i),points[i].load());for(int k=0;k<32;++k)for(int j=0;j<8;++j){auto key="seq_"+juce::String(k)+"_"+juce::String(j);if(tree.hasProperty(key))setSequencePoint(k,j,(float)tree.getProperty(key));}state.replaceState(tree);}}}
+void DISidechainProcessor::getStateInformation(juce::MemoryBlock& dest){auto tree=state.copyState();for(int i=0;i<8;++i)tree.setProperty("point"+juce::String(i),points[i].load(),nullptr);for(int k=0;k<32;++k)for(int j=0;j<8;++j)tree.setProperty("seq_"+juce::String(k)+"_"+juce::String(j),getSequencePoint(k,j),nullptr);for(int lane=0;lane<2;++lane)for(int k=0;k<32;++k)for(int j=0;j<8;++j)tree.setProperty("mod_"+juce::String(lane)+"_"+juce::String(k)+"_"+juce::String(j),getModulationPoint(lane,k,j),nullptr);if(auto xml=tree.createXml())copyXmlToBinary(*xml,dest);}
+void DISidechainProcessor::setStateInformation(const void* data,int bytes){if(auto xml=getXmlFromBinary(data,bytes)){auto tree=juce::ValueTree::fromXml(*xml);if(tree.isValid()){for(int i=0;i<8;++i)points[i]=(float)tree.getProperty("point"+juce::String(i),points[i].load());for(int k=0;k<32;++k)for(int j=0;j<8;++j){auto key="seq_"+juce::String(k)+"_"+juce::String(j);if(tree.hasProperty(key))setSequencePoint(k,j,(float)tree.getProperty(key));}for(int lane=0;lane<2;++lane)for(int k=0;k<32;++k)for(int j=0;j<8;++j){auto key="mod_"+juce::String(lane)+"_"+juce::String(k)+"_"+juce::String(j);if(tree.hasProperty(key))setModulationPoint(lane,k,j,(float)tree.getProperty(key));}state.replaceState(tree);}}}
 juce::AudioProcessorEditor* DISidechainProcessor::createEditor(){return new DISidechainEditor(*this);}
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter(){return new DISidechainProcessor();}
