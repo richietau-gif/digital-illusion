@@ -45,6 +45,9 @@ public:
  float getEnvelopeSegmentCurve(int segment) const noexcept;
  void setEnvelopeSegmentCurve(int segment, float curve) noexcept;
  float evaluateEnvelope(double normalizedPhase) const noexcept;
+ // Signed phase displacement: positive = delayed/right, negative = early/left.
+ // ONE SHOT clamps to endpoints; LOOP wraps within the beat cycle.
+ float evaluateShiftedEnvelope(double normalizedPhase,bool loop) const noexcept;
  float getVisualFilterCutoffHz() const noexcept {
      return visualFilterCutoffHz.load(std::memory_order_relaxed);
  }
