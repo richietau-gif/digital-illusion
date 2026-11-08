@@ -108,9 +108,9 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p) : AudioProcessorEd
     setLookAndFeel(&skin);
     setWantsKeyboardFocus(true);
 
-    const char* ids[] = {"depth","mix","threshold","length","smooth","low","high","retrigger","midiNote","midiChannel","detectorHP","outputFilterMin","outputFilterMax","outputFilterAmount","outputFilterResonance","outputFilterDrive","detectorAttackMs","detectorReleaseMs","multiLowDepth","multiMidDepth","multiHighDepth","envelopeOffset"};
-    const char* titles[] = {"DEPTH","MIX","THRESHOLD dB","LENGTH ms","SMOOTH","LOW Hz","HIGH Hz","HOLDOFF","MIDI NOTE (-1 ANY)","MIDI CH (0 ANY)","TRIGGER HP Hz","FILTER MIN Hz","FILTER MAX Hz","FILTER AMOUNT","RESONANCE Q","FILTER DRIVE","TRIGGER ATTACK ms","TRIGGER RELEASE ms","MULTI LOW DEPTH","MULTI MID DEPTH","MULTI HIGH DEPTH","OFFSET ± %"};
-    for (int i=0;i<22;++i) {
+    const char* ids[] = {"depth","mix","threshold","length","smooth","low","high","retrigger","midiNote","midiChannel","detectorHP","outputFilterMin","outputFilterMax","outputFilterAmount","outputFilterResonance","outputFilterDrive","detectorAttackMs","detectorReleaseMs","multiLowDepth","multiMidDepth","multiHighDepth","envelopeOffset","filterEnvelopeMorph","filterEnvelopeFollower"};
+    const char* titles[] = {"DEPTH","MIX","THRESHOLD dB","LENGTH ms","SMOOTH","LOW Hz","HIGH Hz","HOLDOFF","MIDI NOTE (-1 ANY)","MIDI CH (0 ANY)","TRIGGER HP Hz","FILTER MIN Hz","FILTER MAX Hz","FILTER AMOUNT","RESONANCE Q","FILTER DRIVE","TRIGGER ATTACK ms","TRIGGER RELEASE ms","MULTI LOW DEPTH","MULTI MID DEPTH","MULTI HIGH DEPTH","OFFSET ± %","MORPH A/B","FOLLOW ±"};
+    for (int i=0;i<24;++i) {
         auto s=std::make_unique<juce::Slider>();
         const bool rotary=(i==0||i==4||i==1||(i>=11&&i<=15));
         s->setSliderStyle(rotary?juce::Slider::RotaryHorizontalVerticalDrag:
@@ -218,12 +218,48 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p) : AudioProcessorEd
         presetButtons[(size_t)i]=std::move(button);
     }
 
+    const char* viewLabels[]={"VOLUME","FILTER"};
+    for(int i=0;i<2;++i){
+        auto button=std::make_unique<juce::TextButton>(viewLabels[i]);
+        button->setComponentID("curve-view-"+juce::String(i));
+        button->setColour(juce::TextButton::buttonColourId,juce::Colour(0xff24303b));
+        button->setColour(juce::TextButton::buttonOnColourId,
+            i==0?curveAccent:juce::Colour(0xff35dce7));
+        button->setColour(juce::TextButton::textColourOffId,pale);
+        button->setColour(juce::TextButton::textColourOnId,juce::Colour(0xff10171b));
+        button->onClick=[this,i]{filterView=(i==1);selectedPoint=-1;repaint();};
+        addAndMakeVisible(*button);
+        curveViewButtons[(size_t)i]=std::move(button);
+    }
+    filterEnvelopeLinkButton=std::make_unique<juce::ToggleButton>("LINK");
+    filterEnvelopeLinkButton->setComponentID("filter-envelope-link");
+    filterEnvelopeLinkButton->setColour(juce::ToggleButton::textColourId,juce::Colour(0xff35dce7));
+    addAndMakeVisible(*filterEnvelopeLinkButton);
+    filterEnvelopeLinkButton->onClick=[this]{
+        if(!filterEnvelopeLinkButton->getToggleState())
+            proc.copyVolumeShapeToFilterBanks();
+        repaint();
+    };
+    filterEnvelopeLinkAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+         p.state,"filterEnvelopeLink",*filterEnvelopeLinkButton);
+    for(int i=0;i<2;++i){
+        auto button=std::make_unique<juce::TextButton>(i==0?"A":"B");
+        button->setComponentID("filter-bank-"+juce::String(i));
+        button->setColour(juce::TextButton::buttonColourId,juce::Colour(0xff24303b));
+        button->setColour(juce::TextButton::buttonOnColourId,juce::Colour(0xffaf8bff));
+        button->setColour(juce::TextButton::textColourOffId,pale);
+        button->setColour(juce::TextButton::textColourOnId,juce::Colour(0xff10171b));
+        button->onClick=[this,i]{editedFilterBank=i;selectedPoint=-1;repaint();};
+        addAndMakeVisible(*button);
+        filterBankButtons[(size_t)i]=std::move(button);
+    }
+
     // setSize invokes resized synchronously: do not move above child construction.
     setSize(1380,860);
     startTimerHz(15);
 }
 DISidechainEditor::~DISidechainEditor(){
-    stopTimer();outputFilterAttachment.reset();ba.reset();ca.clear();sa.clear();
+    stopTimer();filterEnvelopeLinkAttachment.reset();outputFilterAttachment.reset();ba.reset();ca.clear();sa.clear();
     setLookAndFeel(nullptr);
 }
 void DISidechainEditor::updateSpectrum(){
@@ -276,6 +312,10 @@ void DISidechainEditor::timerCallback(){
     const int activePreset=envelopePreset->getSelectedId()-1;
     for(int i=0;i<6;++i)
         presetButtons[(size_t)i]->setToggleState(i==activePreset,juce::dontSendNotification);
+    for(int i=0;i<2;++i){
+        curveViewButtons[(size_t)i]->setToggleState((i==1)==filterView,juce::dontSendNotification);
+        filterBankButtons[(size_t)i]->setToggleState(i==editedFilterBank,juce::dontSendNotification);
+    }
     const auto sequence=proc.triggerSequence.load(std::memory_order_relaxed);
     if(sequence!=lastTriggerSequence){lastTriggerSequence=sequence;triggerFlashTicks=3;}
     else if(triggerFlashTicks>0)--triggerFlashTicks;
@@ -556,14 +596,20 @@ void DISidechainEditor::resized(){
     const auto bounds=[sc](float x,float y,float w,float h){
         return juce::Rectangle<int>(juce::roundToInt(x*sc),juce::roundToInt(y*sc),
             juce::jmax(1,juce::roundToInt(w*sc)),juce::jmax(1,juce::roundToInt(h*sc)));};
-    if(sliders.size()!=22||labels.size()!=22||combos.size()!=3||
+    if(sliders.size()!=24||labels.size()!=24||combos.size()!=3||
        sync==nullptr||outputFilterToggle==nullptr||envelopePreset==nullptr||
        filterTypeButtons[0]==nullptr||filterSlopeButtons[0]==nullptr||
-       presetButtons[0]==nullptr)return;
+       presetButtons[0]==nullptr||curveViewButtons[0]==nullptr||
+       filterBankButtons[0]==nullptr||filterEnvelopeLinkButton==nullptr)return;
     // Main source, playback, tempo divisions and saved factory shapes.
     for(int i=0;i<3;++i)
         combos[(size_t)i]->setBounds(bounds(279.f+i*234.f,181.f,211,25));
     envelopePreset->setBounds(bounds(750,130,188,25));
+    curveViewButtons[0]->setBounds(bounds(401,130,92,25));
+    curveViewButtons[1]->setBounds(bounds(497,130,88,25));
+    filterEnvelopeLinkButton->setBounds(bounds(593,130,84,25));
+    filterBankButtons[0]->setBounds(bounds(740,659,51,24));
+    filterBankButtons[1]->setBounds(bounds(797,659,51,24));
     // Compact timing control below the curve, balanced around zero.
     labels[21]->setBounds(bounds(738,485,91,22));
     labels[21]->setVisible(true);
@@ -605,12 +651,12 @@ void DISidechainEditor::resized(){
         labels[(size_t)i]->setVisible(true);sliders[(size_t)i]->setVisible(true);
     }
     // Compact but always visible technical controls under the 2nd right panel.
-    const int extra[]={3,5,6,8,9,18,19,20};
-    for(int k=0;k<8;++k){
+    const int extra[]={3,5,6,8,9,18,19,20,22,23};
+    for(int k=0;k<10;++k){
         const int i=extra[k],row=k/2,col=k%2;
-        const float x=944.f+col*204.f,y=686.f+row*38.f;
-        labels[(size_t)i]->setBounds(bounds(x,y,198,14));
-        sliders[(size_t)i]->setBounds(bounds(x,y+15,196,22));
+        const float x=944.f+col*204.f,y=682.f+row*32.f;
+        labels[(size_t)i]->setBounds(bounds(x,y,198,13));
+        sliders[(size_t)i]->setBounds(bounds(x,y+13,196,19));
         labels[(size_t)i]->setVisible(true);sliders[(size_t)i]->setVisible(true);
     }
 }
