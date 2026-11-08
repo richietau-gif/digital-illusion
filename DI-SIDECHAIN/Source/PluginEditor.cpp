@@ -203,6 +203,8 @@ void DISidechainEditor::updatePoint(const juce::MouseEvent& e) {
 }
 void DISidechainEditor::updateDetailPoint(const juce::MouseEvent& e){updatePoint(e);}
 void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
+ if(juce::Rectangle<int>(25,98,173,47).contains(e.getPosition())){sequenceToggle->setToggleState(false,juce::sendNotificationSync);repaint();return;}
+ if(juce::Rectangle<int>(207,98,185,47).contains(e.getPosition())){sequenceToggle->setToggleState(true,juce::sendNotificationSync);repaint();return;}
  if(stepStrip.contains(e.getPosition())){
   const int count=juce::jlimit(1,32,(int)sequenceCount->getValue());
   selectedStep=juce::jlimit(0,count-1,(e.getPosition().x-stepStrip.getX())*count/juce::jmax(1,stepStrip.getWidth()));
