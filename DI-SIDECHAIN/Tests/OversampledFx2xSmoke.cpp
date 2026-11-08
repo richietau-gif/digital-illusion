@@ -54,5 +54,26 @@ int main(){
 
  fx.reset();
  for(int i=0;i<512;++i)check(std::isfinite(fx.process(i%2?1.f:-1.f,16.f,0.f)),"Nyquist input must stay finite");
+ // Quantitative aliasing regression: at 48 kHz, a 10 kHz tone's 30 kHz
+ // third harmonic folds to 18 kHz without adequate oversampling filtering.
+ fx.reset();
+ constexpr int count=8192;
+ constexpr double sampleRate=48000., fundamental=10000., alias=18000.;
+ constexpr double pi=3.14159265358979323846;
+ double plainReal=0.,plainImag=0.,oversampledReal=0.,oversampledImag=0.;
+ for(int i=0;i<count;++i){
+  const float input=0.8f*std::sin(2.*pi*fundamental*i/sampleRate);
+  const float plain=di::processFx(input,8.f,1.f);
+  const float oversampled=fx.process(input,8.f,1.f);
+  if(i<256)continue; // exclude FIR startup transient
+  const double angle=2.*pi*alias*i/sampleRate;
+  const double c=std::cos(angle),sn=std::sin(angle);
+  plainReal+=plain*c;plainImag+=plain*sn;
+  oversampledReal+=oversampled*c;oversampledImag+=oversampled*sn;
+ }
+ const double plainAlias=std::hypot(plainReal,plainImag);
+ const double oversampledAlias=std::hypot(oversampledReal,oversampledImag);
+ check(plainAlias>1.,"Aliasing test tone must produce measurable harmonics");
+ check(oversampledAlias<plainAlias*0.4,"2x FIR must attenuate 18kHz folded alias by at least 8dB");
  return 0;
 }
