@@ -10,7 +10,7 @@ namespace di {
 class OversampledFx2x {
 public:
  static constexpr int latencySamples=7;
- void reset() noexcept { previous=0.f; up.fill(0.f); down.fill(0.f); upIndex=downIndex=0; }
+ void reset() noexcept { up.fill(0.f); down.fill(0.f); upIndex=downIndex=0; }
  float process(float input,float drive,float type) noexcept {
   if(!std::isfinite(input))input=0.f;
   // Zero stuffing; interpolation FIR has gain 2 at DC.
@@ -35,7 +35,6 @@ private:
   index=index==14?0:index+1;
   return sum*gain;
  }
- float previous=0.f;
  std::array<float,15> up{},down{};
  int upIndex=0,downIndex=0;
 };
