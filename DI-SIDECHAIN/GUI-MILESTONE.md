@@ -1,3 +1,12 @@
+## DI SIDECHAIN 3.2 — Separate Volume/Filter, A/B Morph and Envelope Follower
+
+- VOLUME / FILTER tabs choose the editable waveform. LINK defaults ON, preserving previous sound and state.
+- Unlinking from GUI copies the current Volume shape into two independent Filter A/B banks of eight editable vertical points.
+- Morph A/B blends the two filter envelopes per sample without altering Volume ducking. Bank selector and MORPH slider are always visible.
+- Envelope Follower can modulate cutoff from external sidechain or the main input (signed -100 to +100%, default 0).
+- Filter A/B bank nodes and all new automatable parameters persist in host state. Existing saved sessions remain LINKED by default.
+- Filter bank nodes are currently evenly spaced at 1/7-beat intervals. Volume retains the 2–32 point editable curve and shaping.
+- DSP and GUI regressions verify bank isolation, morph interpolation, follower activity, linked legacy behavior and state roundtrip.
 ## DI SIDECHAIN 3.1 — Envelope OFFSET and balanced color system
 
 - **OFFSET ± %** is a new automatable bipolar parameter, range **−50 to +50**
