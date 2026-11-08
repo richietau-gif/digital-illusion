@@ -9,6 +9,7 @@ public:
  void resized() override;
  void mouseDown(const juce::MouseEvent&) override;
  void mouseDrag(const juce::MouseEvent&) override;
+ void mouseUp(const juce::MouseEvent&) override;
 private:
  void timerCallback() override {refreshFilterButtons();repaint();}
  void updatePoint(const juce::MouseEvent&);
@@ -18,7 +19,18 @@ private:
  void refreshFilterButtons();
  void selectFilter(int);
  juce::Rectangle<int> graph, stepStrip, detailGraph, sequencerPanel, filterPanel, outputPanel;
- std::unique_ptr<juce::TextButton> copyStep, pasteStep, resetStep;
+ std::unique_ptr<juce::TextButton> copyStep, pasteStep, resetStep, undoButton, redoButton, snapButton;
+ struct ShapeEdit {int step;bool sequence;di::ShapeSequencer::Shape before,after;};
+ std::vector<ShapeEdit> undoStack, redoStack;
+ di::ShapeSequencer::Shape dragBefore{};
+ bool draggingShape=false;
+ int dragStep=0;
+ bool dragSequence=false;
+ di::ShapeSequencer::Shape captureShape(int,bool) const;
+ void applyShape(int,bool,const di::ShapeSequencer::Shape&);
+ void pushEdit(int,bool,const di::ShapeSequencer::Shape&,const di::ShapeSequencer::Shape&);
+ void undoEdit();
+ void redoEdit();
  di::ShapeSequencer::Shape clipboard{};
  bool hasClipboard=false;
  void paintShape(juce::Graphics&, juce::Rectangle<int>, int, bool);
