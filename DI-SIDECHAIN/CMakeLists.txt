@@ -12,6 +12,9 @@ target_link_libraries(DISidechain PRIVATE juce::juce_audio_utils juce::juce_dsp 
 
 include(CTest)
 if(BUILD_TESTING)
+ add_executable(di_trigger_logic_smoke Tests/TriggerLogicSmoke.cpp)
+ target_compile_features(di_trigger_logic_smoke PRIVATE cxx_std_17)
+ add_test(NAME di_trigger_logic_smoke COMMAND di_trigger_logic_smoke)
  add_executable(di_shape_sequencer_smoke Tests/ShapeSequencerSmoke.cpp)
  target_compile_features(di_shape_sequencer_smoke PRIVATE cxx_std_17)
  add_test(NAME di_shape_sequencer_smoke COMMAND di_shape_sequencer_smoke)
