@@ -9,6 +9,8 @@ class ShapeSequencer {
 public:
  static constexpr int maxSteps = 32;
  static constexpr int nodesPerStep = 8;
+ // Tempo-synced sequences follow the host transport, not incoming trigger density.
+ static constexpr bool shouldRestartOnTrigger(bool tempoSync) noexcept { return !tempoSync; }
  using Shape = std::array<float, nodesPerStep>;
  ShapeSequencer() noexcept {
    const Shape initial{{1.f, .92f, .08f, .02f, .32f, .75f, .95f, 1.f}};
