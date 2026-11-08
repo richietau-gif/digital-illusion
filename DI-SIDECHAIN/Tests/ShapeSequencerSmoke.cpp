@@ -88,6 +88,23 @@ int main() {
  check(tempoTimeline.getCurrentStep()==7,"Negative PPQ loop wrap");
  tempoTimeline.seekToStepPosition(1e12+2.75);
  check(tempoTimeline.getCurrentStep()==2,"Large PPQ timeline must wrap");
+ // Regression: seek must select the correct step and output after DAW loop jumps.
+ // Flat per-step envelopes make the expected sample independent of phase.
+ di::ShapeSequencer seekCheck;
+ seekCheck.setSteps(16);
+ for(int k=0;k<16;++k){
+  di::ShapeSequencer::Shape flatStep{};
+  flatStep.fill(static_cast<float>(k)/15.f);
+  seekCheck.setShape(k,flatStep);
+ }
+ for(double pos:{0.,0.5,1.,7.5,15.75,16.,17.25,-0.25,-16.5,1e12+2.75}){
+  const double wrapped=std::fmod(std::fmod(pos,16.)+16.,16.);
+  const int expectedStep=static_cast<int>(wrapped);
+  seekCheck.seekToStepPosition(pos);
+  check(seekCheck.getCurrentStep()==expectedStep,"DAW PPQ seek selected wrong step");
+  check(std::abs(seekCheck.render(128.)-static_cast<float>(expectedStep)/15.f)<1e-6f,
+        "DAW PPQ seek rendered wrong step envelope");
+ }
  check(!di::transportDiscontinuity(-1,0),"Unknown transport sample must not reset");
  check(!di::transportDiscontinuity(1024,1024),"Contiguous transport must not reset");
  check(!di::transportDiscontinuity(1024,1026),"Two-sample host tolerance");
