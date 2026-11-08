@@ -201,6 +201,7 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  text(g,"100%",{18,186,57,20},12,muted);
  text(g,"50%",{18,292,57,20},12,muted);
  text(g,"0%",{18,390,57,20},12,muted);
+ const auto selectedColour=selectedLane==0?orange:selectedLane==1?juce::Colour(0xff44bbff):juce::Colour(0xffc55bff);
  const bool sequenced=sequenceToggle->getToggleState();
  if(sequenced) {
   // Four successive shapes across the overview, with a live step cursor.
@@ -238,7 +239,6 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  paintPanel(g,outputPanel,"OUTPUT  /  SIDECHAIN");
  text(g,"STEPS", {35,520,100,23},14,muted);
  text(g,"LENGTH / RATE", {215,520,180,23},14,muted);
- const auto selectedColour=selectedLane==0?orange:selectedLane==1?juce::Colour(0xff44bbff):juce::Colour(0xffc55bff);
  const juce::String selectedName=selectedLane==0?"VOLUME":selectedLane==1?"FILTER":"PAN";
  text(g,selectedName+"  /  STEP "+juce::String(selectedStep+1), {463,518,230,22},14,selectedColour,true);
  paintShape(g,detailGraph,selectedStep,true);
