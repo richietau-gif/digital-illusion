@@ -11,12 +11,13 @@ public:
  void mouseDrag(const juce::MouseEvent&) override;
  void mouseUp(const juce::MouseEvent&) override;
 private:
- void timerCallback() override {refreshFilterButtons();repaint();}
+ void timerCallback() override {refreshFilterButtons();refreshFxButtons();repaint();}
  void updatePoint(const juce::MouseEvent&);
  DITheme theme;
  DISidechainProcessor& proc;
  std::array<std::unique_ptr<juce::TextButton>,4> filterButtons;
  void refreshFilterButtons();
+ void refreshFxButtons();
  void selectFilter(int);
  juce::Rectangle<int> graph, stepStrip, detailGraph, sequencerPanel, filterPanel, outputPanel;
  std::unique_ptr<juce::TextButton> copyStep, pasteStep, resetStep, undoButton, redoButton, snapButton;
@@ -58,7 +59,7 @@ private:
  std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>> ca;
  std::unique_ptr<juce::ComboBox> fxTypeBox;
  std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> fxTypeAttachment;
- std::unique_ptr<juce::ToggleButton> fxToggle, saturatorToggle;
+ std::unique_ptr<juce::TextButton> fxToggle, saturatorToggle;
  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> saturatorAttachment;
  std::unique_ptr<juce::TextButton> presetButton, shapePresetButton, sequencePrev, sequenceNext;
  juce::String presetName {"Custom"};
