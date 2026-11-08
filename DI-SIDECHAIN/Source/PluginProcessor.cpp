@@ -10,6 +10,7 @@ static float logCoshStable(float x) noexcept {
 static juce::AudioProcessorValueTreeState::ParameterLayout layoutParams(){
  std::vector<std::unique_ptr<juce::RangedAudioParameter>> p;
  auto f=[&](const char* id,const char* name,float lo,float hi,float def){p.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{id,1},name,juce::NormalisableRange<float>(lo,hi),def));};
+ f("envelopeOffset","Envelope timing offset percent",-50,50,0);
  f("depth","Depth",0,1,1); f("mix","Mix",0,1,1);f("threshold","Trigger threshold dB",-60,0,-22);f("length","Envelope milliseconds",10,2000,250);f("smooth","Smoothing milliseconds",0.1,20,2);f("low","Low cutoff",25,1500,120);f("high","High cutoff",60,18000,400);f("retrigger","Trigger holdoff milliseconds",1,250,35);
  f("midiNote","MIDI trigger note (-1 = any)",-1,127,-1);
  f("midiChannel","MIDI trigger channel (0 = any)",0,16,0);
@@ -222,6 +223,23 @@ float DISidechainProcessor::evaluateEnvelope(double t) const noexcept {
     }
     return left.y;
 }
+float DISidechainProcessor::evaluateShiftedEnvelope(double t,bool loop) const noexcept {
+    if(!std::isfinite(t))return 1.f;
+    const float offset=juce::jlimit(-50.f,50.f,
+        state.getRawParameterValue("envelopeOffset")->load(std::memory_order_relaxed));
+    if(std::abs(offset)<.0001f)return evaluateEnvelope(t); // exact legacy behavior
+    double shifted=t-(double)offset*.01;
+    if(loop){
+        shifted=std::fmod(shifted,1.0);
+        if(shifted<0.0)shifted+=1.0;
+    }else{
+        // Past either edge, hold the neutral endpoints. No circular wrap
+        // in ONE SHOT so a delayed kick cannot leak a previous cycle.
+        if(shifted<0.0)return 1.f;
+        if(shifted>=1.0)return 1.f;
+    }
+    return evaluateEnvelope(shifted);
+}
 void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::MidiBuffer& midi){
  juce::ScopedNoDenormals noDenormals;
  auto main=getBusBuffer(buffer,true,0);int n=main.getNumSamples();if(n<=0||main.getNumChannels()<2||!std::isfinite(sr)||sr<=0)return;
@@ -329,7 +347,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  float env=1.f;
  if(playbackMode==0){
   // ONE SHOT: every accepted MIDI/audio event starts the envelope from zero.
-  env=phase>=1?1.f:evaluateEnvelope(phase);
+  env=phase>=1?1.f:evaluateShiftedEnvelope(phase,false);
   phase=juce::jmin(1.0,phase+step);
  }else if(hostRunning){
   // LOOP: use the host's musical position when available, so each beat is
@@ -341,7 +359,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
    if(cycle<0)cycle+=beatsPerCycle;
    phase=cycle/beatsPerCycle;
   }
-  env=evaluateEnvelope(phase);
+  env=evaluateShiftedEnvelope(phase,true);
   phase=hostPpqAvailable&&get("sync")>.5f ? phase : std::fmod(phase+step,1.0);
  }else{
   phase=1;
