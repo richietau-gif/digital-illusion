@@ -418,12 +418,53 @@ void DISidechainEditor::applyShapePreset(int index) {
 void DISidechainEditor::showPresetMenu() {
  juce::PopupMenu menu;const juce::StringArray names{"Classic Duck","Deep Pump","Sidechain 4/4","Breakbeat Pump","Pump Rise"};
  for(int i=0;i<names.size();++i)menu.addItem(i+1,names[i]);
+ menu.addSeparator();menu.addItem(100,"Save user preset...");menu.addItem(101,"Load user preset...");
  juce::Component::SafePointer<DISidechainEditor> safe(this);
- menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(presetButton.get()),[safe](int choice){if(safe&&choice>0)safe->applyFactoryPreset(choice-1);});
+ menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(presetButton.get()),[safe](int choice){
+  if(!safe)return;
+  if(choice==100)safe->saveUserPreset();
+  else if(choice==101)safe->loadUserPreset();
+  else if(choice>0)safe->applyFactoryPreset(choice-1);
+ });
 }
 void DISidechainEditor::showShapeMenu() {
  juce::PopupMenu menu;const juce::StringArray names{"Classic Duck","Pump Rise","Pump Fall","Gate","Wave","Linear Rise"};
  for(int i=0;i<names.size();++i)menu.addItem(i+1,names[i]);
  juce::Component::SafePointer<DISidechainEditor> safe(this);
  menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(shapePresetButton.get()),[safe](int choice){if(safe&&choice>0)safe->applyShapePreset(choice-1);});
+}
+
+void DISidechainEditor::saveUserPreset() {
+ const auto destination=juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("DI-Sidechain.dipreset");
+ presetChooser=std::make_unique<juce::FileChooser>("Save DI SIDECHAIN preset",destination,"*.dipreset");
+ juce::Component::SafePointer<DISidechainEditor> safe(this);
+ presetChooser->launchAsync(juce::FileBrowserComponent::saveMode|juce::FileBrowserComponent::canSelectFiles,
+  [safe](const juce::FileChooser& chooser){
+   if(!safe)return;
+   const auto file=chooser.getResult();
+   if(file==juce::File())return;
+   juce::MemoryBlock data;safe->proc.getStateInformation(data);
+   if(file.replaceWithData(data.getData(),data.getSize())) {
+    safe->presetName=file.getFileNameWithoutExtension();
+    safe->presetButton->setButtonText("PRESETS  -  "+safe->presetName);
+   }
+  });
+}
+void DISidechainEditor::loadUserPreset() {
+ const auto folder=juce::File::getSpecialLocation(juce::File::userDocumentsDirectory);
+ presetChooser=std::make_unique<juce::FileChooser>("Load DI SIDECHAIN preset",folder,"*.dipreset");
+ juce::Component::SafePointer<DISidechainEditor> safe(this);
+ presetChooser->launchAsync(juce::FileBrowserComponent::openMode|juce::FileBrowserComponent::canSelectFiles,
+  [safe](const juce::FileChooser& chooser){
+   if(!safe)return;
+   const auto file=chooser.getResult();
+   if(file==juce::File())return;
+   juce::MemoryBlock data;
+   if(file.loadFileAsData(data) && data.getSize()>0){
+    safe->proc.setStateInformation(data.getData(),(int)data.getSize());
+    safe->presetName=file.getFileNameWithoutExtension();
+    safe->presetButton->setButtonText("PRESETS  -  "+safe->presetName);
+    safe->repaint();
+   }
+  });
 }
