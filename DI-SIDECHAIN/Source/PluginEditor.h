@@ -11,7 +11,9 @@ public:
  void mouseDrag(const juce::MouseEvent&) override;
  void mouseUp(const juce::MouseEvent&) override;
 private:
- void timerCallback() override {refreshFilterButtons();refreshFxButtons();repaint();}
+ void timerCallback() override {refreshFilterButtons();refreshFxButtons();
+  if(sequenceCount)selectedStep=juce::jlimit(0,juce::jlimit(1,16,(int)sequenceCount->getValue())-1,selectedStep);
+  repaint();}
  void updatePoint(const juce::MouseEvent&);
  DITheme theme;
  DISidechainProcessor& proc;
