@@ -267,88 +267,161 @@ void DISidechainEditor::paintShape(juce::Graphics& g,juce::Rectangle<int> r,int 
  }
 }
 void DISidechainEditor::paint(juce::Graphics& g) {
- g.fillAll(bg);
- text(g,"~", {18,12,55,45},34,juce::Colour(0xff21d6e9),true);
- text(g,"DI SIDECHAIN", {76,8,325,46},33,juce::Colours::white,true);
- text(g,"4.0", {398,11,70,43},29,orange,true);
- text(g,"DIGITAL ILLUSION", {78,49,340,19},12,muted);
- g.setColour(edge);g.drawHorizontalLine(77,0.f,(float)getWidth());
- auto nav=juce::Rectangle<int>(12,90,getWidth()-24,64);
- g.setColour(panel);g.fillRoundedRectangle(nav.toFloat(),12.f);
- text(g,"SIDECHAIN", {42,105,160,34},19,muted,true);
- g.setColour(sequenceToggle->getToggleState()?green:edge);
- g.fillRoundedRectangle(juce::Rectangle<float>(207,98,185,47),9.f);
- text(g,"SEQUENCER", {233,105,153,31},19,sequenceToggle->getToggleState()?bg:muted,true);
- text(g,"STEPS", {414,99,80,17},12,muted);
- text(g,"LENGTH / RATE", {578,99,135,17},12,muted);
- text(g,"FX", {1015,104,35,32},15,juce::Colour(0xffffb84d),true);
- text(g,"SATURATOR", {1103,104,110,32},15,juce::Colour(0xffffb84d),true);
- text(g,"DRIVE dB", {1090,96,110,18},11,muted);
- text(g,"WET", {1284,96,70,18},11,muted);
- text(g,"DI SIDECHAIN 4.1", {1280,52,240,22},13,muted);
- auto graphPanel=juce::Rectangle<int>(12,165,getWidth()-24,282);
- g.setColour(panel);g.fillRoundedRectangle(graphPanel.toFloat(),12.f);
- g.setColour(edge);g.drawRoundedRectangle(graphPanel.toFloat(),12.f,1.f);
- text(g,"100%",{18,186,57,20},12,muted);
- text(g,"50%",{18,292,57,20},12,muted);
- text(g,"0%",{18,390,57,20},12,muted);
- const auto selectedColour=selectedLane==0?orange:selectedLane==1?juce::Colour(0xff44bbff):juce::Colour(0xffc55bff);
+ g.fillAll(juce::Colour(0xff06121b));
+ g.addTransform(juce::AffineTransform::scale(uiScale));
+ const auto white=juce::Colour(0xffecf8ff);
+ const auto faint=juce::Colour(0xff9bb6c7);
+ const auto cyan=DITheme::cyan();
+ const auto lime=DITheme::lime();
+ const auto orange=DITheme::orange();
+ // Polished header with an original waveform logo, entirely vector-rendered.
+ juce::ColourGradient top(juce::Colour(0xff123448),0.f,0.f,juce::Colour(0xff06111a),0.f,102.f,false);
+ g.setGradientFill(top);g.fillRect(0,0,designWidth,101);
+ g.setColour(cyan.withAlpha(.65f));g.drawHorizontalLine(100,12.f,1524.f);
+ juce::Path logo;
+ for(int i=0;i<=75;++i) {
+  const float t=i/75.f;
+  const float amp=std::pow(juce::jmax(0.f,1.f-std::abs(t-.5f)*2.f),1.6f)*16.f;
+  const float x=27.f+t*70.f,y=58.f-std::sin(t*juce::MathConstants<float>::twoPi*4.f)*amp;
+  if(i==0)logo.startNewSubPath(x,y);else logo.lineTo(x,y);
+ }
+ g.setColour(cyan.withAlpha(.23f));g.strokePath(logo,juce::PathStrokeType(6.f));
+ g.setColour(cyan);g.strokePath(logo,juce::PathStrokeType(2.5f));
+ text(g,"DI SIDECHAIN", {117,30,280,39},32,white,true);
+ text(g,"4.1",{365,30,70,39},29,orange,true);
+ text(g,"D I G I T A L   I L L U S I O N",{120,72,310,16},12,faint);
+ g.setColour(juce::Colour(0xff2d5668));g.drawVerticalLine(435,30.f,80.f);
+ text(g,"PRESET",{450,43,80,21},12,faint,true);
+ text(g,"SETUP",{1350,44,75,23},14,cyan,true);
+ // Toolbar / sequencer: dark glass and green active states.
+ const auto nav=juce::Rectangle<float>(12,108,1512,62);
+ g.setColour(juce::Colour(0xff102a37));g.fillRoundedRectangle(nav,11.f);
+ g.setColour(juce::Colour(0xff24546a));g.drawRoundedRectangle(nav,11.f,1.f);
+ const bool enabled=sequenceToggle&&sequenceToggle->getToggleState();
+ g.setColour(enabled?juce::Colour(0xff0a2533):lime());
+ g.fillRoundedRectangle(juce::Rectangle<float>(24,117,153,43),8.f);
+ text(g,"SIDECHAIN",{40,122,136,30},16,enabled?white:DITheme::dark(),true);
+ g.setColour(enabled?lime():juce::Colour(0xff102d3c));
+ g.fillRoundedRectangle(juce::Rectangle<float>(183,117,155,43),8.f);
+ if(enabled){g.setColour(lime().withAlpha(.25f));g.drawRoundedRectangle(juce::Rectangle<float>(184,118,153,41),8.f,3.f);}
+ text(g,"SEQUENCER",{199,122,137,30},16,enabled?DITheme::dark():white,true);
+ text(g,"STEPS",{503,110,70,14},11,faint);
+ text(g,"LENGTH / RATE",{600,110,135,14},11,faint);
+ text(g,"FX",{998,123,37,31},15,white,true);
+ text(g,"SATURATOR",{1105,123,105,31},15,white,true);
+ text(g,"DRIVE",{1283,110,72,14},11,faint);
+ text(g,"WET",{1415,110,60,14},11,faint);
+ // Shape overview.
+ paintPanel(g,{12,177,1512,269},"");
+ text(g,"100%",{19,198,58,18},12,white);
+ text(g,"50%",{25,270,52,18},12,white);
+ text(g,"0%",{31,352,46,18},12,white);
  const bool sequenced=sequenceToggle->getToggleState();
+ const int count=juce::jlimit(1,16,(int)sequenceCount->getValue());
+ const int first=(selectedStep/4)*4;
  if(sequenced) {
-  // Four successive shapes across the overview, with a live step cursor.
-  const int total=juce::jlimit(1,16,(int)sequenceCount->getValue());
-  const int first=(selectedStep/4)*4;
   for(int k=0;k<4;++k) {
-   auto cell=juce::Rectangle<int>(graph.getX()+k*graph.getWidth()/4,graph.getY(),graph.getWidth()/4,graph.getHeight());
-   paintShape(g,cell,(first+k)%total,false);
-   if((first+k)%total==proc.activeSequenceStep.load(std::memory_order_relaxed)){
-    g.setColour(green);g.fillRect(cell.getX(),cell.getY(),3,cell.getHeight());
+   auto r=juce::Rectangle<int>(graph.getX()+k*graph.getWidth()/4,graph.getY(),graph.getWidth()/4,graph.getHeight());
+   paintShape(g,r,(first+k)%count,false);
+   if((first+k)%count==proc.activeSequenceStep.load(std::memory_order_relaxed)){
+    g.setColour(lime);g.fillRect(r.getX(),r.getY(),3,r.getHeight());
    }
   }
  } else paintShape(g,graph,selectedStep,false);
- const int count=juce::jlimit(1,16,(int)sequenceCount->getValue());
+ const auto laneColour=selectedLane==0?orange:selectedLane==1?cyan:juce::Colour(0xffd36afb);
  const int playing=proc.activeSequenceStep.load(std::memory_order_relaxed);
+ // One visible row, never more than sixteen steps.
  for(int i=0;i<count;++i){
-  const float w=(float)stepStrip.getWidth()/count;
-  auto r=juce::Rectangle<float>(stepStrip.getX()+i*w,stepStrip.getY(),juce::jmax(2.f,w-3),stepStrip.getHeight());
-  g.setColour(i==selectedStep?orange.withAlpha(.65f):i==playing&&sequenceToggle->getToggleState()?green.withAlpha(.7f):juce::Colour(0xff25303b));
-  g.fillRoundedRectangle(r,5.f);
-  if(w>=25){text(g,juce::String(i+1),r.toNearestInt().reduced(4,2).withHeight(17),12,juce::Colours::white);}
-  if(w>=23){
-   juce::Path mini;
-   for(int j=0;j<8;++j){float x=r.getX()+3+(r.getWidth()-6)*j/7.f;
-    const float node=selectedLane==0?proc.getSequencePoint(i,j):proc.getModulationPoint(selectedLane-1,i,j);
-    float y=r.getBottom()-4-node*(r.getHeight()-23);
-    if(j==0)mini.startNewSubPath(x,y);else mini.lineTo(x,y);}
-   g.setColour(selectedColour);g.strokePath(mini,juce::PathStrokeType(1.5f));
+  const float width=(float)stepStrip.getWidth()/count;
+  const auto r=juce::Rectangle<float>(stepStrip.getX()+i*width+1,stepStrip.getY(),width-3,stepStrip.getHeight());
+  const bool selected=i==selectedStep;
+  juce::ColourGradient tile(selected?juce::Colour(0xffa24d0d):juce::Colour(0xff153447),r.getX(),r.getY(),
+                            selected?juce::Colour(0xff3b230f):juce::Colour(0xff091b27),r.getX(),r.getBottom(),false);
+  g.setGradientFill(tile);g.fillRoundedRectangle(r,6.f);
+  g.setColour(selected?orange: i==playing&&sequenced?lime:juce::Colour(0xff28546a));
+  g.drawRoundedRectangle(r,6.f,selected?2.f:1.f);
+  text(g,juce::String(i+1),r.toNearestInt().reduced(5,3).withHeight(16),12,white,true);
+  juce::Path miniature;
+  for(int node=0;node<8;++node) {
+   const float value=selectedLane==0?proc.getSequencePoint(i,node):proc.getModulationPoint(selectedLane-1,i,node);
+   const float px=r.getX()+5.f+(r.getWidth()-10.f)*node/7.f;
+   const float py=r.getBottom()-5.f-value*(r.getHeight()-25.f);
+   if(node==0)miniature.startNewSubPath(px,py);else miniature.lineTo(px,py);
   }
+  g.setColour(laneColour);g.strokePath(miniature,juce::PathStrokeType(1.8f));
  }
- paintPanel(g,sequencerPanel,"STEP NAVIGATION / WORKFLOW");
- paintPanel(g,juce::Rectangle<int>(442,460,752,243),"STEP EDIT  /  ENVELOPE & SHAPE");
- paintPanel(g,juce::Rectangle<int>(1206,460,318,243),"MODULATION LANES");
- paintPanel(g,filterPanel,"FILTER  /  ALWAYS VISIBLE");
- paintPanel(g,outputPanel,"OUTPUT  /  SIDECHAIN");
- text(g,"SELECT STEP", {35,520,160,23},14,muted);
- text(g,juce::String(selectedStep+1)+" / 16", {112,559,240,38},25,juce::Colours::white,true);
- text(g,"Choose a step above or use the arrows.", {35,607,382,30},13,muted);
- text(g,"Select VOLUME / FILTER / PAN, then drag nodes.", {35,642,382,30},13,muted);
- const juce::String selectedName=selectedLane==0?"VOLUME":selectedLane==1?"FILTER":"PAN";
- text(g,selectedName+"  /  STEP "+juce::String(selectedStep+1), {463,518,230,22},14,selectedColour,true);
+ // Step editor and modulation lanes: lanes are a single-click selection.
+ paintPanel(g,sequencerPanel,"STEP EDIT");
+ paintPanel(g,{897,456,305,240},"MODULATION LANES");
+ paintPanel(g,{1212,456,312,240},"LANE SETTINGS");
+ text(g,"STEP",{33,503,82,21},12,faint);
+ text(g,juce::String(selectedStep+1)+" / "+juce::String(count),{90,532,105,35},25,white,true);
+ text(g,"CURVE",{32,591,84,19},12,faint);
+ text(g,"Drag a node to change the step shape.",{29,645,192,28},12,faint);
+ const juce::String laneName=selectedLane==0?"VOLUME":selectedLane==1?"FILTER":"PAN";
+ text(g,laneName+"   /   STEP "+juce::String(selectedStep+1),{231,501,265,22},14,laneColour,true);
  paintShape(g,detailGraph,selectedStep,true);
- text(g,"Drag vertically to edit nearest node. SNAP rounds to 1/16.", {464,664,480,23},13,muted);
- text(g,"OFFSET +/-  (VOLUME)", {970,665,175,23},12,orange,true);
- text(g,"LANE EDITOR", {1225,505,230,18},12,muted);
- text(g,"SEQUENCED", {1370,523,130,24},14,sequenceToggle->getToggleState()?green:muted,true);
- text(g,"FILTER - DUCK DEPTH", {1225,566,280,23},14,juce::Colour(0xff44bbff));
- text(g,"PAN - BIPOLAR", {1225,623,280,23},14,juce::Colour(0xffc55bff));
- text(g,"FILTER MODE", {35,763,170,20},13,muted);
- text(g,"TRIGGER SOURCE", {290,763,180,20},13,muted);
- text(g,"BEAT DIVISION", {540,763,180,20},13,muted);
- text(g,"LIVE DSP CONTROLS  /  ACTIVE", {35,907,400,20},12,green);
- text(g,"OUTPUT CONTROLS", {1225,764,260,23},14,muted);
- const float peak=juce::jlimit(0.f,1.f,proc.meter.load(std::memory_order_relaxed));
- g.setColour(edge);g.fillRoundedRectangle(juce::Rectangle<float>(1491,765,12,126),4.f);
- g.setColour(green);g.fillRoundedRectangle(juce::Rectangle<float>(1491,891-peak*126,12,peak*126),4.f);
+ text(g,"Drag nodes to edit. Toggle SNAP for 1/16 increments.",{232,667,496,19},11,faint);
+ // Six interactive shape palette buttons (mouseDown hits corresponding rectangles).
+ for(int i=0;i<6;++i){
+  const int x=734+(i%3)*48,y=552+(i/3)*48;
+  auto rr=juce::Rectangle<float>((float)x,(float)y,42.f,40.f);
+  g.setColour(juce::Colour(0xff122c3b));g.fillRoundedRectangle(rr,6.f);
+  g.setColour(juce::Colour(0xff35667b));g.drawRoundedRectangle(rr,6.f,1.f);
+  juce::Path shape;
+  for(int j=0;j<=24;++j){
+   const float t=j/24.f;
+   const float v=i==0?t*t*(3.f-2.f*t):i==1?t:i==2?std::sqrt(t):i==3?(t>.5f?1.f:0.f):i==4?1.f-t:std::abs(std::sin(t*juce::MathConstants<float>::pi));
+   if(j==0)shape.startNewSubPath(x+7.f,y+32.f-24.f*v);
+   else shape.lineTo(x+7.f+28.f*t,y+32.f-24.f*v);
+  }
+  g.setColour(i==0?orange:cyan);g.strokePath(shape,juce::PathStrokeType(1.9f));
+ }
+ text(g,"CURVE SHAPES",{737,654,142,17},11,faint);
+ for(int i=0;i<3;++i){
+  const int y=505+i*60;
+  auto r=juce::Rectangle<float>(913.f,(float)y,272.f,50.f);
+  g.setColour(juce::Colour(0xff0b2030));g.fillRoundedRectangle(r,7.f);
+  g.setColour(juce::Colour(0xff295369));g.drawRoundedRectangle(r,7.f,1.f);
+  const auto colour=i==0?lime():i==1?cyan:juce::Colour(0xffd66bfa);
+  g.setColour(selectedLane==i?colour:colour.withAlpha(.5f));
+  g.drawRoundedRectangle(juce::Rectangle<float>(917.f,(float)y+5.f,100.f,40.f),7.f,selectedLane==i?2.f:1.f);
+  // Native JUCE button overlays the left section, preserving keyboard access.
+  juce::Path wave;
+  for(int j=0;j<=48;++j){
+   const float t=j/48.f;
+   const float px=1029.f+120.f*t;
+   const float py=y+25.f-11.f*std::sin(t*juce::MathConstants<float>::twoPi*(i+1));
+   if(j==0)wave.startNewSubPath(px,py);else wave.lineTo(px,py);
+  }
+  g.setColour(i==0?orange:i==1?cyan:juce::Colour(0xffd66bfa));g.strokePath(wave,juce::PathStrokeType(2.f));
+  text(g,"ON",{1153,y+13,30,24},12,lime(),true);
+ }
+ text(g,"LANE: "+laneName,{1230,504,254,20},13,white,true);
+ text(g,"OFFSET",{1231,543,95,20},12,faint);
+ text(g,"FILTER DEPTH",{1231,592,110,20},12,cyan);
+ text(g,"PAN DEPTH",{1231,640,110,20},12,juce::Colour(0xffd66bfa));
+ // Always visible frequency controls and output meters.
+ paintPanel(g,filterPanel,"FILTER");
+ paintPanel(g,outputPanel,"OUTPUT / SIDECHAIN");
+ text(g,"MODE",{30,747,70,18},11,faint);
+ text(g,"TRIGGER SOURCE",{375,747,170,18},11,faint);
+ text(g,"BEAT DIVISION",{594,747,150,18},11,faint);
+ text(g,"LOW / HIGH FREQUENCY RESPONSE",{756,745,330,18},11,faint);
+ const char* knobs[]={"SENSITIVITY","LENGTH","SMOOTH","LOW HZ","HIGH HZ","RETRIGGER"};
+ for(int i=0;i<6;++i)text(g,knobs[i],{29+i*116,866,112,19},11,faint);
+ paintFrequencyResponse(g,{755,790,348,106});
+ text(g,"DEPTH",{1170,766,110,20},13,white,true);
+ text(g,"MIX",{1320,766,110,20},13,white,true);
+ text(g,"OUT",{1459,752,57,21},13,white,true);
+ const float level=juce::jlimit(0.f,1.f,proc.meter.load(std::memory_order_relaxed));
+ for(int ch=0;ch<2;++ch){
+  auto meter=juce::Rectangle<float>(1459.f+ch*17.f,786.f,11.f,109.f);
+  g.setColour(juce::Colour(0xff061016));g.fillRect(meter);
+  g.setColour(cyan);g.fillRect(meter.removeFromBottom(level*meter.getHeight()));
+ }
+ const juce::StringArray db{"0","-6","-12","-18","-24","-36"};
+ for(int i=0;i<db.size();++i)text(g,db[i],{1496,781+i*20,39,16},10,faint);
 }
 void DISidechainEditor::resized() {
  graph={77,185,getWidth()-100,184};
