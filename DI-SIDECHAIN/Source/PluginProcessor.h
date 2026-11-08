@@ -28,6 +28,9 @@ public:
  std::atomic<float> meter {0};
  std::atomic<int> activeSequenceStep {0};
  std::array<std::array<std::atomic<float>,8>,32> sequencePoints;
+ std::array<std::array<std::array<std::atomic<float>,8>,32>,2> modulationPoints;
+ void setModulationPoint(int lane,int step,int node,float value) noexcept;
+ float getModulationPoint(int lane,int step,int node) const noexcept;
  void setSequencePoint(int step,int node,float value) noexcept;
  float getSequencePoint(int step,int node) const noexcept;
 private:
@@ -35,6 +38,7 @@ private:
  struct FilterChannel {juce::dsp::LinkwitzRileyFilter<float> low, high;};
  std::array<FilterChannel,2> filters;
  di::ShapeSequencer sequencer;
+ std::array<di::ShapeSequencer,2> modulationSequencers;
  double sr=44100, phase=1, envelopeLength=0.25, detector=0;
  int refractory=0; bool armed=true; float smoothGain=1;
  float curve(double) const;
