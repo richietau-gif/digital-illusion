@@ -11,6 +11,10 @@ static juce::AudioProcessorValueTreeState::ParameterLayout layoutParams(){
  std::vector<std::unique_ptr<juce::RangedAudioParameter>> p;
  auto f=[&](const char* id,const char* name,float lo,float hi,float def){p.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{id,1},name,juce::NormalisableRange<float>(lo,hi),def));};
  f("envelopeOffset","Envelope timing offset percent",-50,50,0);
+ p.push_back(std::make_unique<juce::AudioParameterBool>(
+     juce::ParameterID{"filterEnvelopeLink",1},"Link filter envelope to volume",true));
+ f("filterEnvelopeMorph","Filter curve A/B morph",0,1,0);
+ f("filterEnvelopeFollower","Audio envelope follower modulation",-1,1,0);
  f("depth","Depth",0,1,1); f("mix","Mix",0,1,1);f("threshold","Trigger threshold dB",-60,0,-22);f("length","Envelope milliseconds",10,2000,250);f("smooth","Smoothing milliseconds",0.1,20,2);f("low","Low cutoff",25,1500,120);f("high","High cutoff",60,18000,400);f("retrigger","Trigger holdoff milliseconds",1,250,35);
  f("midiNote","MIDI trigger note (-1 = any)",-1,127,-1);
  f("midiChannel","MIDI trigger channel (0 = any)",0,16,0);
@@ -44,6 +48,10 @@ static juce::AudioProcessorValueTreeState::ParameterLayout layoutParams(){
 juce::AudioProcessorValueTreeState::ParameterLayout DISidechainProcessor::makeParams(){return layoutParams();}
 DISidechainProcessor::DISidechainProcessor():AudioProcessor(BusesProperties().withInput("Input",juce::AudioChannelSet::stereo(),true).withInput("Sidechain",juce::AudioChannelSet::stereo(),false).withOutput("Output",juce::AudioChannelSet::stereo(),true)),state(*this,nullptr,"PARAMS",makeParams()){
  const float defaults[8]={1,0.92f,0.08f,0.02f,0.32f,0.75f,0.95f,1};for(int i=0;i<8;++i)points[i]=defaults[i];
+ for(int i=0;i<filterEnvelopePoints;++i){
+     filterEnvelopeBanks[0][i].store(defaults[i],std::memory_order_relaxed);
+     filterEnvelopeBanks[1][i].store(i%2==0?1.f:.04f,std::memory_order_relaxed);
+ }
 }
 bool DISidechainProcessor::isBusesLayoutSupported(const BusesLayout& b) const {return b.getMainInputChannelSet()==juce::AudioChannelSet::stereo()&&b.getMainOutputChannelSet()==juce::AudioChannelSet::stereo()&&(b.inputBuses.size()<2||b.inputBuses[1].isDisabled()||b.inputBuses[1]==juce::AudioChannelSet::mono()||b.inputBuses[1]==juce::AudioChannelSet::stereo());}
 void DISidechainProcessor::prepareToPlay(double sampleRate,int maxBlock){
@@ -53,6 +61,7 @@ void DISidechainProcessor::prepareToPlay(double sampleRate,int maxBlock){
   for(auto& stage:channel)stage={};
  outputFilterBlend=0.f;smoothedFilterQ=.70710678f;smoothedFilterDrive=0.f;
  drivePreviousInput.fill(0.f);
+ followerLevel=0.f;visualFollowerLevel.store(0.f,std::memory_order_relaxed);
  visualFilterCutoffHz.store(20000.f);
  juce::dsp::ProcessSpec spec{sampleRate,(juce::uint32)juce::jmax(1,maxBlock),1};
  for(auto& c:filters){
@@ -240,6 +249,50 @@ float DISidechainProcessor::evaluateShiftedEnvelope(double t,bool loop) const no
     }
     return evaluateEnvelope(shifted);
 }
+float DISidechainProcessor::getFilterEnvelopePoint(int bank,int index) const noexcept {
+    if(bank<0||bank>=2||index<0||index>=filterEnvelopePoints)return 1.f;
+    return filterEnvelopeBanks[(size_t)bank][(size_t)index].load(std::memory_order_relaxed);
+}
+void DISidechainProcessor::setFilterEnvelopePoint(int bank,int index,float y) noexcept {
+    if(bank<0||bank>=2||index<0||index>=filterEnvelopePoints||!std::isfinite(y))return;
+    filterEnvelopeBanks[(size_t)bank][(size_t)index].store(
+        juce::jlimit(0.f,1.f,y),std::memory_order_relaxed);
+}
+float DISidechainProcessor::evaluateFilterBank(int bank,double t,bool loop) const noexcept {
+    if(!std::isfinite(t))return 1.f;
+    const double offset=(double)juce::jlimit(-50.f,50.f,
+       state.getRawParameterValue("envelopeOffset")->load(std::memory_order_relaxed))*.01;
+    t-=offset;
+    if(loop){
+        t=std::fmod(t,1.0);
+        if(t<0.0)t+=1.0;
+    }else if(t<0.0||t>=1.0){
+        return 1.f;
+    }
+    t=juce::jlimit(0.0,1.0,t);
+    const double position=t*(filterEnvelopePoints-1);
+    const int i=juce::jmin(filterEnvelopePoints-2,(int)position);
+    float u=(float)(position-i);
+    u=u*u*(3.f-2.f*u);
+    const float left=getFilterEnvelopePoint(bank,i),right=getFilterEnvelopePoint(bank,i+1);
+    return juce::jlimit(0.f,1.f,left+(right-left)*u);
+}
+float DISidechainProcessor::evaluateFilterEnvelope(double t,bool loop) const noexcept {
+    if(state.getRawParameterValue("filterEnvelopeLink")->load(std::memory_order_relaxed)>.5f)
+        return evaluateShiftedEnvelope(t,loop);
+    const float morph=juce::jlimit(0.f,1.f,
+        state.getRawParameterValue("filterEnvelopeMorph")->load(std::memory_order_relaxed));
+    const float a=evaluateFilterBank(0,t,loop),b=evaluateFilterBank(1,t,loop);
+    return a+(b-a)*morph;
+}
+void DISidechainProcessor::copyVolumeShapeToFilterBanks() noexcept {
+    // On unlink, preserve the sound by sampling the volume curve.
+    for(int i=0;i<filterEnvelopePoints;++i){
+        const float sample=evaluateEnvelope((double)i/(filterEnvelopePoints-1));
+        filterEnvelopeBanks[0][i].store(sample,std::memory_order_relaxed);
+        filterEnvelopeBanks[1][i].store(sample,std::memory_order_relaxed);
+    }
+}
 void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::MidiBuffer& midi){
  juce::ScopedNoDenormals noDenormals;
  auto main=getBusBuffer(buffer,true,0);int n=main.getNumSamples();if(n<=0||main.getNumChannels()<2||!std::isfinite(sr)||sr<=0)return;
@@ -265,6 +318,9 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  const float targetFilterQ=juce::jlimit(.5f,12.f,get("outputFilterResonance"));
  const float targetFilterDrive=juce::jlimit(0.f,1.f,get("outputFilterDrive"));
  const float filterAmount=juce::jlimit(0.f,1.f,get("outputFilterAmount"));
+ const float followerAmount=juce::jlimit(-1.f,1.f,get("filterEnvelopeFollower"));
+ const double followerAttack=std::exp(-1.0/(sr*.010));
+ const double followerRelease=std::exp(-1.0/(sr*.080));
  const float cutoffMin=juce::jlimit(20.f,(float)(sr*.45),get("outputFilterMin"));
  const float cutoffMax=juce::jlimit(cutoffMin,(float)(sr*.45),
                                     juce::jmax(cutoffMin,get("outputFilterMax")));
@@ -345,8 +401,10 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  if(refractory>0)--refractory;
  if(fire){phase=0;refractory=holdoff;triggerSequence.fetch_add(1,std::memory_order_relaxed);}
  float env=1.f;
+ double filterPhase=phase;
  if(playbackMode==0){
   // ONE SHOT: every accepted MIDI/audio event starts the envelope from zero.
+  filterPhase=phase;
   env=phase>=1?1.f:evaluateShiftedEnvelope(phase,false);
   phase=juce::jmin(1.0,phase+step);
  }else if(hostRunning){
@@ -359,16 +417,32 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
    if(cycle<0)cycle+=beatsPerCycle;
    phase=cycle/beatsPerCycle;
   }
+  filterPhase=phase;
   env=evaluateShiftedEnvelope(phase,true);
   phase=hostPpqAvailable&&get("sync")>.5f ? phase : std::fmod(phase+step,1.0);
  }else{
   phase=1;
+  filterPhase=1;
   env=1.f;
  }
  float target=1-depth*(1-env);smoothGain=coeff*smoothGain+(1-coeff)*target;
- // Envelope 0 => minimum cutoff; envelope 1 => maximum cutoff.
- // Amount 0 makes the cutoff static at maximum; independent of volume depth.
- const float shaped=1.f-filterAmount*(1.f-juce::jlimit(0.f,1.f,env));
+ // Filter has a separate A/B curve when unlinked from volume ducking.
+ // Audio follower can additionally modulate cutoff with a signed amount.
+ // It reads external sidechain when connected, otherwise the program input.
+ float detectorSample=std::abs(inputMono);
+ if(hasSide&&side.getNumSamples()>=n){
+    detectorSample=0.f;
+    for(int channel=0;channel<side.getNumChannels();++channel)
+       detectorSample=juce::jmax(detectorSample,std::abs(side.getSample(channel,i)));
+ }
+ const double followCoeff=detectorSample>=followerLevel?followerAttack:followerRelease;
+ followerLevel=(float)(followCoeff*followerLevel+(1.-followCoeff)*detectorSample);
+ if(i==n-1)visualFollowerLevel.store(followerLevel,std::memory_order_relaxed);
+ const float filterEnv=filterPhase>=1.0?1.f:
+     evaluateFilterEnvelope(filterPhase,playbackMode==1);
+ const float followerMod=followerAmount*(juce::jlimit(0.f,1.f,followerLevel*2.f)-.5f);
+ const float shaped=1.f-filterAmount*(1.f-
+       juce::jlimit(0.f,1.f,filterEnv+followerMod));
  const float cutoff=cutoffMin*std::exp(filterLogRange*shaped);
  // Topology-preserving bilinear transform coefficients.
  // 0.45 * sample rate prevents tan(pi/2) singularity near Nyquist.
@@ -463,6 +537,10 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
 void DISidechainProcessor::getStateInformation(juce::MemoryBlock& dest){
     auto tree=state.copyState();
     for(int i=0;i<8;++i)tree.setProperty("point"+juce::String(i),points[i].load(),nullptr);
+    for(int bank=0;bank<2;++bank)
+      for(int i=0;i<filterEnvelopePoints;++i)
+        tree.setProperty("filterEnv"+juce::String(bank)+"_"+juce::String(i),
+                         getFilterEnvelopePoint(bank,i),nullptr);
     const int count=activeNodeCount.load(std::memory_order_acquire);
     if(count>=2){
         tree.setProperty("envelopeVersion",2,nullptr);
@@ -503,6 +581,14 @@ void DISidechainProcessor::setStateInformation(const void* data,int bytes){
                 }
                 if(valid)activeNodeCount.store(count,std::memory_order_release);
             }
+            for(int bank=0;bank<2;++bank)
+              for(int i=0;i<filterEnvelopePoints;++i){
+                const auto key="filterEnv"+juce::String(bank)+"_"+juce::String(i);
+                if(tree.hasProperty(key)){
+                    const float v=(float)tree.getProperty(key);
+                    if(std::isfinite(v))setFilterEnvelopePoint(bank,i,v);
+                }
+              }
             state.replaceState(tree);
         }
     }
