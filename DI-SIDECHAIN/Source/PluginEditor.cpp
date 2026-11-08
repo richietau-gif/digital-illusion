@@ -77,7 +77,7 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  const char* laneNames[]={"VOLUME","FILTER","PAN"};
  for(int i=0;i<3;++i){
   laneTabs[i]=std::make_unique<juce::TextButton>(laneNames[i]);
-  laneTabs[i]->onClick=[this,i]{if(i>0&&!sequenceToggle->getToggleState())sequenceToggle->setToggleState(true,juce::sendNotificationSync);selectedLane=i;for(int j=0;j<3;++j)laneTabs[j]->setToggleState(j==selectedLane,juce::dontSendNotification);repaint();};
+  laneTabs[i]->onClick=[this,i]{if(i>0&&!sequenceToggle->getToggleState())sequenceToggle->setToggleState(true,juce::sendNotificationSync);selectedLane=i;if(shapeOffset)shapeOffset->setEnabled(selectedLane==0);for(int j=0;j<3;++j)laneTabs[j]->setToggleState(j==selectedLane,juce::dontSendNotification);repaint();};
   addAndMakeVisible(*laneTabs[i]);
  }
  const char* laneIds[]={"filterMod","panMod"};
@@ -475,7 +475,7 @@ void DISidechainEditor::paint(juce::Graphics& g) {
   text(g,"EDIT",{1150,y+13,41,24},11,faint,true);
  }
  text(g,"LANE: "+laneName,{1230,504,254,20},13,white,true);
- text(g,"OFFSET",{1231,543,95,20},12,faint);
+ text(g,"VOLUME OFFSET",{1226,543,110,20},11,selectedLane==0?faint:faint.withAlpha(.55f));
  text(g,"FILTER DEPTH",{1231,592,110,20},12,cyan);
  text(g,"PAN DEPTH",{1231,640,110,20},12,juce::Colour(0xffd66bfa));
  // Always visible frequency controls and output meters.
@@ -486,7 +486,7 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  text(g,"BEAT DIVISION",{594,747,150,18},11,faint);
  text(g,"LOW / HIGH FREQUENCY RESPONSE",{756,745,330,18},11,faint);
  const char* knobs[]={"SENSITIVITY","LENGTH","SMOOTH","LOW HZ","HIGH HZ","RETRIGGER"};
- for(int i=0;i<6;++i)text(g,knobs[i],{29+i*116,866,112,19},11,faint);
+ for(int i=0;i<6;++i)text(g,knobs[i],{29+i*116,805,112,19},11,faint);
  paintFrequencyResponse(g,{755,790,348,106});
  text(g,"DEPTH",{1170,766,110,20},13,white,true);
  text(g,"MIX",{1320,766,110,20},13,white,true);
@@ -533,7 +533,7 @@ void DISidechainEditor::resized() {
  if(redoButton)redoButton->setBounds(550,499,75,32);
  if(snapButton)snapButton->setBounds(630,499,85,32);
  if(shapePresetButton)shapePresetButton->setBounds(727,499,151,32);
- if(shapeOffset)shapeOffset->setBounds(1320,543,184,31);
+ if(shapeOffset){shapeOffset->setBounds(1320,543,184,31);shapeOffset->setEnabled(selectedLane==0);}
  if(laneSliders[0])laneSliders[0]->setBounds(1320,593,184,31);
  if(laneSliders[1])laneSliders[1]->setBounds(1320,640,184,31);
  for(int i=0;i<3;++i)if(laneTabs[i]){
@@ -545,7 +545,7 @@ void DISidechainEditor::resized() {
   const int xs[]={1163,1290,28,144,260,376,492,608};
   for(int i=0;i<8;++i){
    labels[i]->setVisible(false); // titles are painted in the aligned premium panel
-   sliders[i]->setBounds(xs[i],i<2?791:809,111,110);
+   sliders[i]->setBounds(xs[i],i<2?791:825,111,102);
   }
  }
  // Scale actual child bounds (including origin), not component-local transforms.
