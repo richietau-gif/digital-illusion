@@ -90,13 +90,20 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  fxTypeBox->setColour(juce::ComboBox::outlineColourId,edge);
  addAndMakeVisible(*fxTypeBox);
  fxTypeAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(p.state,"fxType",*fxTypeBox);
- fxToggle=std::make_unique<juce::ToggleButton>("FX");
+ fxToggle=std::make_unique<juce::TextButton>("OFF");
  addAndMakeVisible(*fxToggle);
  fxToggleAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(p.state,"fxEnabled",*fxToggle);
- saturatorToggle=std::make_unique<juce::ToggleButton>("SATURATOR");addAndMakeVisible(*saturatorToggle);
+ saturatorToggle=std::make_unique<juce::TextButton>("OFF");addAndMakeVisible(*saturatorToggle);
  saturatorAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(p.state,"saturatorEnabled",*saturatorToggle);
  // Two independent switches: their state is owned by the processor and saved by the host.
- for(auto* b:{fxToggle.get(),saturatorToggle.get(),sequenceToggle.get(),sync.get()}){
+ for(auto* b:{fxToggle.get(),saturatorToggle.get()}){
+  b->setClickingTogglesState(true);
+  b->setColour(juce::TextButton::buttonColourId,juce::Colour(0xff25303d));
+  b->setColour(juce::TextButton::buttonOnColourId,green);
+  b->setColour(juce::TextButton::textColourOffId,juce::Colours::white);
+  b->setColour(juce::TextButton::textColourOnId,bg);
+ }
+ for(auto* b:{sequenceToggle.get(),sync.get()}){
   b->setColour(juce::ToggleButton::tickColourId,green);
   b->setColour(juce::ToggleButton::textColourId,juce::Colours::white);
  }
@@ -136,7 +143,7 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  const char* filterNames[]={"FULL","LOW","HIGH","BAND"};
  for(int i=0;i<4;++i){filterButtons[i]=std::make_unique<juce::TextButton>(filterNames[i]);filterButtons[i]->onClick=[this,i]{selectFilter(i);};addAndMakeVisible(*filterButtons[i]);}
  if(combos.size()>0)combos[0]->setVisible(false);
- refreshFilterButtons();
+ refreshFilterButtons();refreshFxButtons();
  setSize(1536,950);
  startTimerHz(24);
 }
@@ -179,6 +186,10 @@ void DISidechainEditor::refreshFilterButtons(){
  const auto* raw=proc.state.getRawParameterValue("mode");
  const int selected=raw?juce::jlimit(0,3,(int)raw->load()):0;
  for(int i=0;i<4;++i)if(filterButtons[i])filterButtons[i]->setToggleState(i==selected,juce::dontSendNotification);
+}
+void DISidechainEditor::refreshFxButtons() {
+ if(fxToggle)fxToggle->setButtonText(fxToggle->getToggleState()?"ON":"OFF");
+ if(saturatorToggle)saturatorToggle->setButtonText(saturatorToggle->getToggleState()?"ON":"OFF");
 }
 void DISidechainEditor::paintPanel(juce::Graphics& g,juce::Rectangle<int> r,const juce::String& name) {
  g.setColour(panel);g.fillRoundedRectangle(r.toFloat(),12.f);
@@ -316,7 +327,7 @@ void DISidechainEditor::resized() {
  if(shapeOffset){shapeOffset->setBounds(1100,665,77,28);shapeOffset->setEnabled(selectedLane==0);}
  if(fxTypeBox)fxTypeBox->setBounds(870,111,140,29);
  if(fxToggle)fxToggle->setBounds(1045,111,65,29);
- if(saturatorToggle)saturatorToggle->setBounds(1210,111,132,29);
+ if(saturatorToggle)saturatorToggle->setBounds(1210,111,70,29);
  if(fxSliders[0])fxSliders[0]->setBounds(1340,105,85,42);
  if(fxSliders[1])fxSliders[1]->setBounds(1430,105,85,42);
  for(int i=0;i<3;++i)if(laneTabs[i]){laneTabs[i]->setBounds(1225+i*92,527,86,30);laneTabs[i]->setToggleState(selectedLane==i,juce::dontSendNotification);}
