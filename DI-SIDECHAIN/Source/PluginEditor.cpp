@@ -59,6 +59,14 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  sequenceCount->setColour(juce::Slider::textBoxOutlineColourId,juce::Colours::transparentBlack);
  addAndMakeVisible(*sequenceCount);
  sequenceCountAttachment=std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(p.state,"sequenceSteps",*sequenceCount);
+ shapeOffset=std::make_unique<juce::Slider>(juce::Slider::LinearHorizontal,juce::Slider::TextBoxRight);
+ shapeOffset->setRange(-1.0,1.0,0.01);
+ shapeOffset->setColour(juce::Slider::trackColourId,orange);
+ shapeOffset->setColour(juce::Slider::thumbColourId,orange);
+ shapeOffset->setColour(juce::Slider::textBoxTextColourId,juce::Colours::white);
+ shapeOffset->setColour(juce::Slider::textBoxOutlineColourId,juce::Colours::transparentBlack);
+ addAndMakeVisible(*shapeOffset);
+ shapeOffsetAttachment=std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(p.state,"shapeOffset",*shapeOffset);
  copyStep=std::make_unique<juce::TextButton>("COPY STEP");
  pasteStep=std::make_unique<juce::TextButton>("PASTE STEP");
  resetStep=std::make_unique<juce::TextButton>("RESET STEP");
@@ -99,12 +107,13 @@ void DISidechainEditor::paintShape(juce::Graphics& g,juce::Rectangle<int> r,int 
  for(int i=1;i<8;++i){const int x=r.getX()+r.getWidth()*i/8;g.drawVerticalLine(x,(float)r.getY(),(float)r.getBottom());}
  for(int i=1;i<4;++i){const int y=r.getY()+r.getHeight()*i/4;g.drawHorizontalLine(y,(float)r.getX(),(float)r.getRight());}
  const bool seq=sequenceToggle->getToggleState();
+ const float offset=seq&&shapeOffset? (float)shapeOffset->getValue():0.f;
  auto value=[&](int i){return seq?proc.getSequencePoint(step,i):proc.points[i].load();};
  juce::Path p;
  for(int j=0;j<=140;++j){
   const double t=j/140.0;const double x=t*7;const int k=juce::jmin(6,(int)x);
   float u=(float)(x-k);u=u*u*(3-2*u);
-  const float v=value(k)+(value(k+1)-value(k))*u;
+  const float v=juce::jlimit(0.f,1.f,value(k)+(value(k+1)-value(k))*u+offset);
   const float px=r.getX()+t*r.getWidth(),py=r.getBottom()-v*r.getHeight();
   if(j==0)p.startNewSubPath(px,py);else p.lineTo(px,py);
  }
@@ -112,7 +121,7 @@ void DISidechainEditor::paintShape(juce::Graphics& g,juce::Rectangle<int> r,int 
  g.setColour(orange.withAlpha(.20f));g.fillPath(fill);
  g.setColour(orange);g.strokePath(p,juce::PathStrokeType(drawNodes?3.f:2.f));
  if(drawNodes)for(int i=0;i<8;++i){
-  const float x=r.getX()+r.getWidth()*i/7.f,y=r.getBottom()-value(i)*r.getHeight();
+  const float x=r.getX()+r.getWidth()*i/7.f,y=r.getBottom()-juce::jlimit(0.f,1.f,value(i)+offset)*r.getHeight();
   g.setColour(juce::Colour(0xff121821));g.fillEllipse(x-6,y-6,12,12);
   g.setColour(orange);g.drawEllipse(x-5,y-5,10,10,2.f);
  }
@@ -179,6 +188,7 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  text(g,"EDIT STEP "+juce::String(selectedStep+1), {463,518,220,22},14,orange,true);
  paintShape(g,detailGraph,selectedStep,true);
  text(g,"Drag nodes to edit  •  Copy / Paste / Reset", {464,664,480,23},13,muted);
+ text(g,"OFFSET ±", {970,665,90,23},13,orange,true);
  text(g,"VOLUME", {1225,523,120,24},16,orange,true);
  text(g,"SEQUENCED", {1370,523,130,24},14,sequenceToggle->getToggleState()?green:muted,true);
  text(g,"FILTER  •  modulation not active", {1225,573,280,23},15,juce::Colour(0xff44bbff));
@@ -205,6 +215,7 @@ void DISidechainEditor::resized() {
  if(copyStep)copyStep->setBounds(969,544,208,33);
  if(pasteStep)pasteStep->setBounds(969,586,208,33);
  if(resetStep)resetStep->setBounds(969,628,208,33);
+ if(shapeOffset)shapeOffset->setBounds(1050,665,127,28);
  if(combos.size()==3){combos[0]->setBounds(0,0,0,0);combos[1]->setBounds(290,790,215,31);combos[2]->setBounds(540,790,215,31);}
  for(int i=0;i<4;++i)if(filterButtons[i])filterButtons[i]->setBounds(35+i*58,790,54,31);
  if(sliders.size()!=8||labels.size()!=8)return;
