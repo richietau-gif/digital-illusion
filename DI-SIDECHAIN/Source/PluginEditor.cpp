@@ -563,7 +563,9 @@ void DISidechainEditor::resized() {
  }
 }
 void DISidechainEditor::updatePoint(const juce::MouseEvent& e) {
- if(!detailGraph.contains((e.position/uiScale).toInt()))return;
+ // Continue editing the captured node beyond the graph edges; the vertical
+ // value is clamped below. Starting a drag outside the graph remains ignored.
+ if(!draggingShape&&!detailGraph.contains((e.position/uiScale).toInt()))return;
  const auto r=detailGraph;
  const auto point=e.position/uiScale;
  const int i=draggingShape&&dragNode>=0?dragNode:juce::jlimit(0,7,juce::roundToInt((point.x-r.getX())/juce::jmax(1,r.getWidth())*7.f));
