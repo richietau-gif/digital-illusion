@@ -48,5 +48,16 @@ int main() {
  pan.setShape(0,invalid);
  auto safe=pan.getShape(0);
  check(safe[0]==1.f&&safe[1]==0.f&&safe[2]==1.f,"Shape sanitization failed");
+ check(!di::ShapeSequencer::shouldRestartOnTrigger(true),"Synced MIDI must not restart sequence");
+ check(di::ShapeSequencer::shouldRestartOnTrigger(false),"Free-running MIDI should restart sequence");
+ di::ShapeSequencer syncPattern;
+ syncPattern.setSteps(4);
+ syncPattern.render(1.);
+ check(syncPattern.getCurrentStep()==1,"Synced sequence must advance");
+ for(int note=0;note<12;++note){
+  if(di::ShapeSequencer::shouldRestartOnTrigger(true))syncPattern.trigger();
+  syncPattern.render(1.);
+ }
+ check(syncPattern.getCurrentStep()==1,"Dense triggers must not pin synced pattern to step zero");
  return 0;
 }
