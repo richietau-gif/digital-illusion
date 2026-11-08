@@ -1,3 +1,29 @@
+## DI SIDECHAIN 3.1 — Envelope OFFSET and balanced color system
+
+- **OFFSET ± %** is a new automatable bipolar parameter, range **−50 to +50**
+  percent of the currently active envelope length. Its zero default is
+  backward compatible with previous Ableton sets, and normal APVTS host
+  serialization preserves changes. Double-click the timing slider to reset
+  exactly to zero.
+- Positive OFFSET delays the envelope to the right; negative OFFSET advances
+  its contents to the left. The delay is **a percentage of the beat length**
+  when tempo sync is active, so it follows BPM changes. LOOP wraps cyclically;
+  ONE SHOT holds a neutral envelope outside the window and never wraps
+  across separate triggers. Negative offset does **not predict future kick
+  transients** or generate pre-trigger lookahead.
+- The original waveform remains visible as a thin **dashed cyan ghost**.
+  The active, DSP-linked waveform stays **orange** with matching orange
+  draggable node handles. The cyan timing slider and signed readout remain
+  adjacent to the editor. Dragging nodes of the shifted waveform edits the
+  underlying original shape without destroying the offset.
+- Design language: orange for audible envelope, **cyan for timing/offset**
+  and live waveform readout, **electric green for filter/processing**, muted
+  **blue for input/detector**, and **soft violet for preset controls**.
+  The palette differentiates functions rather than coloring every element
+  green. Large panel groups and dark gradients remain to preserve contrast.
+- Test coverage includes zero-offset identity, both directions, LOOP wrap,
+  ONE SHOT boundaries, parameter state roundtrip, and visible GUI attachment.
+
 ## DI SIDECHAIN 3.0 Studio GUI redesign (second pass)
 
 - Latest layout is **1380 × 860**, modeled on a modern studio FX workflow
