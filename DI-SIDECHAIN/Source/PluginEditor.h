@@ -37,6 +37,8 @@ private:
  void paintPanel(juce::Graphics&, juce::Rectangle<int>, const juce::String&);
  void updateDetailPoint(const juce::MouseEvent&);
  int selectedStep=0;
+ int selectedLane=0;
+ std::array<std::unique_ptr<juce::TextButton>,3> laneTabs;
  std::unique_ptr<juce::ToggleButton> sequenceToggle;
  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> sequenceAttachment;
  std::unique_ptr<juce::Slider> sequenceCount;
