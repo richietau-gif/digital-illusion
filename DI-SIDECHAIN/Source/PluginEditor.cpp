@@ -109,7 +109,7 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  redoButton->onClick=[this]{redoEdit();};
  copyStep->onClick=[this]{clipboard=captureShape(selectedStep+selectedLane*32,true);hasClipboard=true;};
  pasteStep->onClick=[this]{if(hasClipboard){const int key=selectedStep+selectedLane*32;auto before=captureShape(key,true);applyShape(key,true,clipboard);pushEdit(key,true,before,clipboard);repaint();}};
- resetStep->onClick=[this]{const int key=selectedStep+selectedLane*32;auto before=captureShape(key,true);di::ShapeSequencer::Shape defaults=selectedLane==0?di::ShapeSequencer::Shape{1.f,.92f,.08f,.02f,.32f,.75f,.95f,1.f}:di::ShapeSequencer::Shape{1.f,1.f,1.f,1.f,1.f,1.f,1.f,1.f};applyShape(key,true,defaults);pushEdit(key,true,before,defaults);repaint();};
+ resetStep->onClick=[this]{const int key=selectedStep+selectedLane*32;auto before=captureShape(key,true);di::ShapeSequencer::Shape defaults=selectedLane==0?di::ShapeSequencer::Shape{1.f,.92f,.08f,.02f,.32f,.75f,.95f,1.f}:di::ShapeSequencer::Shape{selectedLane==2?0.5f:1.f,selectedLane==2?0.5f:1.f,selectedLane==2?0.5f:1.f,selectedLane==2?0.5f:1.f,selectedLane==2?0.5f:1.f,selectedLane==2?0.5f:1.f,selectedLane==2?0.5f:1.f,selectedLane==2?0.5f:1.f};applyShape(key,true,defaults);pushEdit(key,true,before,defaults);repaint();};
  const char* filterNames[]={"FULL","LOW","HIGH","BAND"};
  for(int i=0;i<4;++i){filterButtons[i]=std::make_unique<juce::TextButton>(filterNames[i]);filterButtons[i]->onClick=[this,i]{selectFilter(i);};addAndMakeVisible(*filterButtons[i]);}
  if(combos.size()>0)combos[0]->setVisible(false);
