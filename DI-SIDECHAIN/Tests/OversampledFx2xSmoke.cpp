@@ -72,6 +72,14 @@ int main(){
   check(std::isfinite(fx.process(input,drive,type)),
         "FX automation must not poison oversampler state");
  }
+ // Reset must clear any nonfinite-history stress input before reuse.
+ fx.reset();
+ di::OversampledFx2x clean;
+ for(int i=0;i<256;++i){
+  const float x=0.35f*std::sin(static_cast<float>(i)*0.12f);
+  check(fx.process(x,3.f,0.f)==clean.process(x,3.f,0.f),
+        "FX reset must reproduce a fresh instance");
+ }
  // Host block size must not affect streaming FIR output or dry latency.
  di::OversampledFx2x continuous,chunked;
  di::FixedDelay<di::OversampledFx2x::latencySamples> continuousDry,chunkedDry;
