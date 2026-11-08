@@ -289,13 +289,14 @@ float DISidechainProcessor::evaluateFilterEnvelope(double t,bool loop) const noe
 }
 void DISidechainProcessor::copyVolumeShapeToFilterBanks() noexcept {
     // First unlink only: never overwrite user edits when LINK is toggled.
-    if(filterBanksInitialized.exchange(true,std::memory_order_acq_rel))return;
+    if(filterBanksInitialized.load(std::memory_order_acquire))return;
     // On unlink, preserve the sound by sampling the volume curve.
     for(int i=0;i<filterEnvelopePoints;++i){
         const float sample=evaluateEnvelope((double)i/(filterEnvelopePoints-1));
         filterEnvelopeBanks[0][i].store(sample,std::memory_order_relaxed);
         filterEnvelopeBanks[1][i].store(sample,std::memory_order_relaxed);
     }
+    filterBanksInitialized.store(true,std::memory_order_release);
 }
 void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::MidiBuffer& midi){
  juce::ScopedNoDenormals noDenormals;
