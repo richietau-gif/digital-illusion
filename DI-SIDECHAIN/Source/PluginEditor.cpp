@@ -164,14 +164,13 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  text(g,"Drag nodes to edit  •  Copy / Paste / Reset", {464,664,480,23},13,muted);
  text(g,"VOLUME", {1225,523,120,24},16,orange,true);
  text(g,"SEQUENCED", {1370,523,130,24},14,sequenceToggle->getToggleState()?green:muted,true);
- text(g,"FILTER  •  planned modulation", {1225,573,260,23},15,juce::Colour(0xff44bbff));
- text(g,"PAN  •  planned modulation", {1225,625,260,23},15,juce::Colour(0xffc55bff));
+ text(g,"FILTER  •  modulation not active", {1225,573,280,23},15,juce::Colour(0xff44bbff));
+ text(g,"PAN  •  modulation not active", {1225,625,280,23},15,juce::Colour(0xffc55bff));
  text(g,"FILTER MODE", {35,763,170,20},13,muted);
  text(g,"TRIGGER SOURCE", {290,763,180,20},13,muted);
  text(g,"BEAT DIVISION", {540,763,180,20},13,muted);
  text(g,"LIVE DSP CONTROLS  /  ACTIVE", {35,907,400,20},12,green);
- text(g,"DEPTH", {1230,764,95,23},14,muted);
- text(g,"DRY / WET", {1370,764,120,23},14,muted);
+ text(g,"OUTPUT CONTROLS", {1225,764,260,23},14,muted);
  const float peak=juce::jlimit(0.f,1.f,proc.meter.load(std::memory_order_relaxed));
  g.setColour(edge);g.fillRoundedRectangle(juce::Rectangle<float>(1491,765,12,126),4.f);
  g.setColour(green);g.fillRoundedRectangle(juce::Rectangle<float>(1491,891-peak*126,12,peak*126),4.f);
@@ -191,7 +190,7 @@ void DISidechainEditor::resized() {
  if(resetStep)resetStep->setBounds(969,628,208,33);
  for(int i=0;i<3&&i<(int)combos.size();++i)combos[i]->setBounds(35+i*250,790,215,31);
  if(sliders.size()!=8||labels.size()!=8)return;
- const int xs[]={35,165,295,425,555,685,1230,1360};
+ const int xs[]={1230,1360,35,165,295,425,555,685};
  for(int i=0;i<8;++i){labels[i]->setBounds(xs[i],831,115,20);sliders[i]->setBounds(xs[i],851,110,78);}
 }
 void DISidechainEditor::updatePoint(const juce::MouseEvent& e) {
