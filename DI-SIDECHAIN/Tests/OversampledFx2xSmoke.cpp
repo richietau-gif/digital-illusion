@@ -61,6 +61,17 @@ int main(){
 
  fx.reset();
  for(int i=0;i<512;++i)check(std::isfinite(fx.process(i%2?1.f:-1.f,16.f,0.f)),"Nyquist input must stay finite");
+ // Abrupt automation and nonfinite inputs must not poison FIR state.
+ fx.reset();
+ for(int i=0;i<4096;++i){
+  const float input=(i%127==0)?std::numeric_limits<float>::quiet_NaN()
+                   :0.8f*std::sin(static_cast<float>(i)*0.19f);
+  const float drive=(i%113==0)?std::numeric_limits<float>::infinity()
+                    :(i%2==0?1.f:16.f);
+  const float type=(i%3==0)?0.f:1.f;
+  check(std::isfinite(fx.process(input,drive,type)),
+        "FX automation must not poison oversampler state");
+ }
  // Quantitative aliasing regression: at 48 kHz, a 10 kHz tone's 30 kHz
  // third harmonic folds to 18 kHz without adequate oversampling filtering.
  fx.reset();
