@@ -92,7 +92,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
   // In tempo-sync mode, incoming kicks/notes trigger the ducking envelope,
   // not the song-position sequencer. Otherwise frequent notes pin it to step 1.
   // Free-running (millisecond) mode retains explicit retrigger behaviour.
-  if(sequenceOn&&get("sync")<=0.5f){
+  if(sequenceOn&&di::ShapeSequencer::shouldRestartOnTrigger(get("sync")>0.5f)){
    sequencer.trigger();
    for(auto& lane:modulationSequencers)lane.trigger();
   }
