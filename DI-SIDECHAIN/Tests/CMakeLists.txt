@@ -8,7 +8,8 @@ foreach(test IN ITEMS
     FxWaveshaperSmoke
     PeakDetectorSmoke
     OversampledFx2xSmoke
-    TriggerLogicSmoke)
+    TriggerLogicSmoke
+    FilterCutoffSmoke)
   add_executable(${test} ${test}.cpp)
   if(MSVC)
     target_compile_options(${test} PRIVATE /W4 /WX)
