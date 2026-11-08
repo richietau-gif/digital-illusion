@@ -52,6 +52,8 @@ private:
  std::vector<std::unique_ptr<juce::ComboBox>> combos;
  std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> sa;
  std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>> ca;
+ std::unique_ptr<juce::ComboBox> fxTypeBox;
+ std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> fxTypeAttachment;
  std::unique_ptr<juce::ToggleButton> fxToggle;
  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> fxToggleAttachment;
  std::array<std::unique_ptr<juce::Slider>,2> fxSliders;
