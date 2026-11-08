@@ -46,8 +46,9 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  const float filterRange=juce::jlimit(0.f,1.f,filterMod);
  const bool fxEnabled=get("fxEnabled")>0.5f;
  const int fxType=juce::jlimit(0,1,(int)get("fxType"));
- const float drive=juce::Decibels::decibelsToGain(fxDrive);
- const float fxWet=juce::jlimit(0.f,1.f,fxMix);
+ // Guard automation and restored host state before values enter persistent smoothers.
+ const float drive=juce::Decibels::decibelsToGain(std::isfinite(fxDrive)?juce::jlimit(0.f,24.f,fxDrive):0.f);
+ const float fxWet=std::isfinite(fxMix)?juce::jlimit(0.f,1.f,fxMix):0.f;
  const float fxTarget=fxEnabled?1.f:0.f;
  const float fxSmoothing=std::exp(-1.f/(float)(0.01*sr));
  const float fxParameterSmoothing=std::exp(-1.f/(float)(0.005*sr));
@@ -81,6 +82,8 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  juce::MidiBuffer::Iterator it(midi);juce::MidiMessage msg;int midiPos=0;bool hasEvent=it.getNextEvent(msg,midiPos);float peak=0;
  for(int i=0;i<n;++i){bool fire=false;
  fxBlend=fxTarget+(fxBlend-fxTarget)*fxSmoothing;
+ if(!std::isfinite(smoothedFxDrive))smoothedFxDrive=drive;
+ if(!std::isfinite(smoothedFxWet))smoothedFxWet=fxWet;
  smoothedFxDrive=drive+(smoothedFxDrive-drive)*fxParameterSmoothing;
  smoothedFxWet=fxWet+(smoothedFxWet-fxWet)*fxParameterSmoothing;
  smoothedFxType=(float)fxType+(smoothedFxType-(float)fxType)*fxSmoothing;
