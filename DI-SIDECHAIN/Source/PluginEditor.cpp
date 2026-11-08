@@ -707,6 +707,16 @@ void DISidechainEditor::setParameter(const char* id,float value){
     }
 }
 void DISidechainEditor::updatePoint(const juce::MouseEvent& e){
+    if(filterView){
+        if(proc.state.getRawParameterValue("filterEnvelopeLink")->load()>.5f ||
+           selectedPoint<0||selectedPoint>=DISidechainProcessor::filterEnvelopePoints)return;
+        const auto q=localDesignPoint(e);
+        const float y=juce::jlimit(0.f,1.f,(graph.getBottom()-q.y)/graph.getHeight());
+        proc.setFilterEnvelopePoint(editedFilterBank,selectedPoint,
+            snapToGrid?std::round(y*16.f)/16.f:y);
+        repaint();
+        return;
+    }
     if(selectedPoint<0||selectedPoint>=proc.getEnvelopeNodeCount())return;
     const auto q=localDesignPoint(e);
     float x=juce::jlimit(0.f,1.f,(q.x-graph.getX())/graph.getWidth());
@@ -731,6 +741,25 @@ void DISidechainEditor::updateBand(const juce::MouseEvent& e){
 void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
     auto q=localDesignPoint(e);
     if(q.x>=1005&&q.x<=1104&&q.y>=132&&q.y<=158){snapToGrid=!snapToGrid;repaint();return;}
+    if(graph.contains(q)&&filterView){
+        selectedPoint=-1;
+        if(proc.state.getRawParameterValue("filterEnvelopeLink")->load()>.5f)return;
+        const float offset=proc.state.getRawParameterValue("envelopeOffset")->load()*.01f;
+        const bool loop=proc.state.getRawParameterValue("playbackMode")->load()>.5f;
+        float best=15.f*15.f;
+        for(int i=0;i<DISidechainProcessor::filterEnvelopePoints;++i){
+            float x=(float)i/(DISidechainProcessor::filterEnvelopePoints-1)+offset;
+            if(loop){x=std::fmod(x,1.f);if(x<0.f)x+=1.f;}
+            if(x<0||x>1)continue;
+            const float y=proc.getFilterEnvelopePoint(editedFilterBank,i);
+            const float dx=q.x-(graph.getX()+x*graph.getWidth());
+            const float dy=q.y-(graph.getBottom()-y*graph.getHeight());
+            const float distance=dx*dx+dy*dy;
+            if(distance<best){best=distance;selectedPoint=i;}
+        }
+        if(selectedPoint>=0){grabKeyboardFocus();updatePoint(e);}
+        return;
+    }
     if(graph.contains(q)&&e.mods.isAltDown()){
         // Alt-drag the curve segment, with per-segment cubic shaping.
         float t=juce::jlimit(0.f,1.f,(q.x-graph.getX())/graph.getWidth());
@@ -800,6 +829,7 @@ void DISidechainEditor::mouseDrag(const juce::MouseEvent& e){
 }
 void DISidechainEditor::mouseUp(const juce::MouseEvent&){bandHandle=-1;curvatureSegment=-1;}
 void DISidechainEditor::mouseDoubleClick(const juce::MouseEvent& e){
+    if(filterView)return; // Filter A/B uses eight fixed-width, vertically editable nodes.
     const auto q=localDesignPoint(e);
     if(!graph.contains(q))return;
     float x=juce::jlimit(0.f,1.f,(q.x-graph.getX())/graph.getWidth());
@@ -815,6 +845,20 @@ void DISidechainEditor::mouseDoubleClick(const juce::MouseEvent& e){
     repaint();
 }
 bool DISidechainEditor::keyPressed(const juce::KeyPress& key){
+    if(filterView){
+        if(proc.state.getRawParameterValue("filterEnvelopeLink")->load()>.5f ||
+           selectedPoint<0||selectedPoint>=DISidechainProcessor::filterEnvelopePoints)return false;
+        const int code=key.getKeyCode();
+        if(code==juce::KeyPress::leftKey){selectedPoint=juce::jmax(0,selectedPoint-1);repaint();return true;}
+        if(code==juce::KeyPress::rightKey){selectedPoint=juce::jmin(7,selectedPoint+1);repaint();return true;}
+        const float direction=code==juce::KeyPress::upKey?1.f:
+                              code==juce::KeyPress::downKey?-1.f:0.f;
+        if(direction==0.f)return false;
+        proc.setFilterEnvelopePoint(editedFilterBank,selectedPoint,
+            proc.getFilterEnvelopePoint(editedFilterBank,selectedPoint)+
+                direction*(snapToGrid?1.f/16.f:.01f));
+        repaint();return true;
+    }
     const int n=proc.getEnvelopeNodeCount();
     if(selectedPoint<0||selectedPoint>=n)return false;
     if(key.getKeyCode()==juce::KeyPress::deleteKey||
