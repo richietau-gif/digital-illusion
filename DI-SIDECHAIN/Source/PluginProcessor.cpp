@@ -2,6 +2,7 @@
 #include "PluginEditor.h"
 #include "FxWaveshaper.h"
 #include "FxWetMix.h"
+#include "FilterCutoff.h"
 #include "PeakDetector.h"
 #include "SidechainPeak.h"
 #include "TransportContinuity.h"
@@ -62,9 +63,9 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  const float fxDrive=bounded("fxDrive",0.f,24.f,0.f);
  const float fxMix=bounded("fxMix",0.f,1.f,1.f);
  // Keep filter cutoffs below Nyquist at lower host sample rates (e.g. 22.05 kHz).
- const float safeNyquist=static_cast<float>(0.45*sr);
- const float lo=juce::jmin(safeNyquist,bounded("low",25.f,1500.f,120.f));
- const float hi=juce::jmin(safeNyquist,juce::jmax(lo+10.f,bounded("high",60.f,18000.f,400.f)));
+ const auto cutoffs=di::safeFilterCutoffs(sr,get("low"),get("high"));
+ const float lo=cutoffs.low;
+ const float hi=cutoffs.high;
  const float filterRange=juce::jlimit(0.f,1.f,filterMod);
  const bool fxEnabled=get("fxEnabled")>0.5f;
  const int fxType=(int)bounded("fxType",0.f,1.f,0.f);
