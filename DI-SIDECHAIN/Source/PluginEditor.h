@@ -11,7 +11,12 @@ private:
  void timerCallback() override {repaint();}
  void updatePoint(const juce::MouseEvent&);
  DISidechainProcessor& proc;
- juce::Rectangle<int> graph;
+ juce::Rectangle<int> graph, stepStrip;
+ int selectedStep=0;
+ std::unique_ptr<juce::ToggleButton> sequenceToggle;
+ std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> sequenceAttachment;
+ std::unique_ptr<juce::Slider> sequenceCount;
+ std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> sequenceCountAttachment;
  std::vector<std::unique_ptr<juce::Slider>> sliders;
  std::vector<std::unique_ptr<juce::Label>> labels;
  std::vector<std::unique_ptr<juce::ComboBox>> combos;
