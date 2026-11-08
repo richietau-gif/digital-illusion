@@ -10,5 +10,10 @@ foreach(test IN ITEMS
     OversampledFx2xSmoke
     TriggerLogicSmoke)
   add_executable(${test} ${test}.cpp)
+  if(MSVC)
+    target_compile_options(${test} PRIVATE /W4 /WX)
+  else()
+    target_compile_options(${test} PRIVATE -Wall -Wextra -Wpedantic -Werror)
+  endif()
   add_test(NAME ${test} COMMAND ${test})
 endforeach()
