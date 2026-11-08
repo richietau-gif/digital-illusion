@@ -54,10 +54,12 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  const float fxParameterSmoothing=std::exp(-1.f/(float)(0.005*sr));
  for(auto& c:filters){c.low.setCutoffFrequency(lo);c.high.setCutoffFrequency(mode==3?hi:lo);}
  double bpm=120;
+ double hostPpq=0.;bool hasPlayingPpq=false;
  if(auto* ph=getPlayHead()){
   if(auto pos=ph->getPosition()){
    if(auto b=pos->getBpm())bpm=*b;
    const bool playing=pos->getIsPlaying();
+   if(playing){if(auto ppq=pos->getPpqPosition()){hostPpq=*ppq;hasPlayingPpq=std::isfinite(hostPpq);}}
    bool discontinuity=playing&&!wasTransportPlaying;
    if(playing){
     if(auto sample=pos->getTimeInSamples()){
@@ -74,6 +76,14 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  const bool sequenceOn=get("sequenceEnabled")>0.5f;
  sequencer.setSteps((int)get("sequenceSteps"));
  for(auto& lane:modulationSequencers)lane.setSteps((int)get("sequenceSteps"));
+ // Re-anchor each audio block to the DAW's PPQ timeline when tempo sync is enabled.
+ // This corrects accumulated drift and aligns loop restarts to musical bars.
+ if(sequenceOn&&get("sync")>0.5f&&hasPlayingPpq){
+  const double beatsPerStep=divisions[juce::jlimit(0,6,(int)get("division"))];
+  const double position=hostPpq/beatsPerStep;
+  sequencer.seekToStepPosition(position);
+  for(auto& lane:modulationSequencers)lane.seekToStepPosition(position);
+ }
  if(sequenceOn)for(int k=0;k<32;++k){
   di::ShapeSequencer::Shape shape{};for(int j=0;j<8;++j)shape[j]=getSequencePoint(k,j);sequencer.setShape(k,shape);
   for(int lane=0;lane<2;++lane){di::ShapeSequencer::Shape mod{};for(int j=0;j<8;++j)mod[j]=getModulationPoint(lane,k,j);modulationSequencers[lane].setShape(k,mod);}
