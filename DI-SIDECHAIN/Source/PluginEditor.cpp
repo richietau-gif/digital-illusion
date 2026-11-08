@@ -67,6 +67,16 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  shapeOffset->setColour(juce::Slider::textBoxOutlineColourId,juce::Colours::transparentBlack);
  addAndMakeVisible(*shapeOffset);
  shapeOffsetAttachment=std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(p.state,"shapeOffset",*shapeOffset);
+ const char* laneIds[]={"filterMod","panMod"};
+ for(int i=0;i<2;++i){
+  laneSliders[i]=std::make_unique<juce::Slider>(juce::Slider::LinearHorizontal,juce::Slider::TextBoxRight);
+  laneSliders[i]->setColour(juce::Slider::trackColourId,i==0?juce::Colour(0xff44bbff):juce::Colour(0xffc55bff));
+  laneSliders[i]->setColour(juce::Slider::thumbColourId,i==0?juce::Colour(0xff44bbff):juce::Colour(0xffc55bff));
+  laneSliders[i]->setColour(juce::Slider::textBoxTextColourId,juce::Colours::white);
+  laneSliders[i]->setColour(juce::Slider::textBoxOutlineColourId,juce::Colours::transparentBlack);
+  addAndMakeVisible(*laneSliders[i]);
+  laneAttachments[i]=std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(p.state,laneIds[i],*laneSliders[i]);
+ }
  copyStep=std::make_unique<juce::TextButton>("COPY STEP");
  pasteStep=std::make_unique<juce::TextButton>("PASTE STEP");
  resetStep=std::make_unique<juce::TextButton>("RESET STEP");
@@ -224,8 +234,8 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  text(g,"OFFSET ±", {970,665,90,23},13,orange,true);
  text(g,"VOLUME", {1225,523,120,24},16,orange,true);
  text(g,"SEQUENCED", {1370,523,130,24},14,sequenceToggle->getToggleState()?green:muted,true);
- text(g,"FILTER  •  modulation not active", {1225,573,280,23},15,juce::Colour(0xff44bbff));
- text(g,"PAN  •  modulation not active", {1225,625,280,23},15,juce::Colour(0xffc55bff));
+ text(g,"FILTER  •  DUCK DEPTH", {1225,566,280,23},14,juce::Colour(0xff44bbff));
+ text(g,"PAN  •  BIPOLAR", {1225,623,280,23},14,juce::Colour(0xffc55bff));
  text(g,"FILTER MODE", {35,763,170,20},13,muted);
  text(g,"TRIGGER SOURCE", {290,763,180,20},13,muted);
  text(g,"BEAT DIVISION", {540,763,180,20},13,muted);
@@ -249,6 +259,8 @@ void DISidechainEditor::resized() {
  if(pasteStep)pasteStep->setBounds(969,586,208,33);
  if(resetStep)resetStep->setBounds(969,628,208,33);
  if(shapeOffset)shapeOffset->setBounds(1050,665,127,28);
+ if(laneSliders[0])laneSliders[0]->setBounds(1225,588,275,28);
+ if(laneSliders[1])laneSliders[1]->setBounds(1225,646,275,28);
  if(undoButton)undoButton->setBounds(706,508,76,30);
  if(redoButton)redoButton->setBounds(788,508,76,30);
  if(snapButton)snapButton->setBounds(869,508,116,30);
