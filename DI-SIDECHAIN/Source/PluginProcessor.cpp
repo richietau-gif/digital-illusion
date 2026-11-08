@@ -170,6 +170,26 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  meter.store(peak);midi.clear();
 }
 void DISidechainProcessor::getStateInformation(juce::MemoryBlock& dest){auto tree=state.copyState();for(int i=0;i<8;++i)tree.setProperty("point"+juce::String(i),points[i].load(),nullptr);for(int k=0;k<32;++k)for(int j=0;j<8;++j)tree.setProperty("seq_"+juce::String(k)+"_"+juce::String(j),getSequencePoint(k,j),nullptr);for(int lane=0;lane<2;++lane)for(int k=0;k<32;++k)for(int j=0;j<8;++j)tree.setProperty("mod_"+juce::String(lane)+"_"+juce::String(k)+"_"+juce::String(j),getModulationPoint(lane,k,j),nullptr);if(auto xml=tree.createXml())copyXmlToBinary(*xml,dest);}
-void DISidechainProcessor::setStateInformation(const void* data,int bytes){if(auto xml=getXmlFromBinary(data,bytes)){auto tree=juce::ValueTree::fromXml(*xml);if(tree.isValid()){for(int i=0;i<8;++i){const float value=(float)tree.getProperty("point"+juce::String(i),points[i].load());if(std::isfinite(value))points[i].store(juce::jlimit(0.f,1.f,value),std::memory_order_relaxed);}for(int k=0;k<32;++k)for(int j=0;j<8;++j){auto key="seq_"+juce::String(k)+"_"+juce::String(j);if(tree.hasProperty(key))setSequencePoint(k,j,(float)tree.getProperty(key));}for(int lane=0;lane<2;++lane)for(int k=0;k<32;++k)for(int j=0;j<8;++j){auto key="mod_"+juce::String(lane)+"_"+juce::String(k)+"_"+juce::String(j);if(tree.hasProperty(key))setModulationPoint(lane,k,j,(float)tree.getProperty(key));}state.replaceState(tree);}}}
+void DISidechainProcessor::setStateInformation(const void* data,int bytes){
+ if(auto xml=getXmlFromBinary(data,bytes)){
+  auto tree=juce::ValueTree::fromXml(*xml);
+  if(!tree.isValid()||tree.getType()!=state.state.getType())return;
+  // Missing properties in older presets must restore defaults, not leak
+  // curve values from a previously loaded preset in this processor instance.
+  constexpr float volumeDefaults[8]={1.f,.92f,.08f,.02f,.32f,.75f,.95f,1.f};
+  const auto restored=[&](const juce::String& key,float fallback){
+   if(!tree.hasProperty(key))return fallback;
+   const float value=(float)tree.getProperty(key);
+   return std::isfinite(value)?juce::jlimit(0.f,1.f,value):fallback;
+  };
+  for(int j=0;j<8;++j)
+   points[j].store(restored("point"+juce::String(j),volumeDefaults[j]),std::memory_order_relaxed);
+  for(int k=0;k<32;++k)for(int j=0;j<8;++j)
+   setSequencePoint(k,j,restored("seq_"+juce::String(k)+"_"+juce::String(j),volumeDefaults[j]));
+  for(int lane=0;lane<2;++lane)for(int k=0;k<32;++k)for(int j=0;j<8;++j)
+   setModulationPoint(lane,k,j,restored("mod_"+juce::String(lane)+"_"+juce::String(k)+"_"+juce::String(j),lane==0?1.f:.5f));
+  state.replaceState(tree);
+ }
+}
 juce::AudioProcessorEditor* DISidechainProcessor::createEditor(){return new DISidechainEditor(*this);}
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter(){return new DISidechainProcessor();}
