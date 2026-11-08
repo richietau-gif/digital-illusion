@@ -4,6 +4,7 @@
 #include "FxWetMix.h"
 #include "PeakDetector.h"
 #include "SidechainPeak.h"
+#include "TransportContinuity.h"
 #include <cmath>
 static juce::AudioProcessorValueTreeState::ParameterLayout layoutParams(){
  std::vector<std::unique_ptr<juce::RangedAudioParameter>> p;
@@ -66,7 +67,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
    bool discontinuity=playing&&!wasTransportPlaying;
    if(playing){
     if(auto sample=pos->getTimeInSamples()){
-     if(expectedTransportSample>=0&&std::abs(*sample-expectedTransportSample)>juce::jmax(2,n*2))discontinuity=true;
+     if(di::transportDiscontinuity(expectedTransportSample,*sample))discontinuity=true;
      expectedTransportSample=*sample+n;
     }else expectedTransportSample=-1;
    }else expectedTransportSample=-1;
