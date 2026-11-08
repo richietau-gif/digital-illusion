@@ -83,7 +83,14 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
   addAndMakeVisible(*laneSliders[i]);
   laneAttachments[i]=std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(p.state,laneIds[i],*laneSliders[i]);
  }
- fxToggle=std::make_unique<juce::ToggleButton>("SATURATION");
+ fxTypeBox=std::make_unique<juce::ComboBox>();
+ fxTypeBox->addItemList(juce::StringArray{"Saturator","Soft Clipper"},1);
+ fxTypeBox->setColour(juce::ComboBox::backgroundColourId,juce::Colour(0xff212b36));
+ fxTypeBox->setColour(juce::ComboBox::textColourId,juce::Colours::white);
+ fxTypeBox->setColour(juce::ComboBox::outlineColourId,edge);
+ addAndMakeVisible(*fxTypeBox);
+ fxTypeAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(p.state,"fxType",*fxTypeBox);
+ fxToggle=std::make_unique<juce::ToggleButton>("FX ON");
  addAndMakeVisible(*fxToggle);
  fxToggleAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(p.state,"fxEnabled",*fxToggle);
  const char* fxIds[]={"fxDrive","fxMix"};
@@ -285,7 +292,8 @@ void DISidechainEditor::resized() {
  if(pasteStep)pasteStep->setBounds(969,586,208,33);
  if(resetStep)resetStep->setBounds(969,628,208,33);
  if(shapeOffset){shapeOffset->setBounds(1100,665,77,28);shapeOffset->setEnabled(selectedLane==0);}
- if(fxToggle)fxToggle->setBounds(825,112,155,30);
+ if(fxTypeBox)fxTypeBox->setBounds(800,112,125,30);
+ if(fxToggle)fxToggle->setBounds(935,112,110,30);
  if(fxSliders[0])fxSliders[0]->setBounds(1080,116,190,28);
  if(fxSliders[1])fxSliders[1]->setBounds(1280,116,190,28);
  for(int i=0;i<3;++i)if(laneTabs[i]){laneTabs[i]->setBounds(1225+i*92,527,86,30);laneTabs[i]->setToggleState(selectedLane==i,juce::dontSendNotification);}
