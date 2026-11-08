@@ -119,7 +119,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
   sequencer.seekToStepPosition(position);
   for(auto& lane:modulationSequencers)lane.seekToStepPosition(position);
  }
- if(sequenceOn)for(int k=0;k<32;++k){
+ if(sequenceOn)for(int k=0;k<sequenceSteps;++k){
   di::ShapeSequencer::Shape shape{};for(int j=0;j<8;++j)shape[j]=getSequencePoint(k,j);sequencer.setShape(k,shape);
   for(int lane=0;lane<2;++lane){di::ShapeSequencer::Shape mod{};for(int j=0;j<8;++j)mod[j]=getModulationPoint(lane,k,j);modulationSequencers[lane].setShape(k,mod);}
  }
