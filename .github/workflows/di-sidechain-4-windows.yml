@@ -1,0 +1,24 @@
+name: DI SIDECHAIN 4 Windows validation
+on:
+  pull_request:
+    paths:
+      - 'DI-SIDECHAIN/**'
+      - '.github/workflows/di-sidechain-4-windows.yml'
+  workflow_dispatch:
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S DI-SIDECHAIN -B build/di-sidechain -G "Visual Studio 17 2022" -A x64 -DBUILD_TESTING=ON
+      - name: Build VST3 and tests
+        run: cmake --build build/di-sidechain --config Release --parallel 2
+      - name: Run sequencer tests
+        run: ctest --test-dir build/di-sidechain -C Release --output-on-failure
+      - name: Upload VST3 bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: di-sidechain-4-windows-vst3
+          path: build/di-sidechain/DISidechain_artefacts/Release/VST3/
+          if-no-files-found: error
