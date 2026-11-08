@@ -72,6 +72,21 @@ int main(){
   check(std::isfinite(fx.process(input,drive,type)),
         "FX automation must not poison oversampler state");
  }
+ // Host block size must not affect streaming FIR output or dry latency.
+ di::OversampledFx2x continuous,chunked;
+ di::FixedDelay<di::OversampledFx2x::latencySamples> continuousDry,chunkedDry;
+ constexpr int sizes[]={1,7,64,3,128,5,17,256};
+ int cursor=0;
+ for(int size:sizes){
+  for(int j=0;j<size;++j,++cursor){
+   const float x=0.65f*std::sin(static_cast<float>(cursor)*0.083f);
+   const float a=continuous.process(x,5.f,1.f);
+   const float b=chunked.process(x,5.f,1.f);
+   check(a==b,"Oversampler must be independent of host block boundaries");
+   check(continuousDry.process(x)==chunkedDry.process(x),
+         "Dry latency must be independent of host block boundaries");
+  }
+ }
  // Quantitative aliasing regression: at 48 kHz, a 10 kHz tone's 30 kHz
  // third harmonic folds to 18 kHz without adequate oversampling filtering.
  fx.reset();
