@@ -31,6 +31,27 @@ int main(){
  }
  check(peakIndex==di::OversampledFx2x::latencySamples,"Oversampler group delay mismatch");
  check(peakMagnitude>0.f,"Impulse response must not be silent");
+ // A fully dry mix must be a bit-exact delayed copy, regardless of FX settings.
+ fx.reset();
+ dry.reset();
+ for(int i=0;i<256;++i){
+  const float input=std::sin(static_cast<float>(i)*0.137f);
+  const float drySignal=dry.process(input);
+  const float processed=fx.process(input,12.f,1.f);
+  const float mixed=drySignal+0.f*(processed-drySignal);
+  check(std::isfinite(processed),"Oversampled FX must remain finite");
+  check(mixed==drySignal,"Zero-wet bypass must equal delayed dry exactly");
+ }
+ // Per-channel state must remain independent under stereo processing.
+ di::OversampledFx2x left,right,reference;
+ for(int i=0;i<256;++i){
+  const float input=std::sin(static_cast<float>(i)*0.071f);
+  const float expected=reference.process(input,4.f,0.f);
+  const float l=left.process(input,4.f,0.f);
+  right.process(-input,8.f,1.f);
+  check(l==expected,"Stereo FX channels must not share filter history");
+ }
+
  fx.reset();
  for(int i=0;i<512;++i)check(std::isfinite(fx.process(i%2?1.f:-1.f,16.f,0.f)),"Nyquist input must stay finite");
  return 0;
