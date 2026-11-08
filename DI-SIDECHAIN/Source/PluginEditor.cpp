@@ -13,6 +13,12 @@ void buttonStyle(juce::TextButton& b) {
  b.setColour(juce::TextButton::buttonColourId,juce::Colour(0xff25303d));
  b.setColour(juce::TextButton::textColourOffId,juce::Colours::white);
 }
+// Click target stays fully transparent so the vector setup cog drawn by the
+// editor remains visible, including during hover/press interactions.
+class TransparentTextButton final : public juce::TextButton {
+public:
+ void paintButton(juce::Graphics&,bool,bool) override {}
+};
 }
 DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEditor(&p),proc(p) {
  setLookAndFeel(&theme);
@@ -109,10 +115,10 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
   b->setColour(juce::ToggleButton::textColourId,juce::Colours::white);
  }
  presetButton=std::make_unique<juce::TextButton>("PRESETS  -  Custom");
- setupButton=std::make_unique<juce::TextButton>("");
+ setupButton=std::make_unique<TransparentTextButton>();
  setupButton->setTooltip("SETUP - Plugin settings");
- setupBounds={1427,32,92,41};
- buttonStyle(*setupButton);addAndMakeVisible(*setupButton);
+ setupBounds={1449,31,61,45};
+ addAndMakeVisible(*setupButton);
  setupButton->onClick=[this]{showSetupMenu();};
  shapePresetButton=std::make_unique<juce::TextButton>("SHAPE PRESETS");
  sequencePrev=std::make_unique<juce::TextButton>("<");
@@ -490,10 +496,19 @@ void DISidechainEditor::resized() {
    sliders[i]->setBounds(xs[i],i<2?791:809,111,110);
   }
  }
- // Scaling all child components preserves native keyboard and pointer input.
- const auto transform=juce::AffineTransform::scale(uiScale);
- for(int i=0;i<getNumChildComponents();++i)
-  if(auto* child=getChildComponent(i))child->setTransform(transform);
+ // Scale actual child bounds (including origin), not component-local transforms.
+ // A local transform scales each button about its own position and would leave
+ // all its x/y coordinates unscaled at 50% or 75%.
+ for(int i=0;i<getNumChildComponents();++i) {
+  if(auto* child=getChildComponent(i)) {
+   child->setTransform(juce::AffineTransform());
+   const auto r=child->getBounds();
+   child->setBounds(juce::roundToInt(r.getX()*uiScale),
+                    juce::roundToInt(r.getY()*uiScale),
+                    juce::jmax(1,juce::roundToInt(r.getWidth()*uiScale)),
+                    juce::jmax(1,juce::roundToInt(r.getHeight()*uiScale)));
+  }
+ }
 }
 void DISidechainEditor::updatePoint(const juce::MouseEvent& e) {
  if(!detailGraph.contains((e.position/uiScale).toInt()))return;
