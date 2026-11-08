@@ -70,7 +70,7 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  const char* laneNames[]={"VOLUME","FILTER","PAN"};
  for(int i=0;i<3;++i){
   laneTabs[i]=std::make_unique<juce::TextButton>(laneNames[i]);
-  laneTabs[i]->onClick=[this,i]{selectedLane=i;for(int j=0;j<3;++j)laneTabs[j]->setToggleState(j==selectedLane,juce::dontSendNotification);repaint();};
+  laneTabs[i]->onClick=[this,i]{if(i>0&&!sequenceToggle->getToggleState())sequenceToggle->setToggleState(true,juce::sendNotificationSync);selectedLane=i;for(int j=0;j<3;++j)laneTabs[j]->setToggleState(j==selectedLane,juce::dontSendNotification);repaint();};
   addAndMakeVisible(*laneTabs[i]);
  }
  const char* laneIds[]={"filterMod","panMod"};
@@ -205,7 +205,7 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  g.fillRoundedRectangle(juce::Rectangle<float>(207,98,185,47),9.f);
  text(g,"SEQUENCER", {233,105,153,31},19,sequenceToggle->getToggleState()?bg:muted,true);
  text(g,"MULTI-LANE  ·  3 ACTIVE LANES", {424,106,305,32},16,green);
- text(g,"FX  /  SATURATOR", {755,106,230,32},16,juce::Colour(0xffffb84d),true);
+ text(g,"FX", {755,106,70,32},16,juce::Colour(0xffffb84d),true);
  text(g,"DRIVE dB", {1090,96,110,18},11,muted);
  text(g,"WET", {1284,96,70,18},11,muted);
  text(g,"DI SIDECHAIN 4.0  •  EXPERIMENTAL", {1160,52,340,22},13,muted);
@@ -285,7 +285,7 @@ void DISidechainEditor::resized() {
  if(pasteStep)pasteStep->setBounds(969,586,208,33);
  if(resetStep)resetStep->setBounds(969,628,208,33);
  if(shapeOffset){shapeOffset->setBounds(1100,665,77,28);shapeOffset->setEnabled(selectedLane==0);}
- if(fxToggle)fxToggle->setBounds(928,112,154,30);
+ if(fxToggle)fxToggle->setBounds(825,112,155,30);
  if(fxSliders[0])fxSliders[0]->setBounds(1080,116,190,28);
  if(fxSliders[1])fxSliders[1]->setBounds(1280,116,190,28);
  for(int i=0;i<3;++i)if(laneTabs[i]){laneTabs[i]->setBounds(1225+i*92,527,86,30);laneTabs[i]->setToggleState(selectedLane==i,juce::dontSendNotification);}
@@ -313,7 +313,7 @@ void DISidechainEditor::updatePoint(const juce::MouseEvent& e) {
 }
 void DISidechainEditor::updateDetailPoint(const juce::MouseEvent& e){updatePoint(e);}
 void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
- if(juce::Rectangle<int>(25,98,173,47).contains(e.getPosition())){sequenceToggle->setToggleState(false,juce::sendNotificationSync);repaint();return;}
+ if(juce::Rectangle<int>(25,98,173,47).contains(e.getPosition())){sequenceToggle->setToggleState(false,juce::sendNotificationSync);selectedLane=0;repaint();return;}
  if(juce::Rectangle<int>(207,98,185,47).contains(e.getPosition())){sequenceToggle->setToggleState(true,juce::sendNotificationSync);repaint();return;}
  if(stepStrip.contains(e.getPosition())){
   const int count=juce::jlimit(1,32,(int)sequenceCount->getValue());
