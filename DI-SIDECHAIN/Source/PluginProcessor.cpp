@@ -129,7 +129,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  const bool fire=di::shouldFireTrigger(midiNoteOn,audioPeak,armed,refractory,trig);
  // Consume a threshold crossing even during holdoff or a simultaneous MIDI note.
  // Otherwise a sustained kick can fire a delayed ghost trigger after holdoff.
- if(audioPeak&&armed)armed=false;
+ if(di::shouldConsumeAudioPeak(audioPeak,armed,trig))armed=false;
  if(refractory>0)--refractory;
  if(fire){
   phase=0;
