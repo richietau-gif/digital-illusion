@@ -1,4 +1,5 @@
 #include "../Source/ShapeSequencer.h"
+#include "../Source/TransportContinuity.h"
 #include <cstdlib>
 #include <iostream>
 static void check(bool condition, const char* message) { if (!condition) { std::cerr << message << '\n'; std::exit(1); } }
@@ -70,5 +71,11 @@ int main() {
  check(timeline.getCurrentStep()==4,"Exact PPQ step boundary");
  timeline.seekToStepPosition(std::numeric_limits<double>::quiet_NaN());
  check(timeline.getCurrentStep()==4,"Invalid PPQ must not corrupt step");
+ check(!di::transportDiscontinuity(-1,0),"Unknown transport sample must not reset");
+ check(!di::transportDiscontinuity(1024,1024),"Contiguous transport must not reset");
+ check(!di::transportDiscontinuity(1024,1026),"Two-sample host tolerance");
+ check(di::transportDiscontinuity(1024,1027),"Small seek must reset");
+ check(di::transportDiscontinuity(1024,1000),"Short loop jump must reset");
+ check(di::transportDiscontinuity(1024,0),"Rewind must reset");
  return 0;
 }
