@@ -3,6 +3,7 @@
 #include "FxWaveshaper.h"
 #include "FxWetMix.h"
 #include "PeakDetector.h"
+#include "SidechainPeak.h"
 #include <cmath>
 static juce::AudioProcessorValueTreeState::ParameterLayout layoutParams(){
  std::vector<std::unique_ptr<juce::RangedAudioParameter>> p;
@@ -106,7 +107,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  smoothedFxWet=fxWet+(smoothedFxWet-fxWet)*fxParameterSmoothing;
  smoothedFxType=(float)fxType+(smoothedFxType-(float)fxType)*fxSmoothing;
  while(hasEvent&&midiPos<=i){if(msg.isNoteOn()&&msg.getVelocity()>0&&trig!=1)fire=true;hasEvent=it.getNextEvent(msg,midiPos);}
- if(hasSide&&trig!=2&&side.getNumSamples()>=n){float v=0;for(int ch=0;ch<side.getNumChannels();++ch)v=juce::jmax(v,std::abs(side.getSample(ch,i)));detector=di::followPeak(detector,(double)v,detectorRelease);if(detector<threshold*.65)armed=true;if(armed&&detector>=threshold&&refractory==0){fire=true;armed=false;}}
+ if(hasSide&&trig!=2&&side.getNumSamples()>=n){const float v=di::sidechainPeak(side.getSample(0,i),side.getNumChannels()>1?side.getSample(1,i):0.f,side.getNumChannels()>1);detector=di::followPeak(detector,(double)v,detectorRelease);if(detector<threshold*.65)armed=true;if(armed&&detector>=threshold&&refractory==0){fire=true;armed=false;}}
  if(refractory>0)--refractory;
  if(fire){
   phase=0;
