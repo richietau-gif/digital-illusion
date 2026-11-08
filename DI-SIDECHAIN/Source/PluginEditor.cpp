@@ -287,7 +287,7 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  const auto white=juce::Colour(0xffecf8ff);
  const auto faint=juce::Colour(0xff9bb6c7);
  const auto cyan=DITheme::cyan();
- const auto lime=DITheme::lime;
+ const auto lime=DITheme::lime();
  const auto orange=DITheme::orange();
  // Polished header with an original waveform logo, entirely vector-rendered.
  juce::ColourGradient top(juce::Colour(0xff123448),0.f,0.f,juce::Colour(0xff06111a),0.f,102.f,false);
