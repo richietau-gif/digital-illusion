@@ -1,5 +1,6 @@
 #pragma once
 #include "PluginProcessor.h"
+#include "DITheme.h"
 class DISidechainEditor : public juce::AudioProcessorEditor,private juce::Timer {
 public:
  explicit DISidechainEditor(DISidechainProcessor&);
@@ -10,7 +11,11 @@ public:
 private:
  void timerCallback() override {repaint();}
  void updatePoint(const juce::MouseEvent&);
+ DITheme theme;
  DISidechainProcessor& proc;
+ std::array<std::unique_ptr<juce::TextButton>,4> filterButtons;
+ void refreshFilterButtons();
+ void selectFilter(int);
  juce::Rectangle<int> graph, stepStrip, detailGraph, sequencerPanel, filterPanel, outputPanel;
  std::unique_ptr<juce::TextButton> copyStep, pasteStep, resetStep;
  di::ShapeSequencer::Shape clipboard{};
