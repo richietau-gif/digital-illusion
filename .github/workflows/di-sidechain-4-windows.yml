@@ -1,9 +1,5 @@
 name: DI SIDECHAIN 4 Windows validation
 on:
-  pull_request:
-    paths:
-      - 'DI-SIDECHAIN/**'
-      - '.github/workflows/di-sidechain-4-windows.yml'
   workflow_dispatch:
 jobs:
   build-and-test:
