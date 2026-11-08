@@ -202,9 +202,9 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p) : AudioProcessorEd
         auto button=std::make_unique<juce::TextButton>(factory[i]);
         button->setComponentID("factory-preset-"+juce::String(i));
         button->setColour(juce::TextButton::buttonColourId,juce::Colour(0xff20312e));
-        button->setColour(juce::TextButton::buttonOnColourId,juce::Colour(0xff38613a));
+        button->setColour(juce::TextButton::buttonOnColourId,juce::Colour(0xff493768));
         button->setColour(juce::TextButton::textColourOffId,pale);
-        button->setColour(juce::TextButton::textColourOnId,accent);
+        button->setColour(juce::TextButton::textColourOnId,juce::Colour(0xffc9b4ff));
         button->onClick=[this,i]{
             envelopePreset->setSelectedId(i+1,juce::sendNotificationSync);
         };
@@ -296,11 +296,14 @@ void DISidechainEditor::paint(juce::Graphics& g){
     };
     // Panel groupings and clean hierarchy like studio-grade audio software.
     section({12,91,239,528},"SIDECHAIN INPUT");
+    g.setColour(juce::Colour(0xff4ba8ec));g.fillRoundedRectangle({13,126,3,486},2.f);
     section({260,91,850,425},"SHAPE EDITOR");
     section({1120,91,247,186},"OUTPUT");
     section({1120,288,247,328},"FACTORY PRESETS");
+    g.setColour(juce::Colour(0xffaf8bff));g.fillRoundedRectangle({1121,326,3,282},2.f);
     section({260,527,850,88},"FREQUENCY TARGET");
     section({12,628,908,220},"FILTER ENGINE");
+    g.setColour(accent.withAlpha(.65f));g.fillRoundedRectangle({13,665,3,176},2.f);
     section({930,628,437,220},"SIDECHAIN CONTROLS");
 
     // Brand/navigation bar: orange reserved exclusively for envelope.
@@ -395,7 +398,7 @@ void DISidechainEditor::paint(juce::Graphics& g){
         g.setColour(timing.withAlpha(.50f));g.strokePath(dashed,juce::PathStrokeType(1.2f));
     }
     text(g,"OFFSET "+juce::String(offsetPercent>0?"+":"")+juce::String(offsetPercent,1)+"%",
-        11,{907,490,182,18},timing,juce::Justification::centredRight);
+        11,{925,158,166,20},timing,juce::Justification::centredRight);
     juce::Path curve;
     for(int i=0;i<=350;++i){
         const float phase=(float)i/350.f;
@@ -454,7 +457,7 @@ void DISidechainEditor::paint(juce::Graphics& g){
              muted,juce::Justification::centred);
     text(g,"GREEN: ACTIVE CONTROL  ·  ORANGE: SHAPE",9,
          {1131,264,222,15},muted,juce::Justification::centred);
-    text(g,"ONE CLICK TO LOAD A CURVE",9,{1134,323,217,16},muted);
+    text(g,"ONE CLICK TO LOAD A CURVE",9,{1134,323,217,16},juce::Colour(0xffb9a0ff));
     text(g,"Custom curves are saved with the Ableton project",9,
          {1136,590,214,18},muted,juce::Justification::centred);
 
