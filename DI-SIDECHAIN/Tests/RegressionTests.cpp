@@ -172,6 +172,14 @@ static void independentFilterAndFollowerRegression()
     require(std::abs(p.evaluateEnvelope(3./7.)-volumeBefore)<.001f,
             "Editing Filter A modified the Volume envelope");
 
+    // Re-linking the two envelopes and un-linking again must NEVER erase
+    // previously edited A/B Filter shapes.
+    set(p,"filterEnvelopeLink",1.f);
+    p.copyVolumeShapeToFilterBanks();
+    set(p,"filterEnvelopeLink",0.f);
+    require(std::abs(p.getFilterEnvelopePoint(0,3)-.9f)<.0001f,
+            "Re-linking destroyed the Filter A/B edits");
+
     set(p,"filterEnvelopeFollower",-.6f);
     juce::MemoryBlock saved;
     p.getStateInformation(saved);
