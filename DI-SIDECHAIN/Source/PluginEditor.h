@@ -36,6 +36,10 @@ private:
  void paintShape(juce::Graphics&, juce::Rectangle<int>, int, bool);
  void paintPanel(juce::Graphics&, juce::Rectangle<int>, const juce::String&);
  void updateDetailPoint(const juce::MouseEvent&);
+ void applyFactoryPreset(int);
+ void applyShapePreset(int);
+ void showPresetMenu();
+ void showShapeMenu();
  int selectedStep=0;
  int selectedLane=0;
  std::array<std::unique_ptr<juce::TextButton>,3> laneTabs;
@@ -54,7 +58,10 @@ private:
  std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>> ca;
  std::unique_ptr<juce::ComboBox> fxTypeBox;
  std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> fxTypeAttachment;
- std::unique_ptr<juce::ToggleButton> fxToggle;
+ std::unique_ptr<juce::ToggleButton> fxToggle, saturatorToggle;
+ std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> saturatorAttachment;
+ std::unique_ptr<juce::TextButton> presetButton, shapePresetButton, sequencePrev, sequenceNext;
+ juce::String presetName {"Custom"};
  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> fxToggleAttachment;
  std::array<std::unique_ptr<juce::Slider>,2> fxSliders;
  std::array<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>,2> fxAttachments;
