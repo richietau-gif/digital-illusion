@@ -41,6 +41,8 @@ private:
  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> sequenceAttachment;
  std::unique_ptr<juce::Slider> sequenceCount;
  std::unique_ptr<juce::Slider> shapeOffset;
+ std::array<std::unique_ptr<juce::Slider>,2> laneSliders;
+ std::array<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>,2> laneAttachments;
  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> shapeOffsetAttachment;
  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> sequenceCountAttachment;
  std::vector<std::unique_ptr<juce::Slider>> sliders;
