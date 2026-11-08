@@ -1,4 +1,5 @@
 #include "../Source/OversampledFx2x.h"
+#include "../Source/FixedDelay.h"
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
@@ -14,6 +15,14 @@ int main(){
  check(std::isfinite(steady),"DC output finite");
  check(std::abs(steady-di::processFx(0.3f,1.f,1.f))<0.02f,"DC gain must settle");
  // Small-signal impulse response verifies the FIR path's nominal delay.
+ di::FixedDelay<di::OversampledFx2x::latencySamples> dry;
+ for(int i=0;i<32;++i){
+  const float result=dry.process(i==0?1.f:0.f);
+  check(std::abs(result-(i==di::OversampledFx2x::latencySamples?1.f:0.f))<1e-6f,"Dry delay impulse alignment");
+ }
+ dry.reset();
+ for(int i=0;i<di::OversampledFx2x::latencySamples;++i)
+  check(dry.process(1.f)==0.f,"Dry delay reset must clear history");
  fx.reset();
  int peakIndex=-1;float peakMagnitude=0.f;
  for(int i=0;i<32;++i){
