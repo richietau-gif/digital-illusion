@@ -79,6 +79,7 @@ private:
  std::atomic<int> activeNodeCount {0}; // 0 selects legacy 8-point envelope
  std::array<std::array<std::atomic<float>,filterEnvelopePoints>,2> filterEnvelopeBanks {};
  std::atomic<float> visualFollowerLevel {0.f};
+ std::atomic<bool> filterBanksInitialized {false};
  float followerLevel=0.f;
  void adoptLegacyPoints() noexcept;
  double sr=44100, phase=1, envelopeLength=0.25, detector=0;
