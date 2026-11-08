@@ -30,6 +30,13 @@ public:
  void reset() noexcept { currentStep = 0; phase = 0.; }
  void trigger() noexcept { currentStep = 0; phase = 0.; }
  void advanceStep() noexcept { currentStep = (currentStep + 1) % steps; phase = 0.; }
+ void seekToStepPosition(double stepPosition) noexcept {
+   if (!std::isfinite(stepPosition)) return;
+   const double wrapped = std::fmod(std::fmod(stepPosition, static_cast<double>(steps)) + steps, static_cast<double>(steps));
+   currentStep = std::clamp(static_cast<int>(wrapped), 0, steps - 1);
+   phase = wrapped - static_cast<double>(currentStep);
+ }
+
  // samplesPerStep may be derived from BPM and musical division in the processor.
  float render(double samplesPerStep) noexcept {
    if (!std::isfinite(samplesPerStep) || samplesPerStep < 1.) samplesPerStep = 1.;
