@@ -15,5 +15,24 @@ int main(){
  check(!shouldFireTrigger(false,true,false,0,0),"Audio requires armed detector");
  check(shouldFireTrigger(true,true,true,0,0),"Simultaneous sources yield one trigger");
  check(!shouldFireTrigger(false,false,true,0,0),"Silence does not trigger");
+ check(di::shouldConsumeAudioPeak(true,true,0),"Combined mode consumes audio crossing");
+ check(di::shouldConsumeAudioPeak(true,true,1),"Audio-only consumes audio crossing");
+ check(!di::shouldConsumeAudioPeak(true,true,2),"MIDI-only must not consume audio");
+ check(!di::shouldConsumeAudioPeak(true,false,0),"Disarmed crossing must not consume");
+ check(!di::shouldConsumeAudioPeak(false,true,0),"No crossing must not consume");
+ // Reproduce a sustained audio pulse overlapping MIDI and the holdoff window.
+ bool armed=true;
+ int holdoff=4;
+ int fires=0;
+ for(int sample=0;sample<12;++sample){
+  const bool high=sample>=1&&sample<=8;
+  const bool midi=sample==1;
+  if(!high)armed=true;
+  const bool crossing=high&&armed;
+  if(shouldFireTrigger(midi,crossing,armed,holdoff,0)){++fires;holdoff=4;}
+  if(di::shouldConsumeAudioPeak(crossing,armed,0))armed=false;
+  if(holdoff>0)--holdoff;
+ }
+ check(fires==1,"Sustained overlapping audio and MIDI must fire once");
  return 0;
 }
