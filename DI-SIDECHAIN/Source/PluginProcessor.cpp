@@ -4,10 +4,11 @@
 static juce::AudioProcessorValueTreeState::ParameterLayout layoutParams(){
  std::vector<std::unique_ptr<juce::RangedAudioParameter>> p;
  auto f=[&](const char* id,const char* name,float lo,float hi,float def){p.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{id,1},name,juce::NormalisableRange<float>(lo,hi),def));};
- f("depth","Depth",0,1,1); f("mix","Mix",0,1,1);f("threshold","Trigger threshold dB",-60,0,-22);f("length","Envelope milliseconds",10,2000,250);f("smooth","Smoothing milliseconds",0.1,20,2);f("low","Low cutoff",25,1500,120);f("high","High cutoff",60,18000,400);f("retrigger","Trigger holdoff milliseconds",1,250,35);f("shapeOffset","Shape vertical offset",-1,1,0);f("panMod","Pan modulation amount",-1,1,0);f("filterMod","Filter modulation amount",0,1,0);
+ f("depth","Depth",0,1,1); f("mix","Mix",0,1,1);f("threshold","Trigger threshold dB",-60,0,-22);f("length","Envelope milliseconds",10,2000,250);f("smooth","Smoothing milliseconds",0.1,20,2);f("low","Low cutoff",25,1500,120);f("high","High cutoff",60,18000,400);f("retrigger","Trigger holdoff milliseconds",1,250,35);f("shapeOffset","Shape vertical offset",-1,1,0);f("panMod","Pan modulation amount",-1,1,0);f("filterMod","Filter modulation amount",0,1,0);f("fxDrive","FX drive dB",0,24,0);f("fxMix","FX wet mix",0,1,1);
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"mode",1},"Frequency mode",juce::StringArray{"Full","Low","High","Band"},0));
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"trigger",1},"Trigger mode",juce::StringArray{"Audio + MIDI","Audio only","MIDI only"},0));
  p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"sequenceEnabled",1},"Shape sequencer enabled",false));
+ p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"fxEnabled",1},"Saturation FX enabled",false));
  p.push_back(std::make_unique<juce::AudioParameterInt>(juce::ParameterID{"sequenceSteps",1},"Sequence steps",1,32,16));
  p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"sync",1},"Tempo sync",true));
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"division",1},"Beat division",juce::StringArray{"1/32","1/16","1/8","1/4","1/2","1 bar","2 bars"},2));
@@ -39,8 +40,11 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  // Keep sidechain as a non-owning view; never allocate or copy a buffer on the audio thread.
  juce::AudioBuffer<float> side; if(hasSide){auto view=getBusBuffer(buffer,true,1);side.setDataToReferTo(view.getArrayOfWritePointers(),view.getNumChannels(),view.getNumSamples());}
  auto get=[&](const char* id){return state.getRawParameterValue(id)->load();};
- int mode=(int)get("mode"),trig=(int)get("trigger");float depth=get("depth"),mix=get("mix"),shapeOffset=get("shapeOffset"),panMod=get("panMod"),filterMod=get("filterMod"),lo=get("low"),hi=juce::jmax(lo+10,get("high"));
+ int mode=(int)get("mode"),trig=(int)get("trigger");float depth=get("depth"),mix=get("mix"),shapeOffset=get("shapeOffset"),panMod=get("panMod"),filterMod=get("filterMod"),fxDrive=get("fxDrive"),fxMix=get("fxMix"),fxEnabled=get("fxEnabled")>0.5f,lo=get("low"),hi=juce::jmax(lo+10,get("high"));
  const float filterRange=juce::jlimit(0.f,1.f,filterMod);
+ const float drive=juce::Decibels::decibelsToGain(fxDrive);
+ const float fxWet=juce::jlimit(0.f,1.f,fxMix);
+ const float saturationNorm=1.f/std::tanh(juce::jmax(1.f,drive));
  for(auto& c:filters){c.low.setCutoffFrequency(lo);c.high.setCutoffFrequency(mode==3?hi:lo);}
  double bpm=120; if(auto* ph=getPlayHead()){if(auto pos=ph->getPosition()){if(auto b=pos->getBpm())bpm=*b;}}
  const double divisions[]={0.125,0.25,0.5,1,2,4,8};
@@ -77,6 +81,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  // Filter lane affects the selected frequency band, while Full mode remains full-band.
  if(filterRange>0.f&&mode!=0)out=dry+(out-dry)*filterLaneGain;
  if(panMod!=0.f)out*=ch==0?panLeft:panRight;
+ if(fxEnabled&&fxDrive>0.f&&fxWet>0.f){const float saturated=std::tanh(out*drive)*saturationNorm;out+=fxWet*(saturated-out);}
  if(!std::isfinite(out))out=dry;main.setSample(ch,i,out);peak=juce::jmax(peak,std::abs(out));}
  }
  meter.store(peak);midi.clear();
