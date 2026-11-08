@@ -38,7 +38,7 @@ int main(){
   const float input=std::sin(static_cast<float>(i)*0.137f);
   const float drySignal=dry.process(input);
   const float processed=fx.process(input,12.f,1.f);
-  const float mixed=drySignal+0.f*(processed-drySignal);
+  const float mixed=drySignal; // zero-wet branch must not evaluate potentially nonfinite wet math
   check(std::isfinite(processed),"Oversampled FX must remain finite");
   check(mixed==drySignal,"Zero-wet bypass must equal delayed dry exactly");
  }
