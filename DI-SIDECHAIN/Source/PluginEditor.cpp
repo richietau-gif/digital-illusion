@@ -56,18 +56,19 @@ void DIStudioSkin::drawRotarySlider(juce::Graphics& g,int x,int y,int width,int 
 }
 void DIStudioSkin::drawLinearSlider(juce::Graphics& g,int x,int y,int width,int height,
                                    float sliderPos,float,float,
-                                   juce::Slider::SliderStyle style,juce::Slider&)
+                                   juce::Slider::SliderStyle style,juce::Slider& slider)
 {
     if(style!=juce::Slider::LinearHorizontal)return;
     const float cy=y+height*.5f;
     const float left=(float)x+5.f,right=x+width-5.f;
-    g.setColour(juce::Colour(0xff344a42));
+    const auto active=slider.findColour(juce::Slider::thumbColourId);
+    g.setColour(active.withAlpha(.18f));
     g.drawLine(left,cy,right,cy,4.f);
-    g.setColour(juce::Colour(0xffafff4d).withAlpha(.27f));
+    g.setColour(active.withAlpha(.27f));
     g.drawLine(left,cy,sliderPos,cy,7.f);
-    g.setColour(juce::Colour(0xffafff4d));
+    g.setColour(active);
     g.drawLine(left,cy,sliderPos,cy,3.f);
-    g.setColour(juce::Colour(0xffb6ff75));
+    g.setColour(active.brighter(.18f));
     g.fillEllipse(sliderPos-5,cy-5,10,10);
 }
 void DIStudioSkin::drawComboBox(juce::Graphics& g,int width,int height,bool,
@@ -101,9 +102,9 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p) : AudioProcessorEd
     setLookAndFeel(&skin);
     setWantsKeyboardFocus(true);
 
-    const char* ids[] = {"depth","mix","threshold","length","smooth","low","high","retrigger","midiNote","midiChannel","detectorHP","outputFilterMin","outputFilterMax","outputFilterAmount","outputFilterResonance","outputFilterDrive","detectorAttackMs","detectorReleaseMs","multiLowDepth","multiMidDepth","multiHighDepth"};
-    const char* titles[] = {"DEPTH","MIX","THRESHOLD dB","LENGTH ms","SMOOTH","LOW Hz","HIGH Hz","HOLDOFF","MIDI NOTE (-1 ANY)","MIDI CH (0 ANY)","TRIGGER HP Hz","FILTER MIN Hz","FILTER MAX Hz","FILTER AMOUNT","RESONANCE Q","FILTER DRIVE","TRIGGER ATTACK ms","TRIGGER RELEASE ms","MULTI LOW DEPTH","MULTI MID DEPTH","MULTI HIGH DEPTH"};
-    for (int i=0;i<21;++i) {
+    const char* ids[] = {"depth","mix","threshold","length","smooth","low","high","retrigger","midiNote","midiChannel","detectorHP","outputFilterMin","outputFilterMax","outputFilterAmount","outputFilterResonance","outputFilterDrive","detectorAttackMs","detectorReleaseMs","multiLowDepth","multiMidDepth","multiHighDepth","envelopeOffset"};
+    const char* titles[] = {"DEPTH","MIX","THRESHOLD dB","LENGTH ms","SMOOTH","LOW Hz","HIGH Hz","HOLDOFF","MIDI NOTE (-1 ANY)","MIDI CH (0 ANY)","TRIGGER HP Hz","FILTER MIN Hz","FILTER MAX Hz","FILTER AMOUNT","RESONANCE Q","FILTER DRIVE","TRIGGER ATTACK ms","TRIGGER RELEASE ms","MULTI LOW DEPTH","MULTI MID DEPTH","MULTI HIGH DEPTH","OFFSET ± %"};
+    for (int i=0;i<22;++i) {
         auto s=std::make_unique<juce::Slider>();
         const bool rotary=(i==0||i==4||i==1||(i>=11&&i<=15));
         s->setSliderStyle(rotary?juce::Slider::RotaryHorizontalVerticalDrag:
@@ -114,6 +115,13 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p) : AudioProcessorEd
         if(i>=13)s->setNumDecimalPlacesToDisplay(2);
         if(!rotary)s->setTextBoxStyle(juce::Slider::TextBoxRight,false,67,23);
         s->setColour(juce::Slider::textBoxTextColourId,pale);
+        if(i==21){
+            s->setComponentID("envelopeOffset");
+            s->setColour(juce::Slider::thumbColourId,juce::Colour(0xff35dce7));
+            s->setColour(juce::Slider::textBoxTextColourId,juce::Colour(0xff35dce7));
+            s->setNumDecimalPlacesToDisplay(1);
+            s->setDoubleClickReturnValue(true,0.);
+        }
         auto l=std::make_unique<juce::Label>();
         l->setText(titles[i],juce::dontSendNotification);
         l->setColour(juce::Label::textColourId,muted);
