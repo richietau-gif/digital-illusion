@@ -4,7 +4,7 @@
 static juce::AudioProcessorValueTreeState::ParameterLayout layoutParams(){
  std::vector<std::unique_ptr<juce::RangedAudioParameter>> p;
  auto f=[&](const char* id,const char* name,float lo,float hi,float def){p.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{id,1},name,juce::NormalisableRange<float>(lo,hi),def));};
- f("depth","Depth",0,1,1); f("mix","Mix",0,1,1);f("threshold","Trigger threshold dB",-60,0,-22);f("length","Envelope milliseconds",10,2000,250);f("smooth","Smoothing milliseconds",0.1,20,2);f("low","Low cutoff",25,1500,120);f("high","High cutoff",60,18000,400);f("retrigger","Trigger holdoff milliseconds",1,250,35);f("shapeOffset","Shape vertical offset",-1,1,0);
+ f("depth","Depth",0,1,1); f("mix","Mix",0,1,1);f("threshold","Trigger threshold dB",-60,0,-22);f("length","Envelope milliseconds",10,2000,250);f("smooth","Smoothing milliseconds",0.1,20,2);f("low","Low cutoff",25,1500,120);f("high","High cutoff",60,18000,400);f("retrigger","Trigger holdoff milliseconds",1,250,35);f("shapeOffset","Shape vertical offset",-1,1,0);f("panMod","Pan modulation amount",-1,1,0);f("filterMod","Filter modulation amount",0,1,0);
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"mode",1},"Frequency mode",juce::StringArray{"Full","Low","High","Band"},0));
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"trigger",1},"Trigger mode",juce::StringArray{"Audio + MIDI","Audio only","MIDI only"},0));
  p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"sequenceEnabled",1},"Shape sequencer enabled",false));
@@ -30,7 +30,8 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  // Keep sidechain as a non-owning view; never allocate or copy a buffer on the audio thread.
  juce::AudioBuffer<float> side; if(hasSide){auto view=getBusBuffer(buffer,true,1);side.setDataToReferTo(view.getArrayOfWritePointers(),view.getNumChannels(),view.getNumSamples());}
  auto get=[&](const char* id){return state.getRawParameterValue(id)->load();};
- int mode=(int)get("mode"),trig=(int)get("trigger");float depth=get("depth"),mix=get("mix"),shapeOffset=get("shapeOffset"),lo=get("low"),hi=juce::jmax(lo+10,get("high"));
+ int mode=(int)get("mode"),trig=(int)get("trigger");float depth=get("depth"),mix=get("mix"),shapeOffset=get("shapeOffset"),panMod=get("panMod"),filterMod=get("filterMod"),lo=get("low"),hi=juce::jmax(lo+10,get("high"));
+ const float filterRange=juce::jlimit(0.f,1.f,filterMod);
  for(auto& c:filters){c.low.setCutoffFrequency(lo);c.high.setCutoffFrequency(mode==3?hi:lo);}
  double bpm=120; if(auto* ph=getPlayHead()){if(auto pos=ph->getPosition()){if(auto b=pos->getBpm())bpm=*b;}}
  const double divisions[]={0.125,0.25,0.5,1,2,4,8};
@@ -49,9 +50,18 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  else {env=phase>=1?1:curve(phase);phase=juce::jmin(1.0,phase+step);}
  if(sequenceOn)env=juce::jlimit(0.f,1.f,env+shapeOffset);
  float target=1-depth*(1-env);smoothGain=coeff*smoothGain+(1-coeff)*target;
+ // Independent, opt-in modulation lanes; neutral defaults preserve legacy patches.
+ const float pan=juce::jlimit(-1.f,1.f,panMod*(2.f*env-1.f));
+ const float panLeft=pan>0.f?std::cos(pan*juce::MathConstants<float>::halfPi):1.f;
+ const float panRight=pan<0.f?std::cos(-pan*juce::MathConstants<float>::halfPi):1.f;
+ const float filterLaneGain=1.f-filterRange*(1.f-env);
  for(int ch=0;ch<2;++ch){float dry=main.getSample(ch,i),wet=dry*smoothGain;
  if(mode!=0){auto& f=filters[ch];float low=f.low.processSample(0,dry),high=f.high.processSample(0,dry);float affected=mode==1?low:mode==2?high:dry-low-high;wet=dry+affected*(smoothGain-1);}
- float out=dry+(wet-dry)*mix;if(!std::isfinite(out))out=dry;main.setSample(ch,i,out);peak=juce::jmax(peak,std::abs(out));}
+ float out=dry+(wet-dry)*mix;
+ // Filter lane affects the selected frequency band, while Full mode remains full-band.
+ if(filterRange>0.f&&mode!=0)out*=filterLaneGain;
+ if(panMod!=0.f)out*=ch==0?panLeft:panRight;
+ if(!std::isfinite(out))out=dry;main.setSample(ch,i,out);peak=juce::jmax(peak,std::abs(out));}
  }
  meter.store(peak);midi.clear();
 }
