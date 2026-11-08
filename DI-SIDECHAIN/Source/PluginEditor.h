@@ -11,15 +11,21 @@ public:
  void mouseDrag(const juce::MouseEvent&) override;
  void mouseUp(const juce::MouseEvent&) override;
 private:
- void timerCallback() override {refreshFilterButtons();refreshFxButtons();
-  if(sequenceCount)selectedStep=juce::jlimit(0,juce::jlimit(1,16,(int)sequenceCount->getValue())-1,selectedStep);
-  repaint();}
+ void timerCallback() override {
+  refreshFilterButtons();
+  refreshFxButtons();
+  syncUiPreferences();
+  if(sequenceCount)
+   selectedStep=juce::jlimit(0,juce::jlimit(1,16,(int)sequenceCount->getValue())-1,selectedStep);
+  repaint();
+ }
  void updatePoint(const juce::MouseEvent&);
  DITheme theme;
  DISidechainProcessor& proc;
  std::array<std::unique_ptr<juce::TextButton>,4> filterButtons;
  void refreshFilterButtons();
  void refreshFxButtons();
+ void syncUiPreferences();
  void selectFilter(int);
  juce::Rectangle<int> graph, stepStrip, detailGraph, sequencerPanel, filterPanel, outputPanel, setupBounds;
  static constexpr int designWidth=1536, designHeight=950;
