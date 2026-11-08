@@ -59,7 +59,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  if(mode!=0){auto& f=filters[ch];float low=f.low.processSample(0,dry),high=f.high.processSample(0,dry);float affected=mode==1?low:mode==2?high:dry-low-high;wet=dry+affected*(smoothGain-1);}
  float out=dry+(wet-dry)*mix;
  // Filter lane affects the selected frequency band, while Full mode remains full-band.
- if(filterRange>0.f&&mode!=0)out*=filterLaneGain;
+ if(filterRange>0.f&&mode!=0)out=dry+(out-dry)*filterLaneGain;
  if(panMod!=0.f)out*=ch==0?panLeft:panRight;
  if(!std::isfinite(out))out=dry;main.setSample(ch,i,out);peak=juce::jmax(peak,std::abs(out));}
  }
