@@ -124,7 +124,7 @@ int main(){
  constexpr double pi=3.14159265358979323846;
  double plainReal=0.,plainImag=0.,oversampledReal=0.,oversampledImag=0.;
  for(int i=0;i<count;++i){
-  const float input=0.8f*std::sin(2.*pi*fundamental*i/sampleRate);
+  const float input=static_cast<float>(0.8*std::sin(2.*pi*fundamental*i/sampleRate));
   const float plain=di::processFx(input,8.f,1.f);
   const float oversampled=fx.process(input,8.f,1.f);
   if(i<256)continue; // exclude FIR startup transient
