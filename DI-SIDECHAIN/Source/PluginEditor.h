@@ -19,7 +19,10 @@ private:
  void refreshFilterButtons();
  void refreshFxButtons();
  void selectFilter(int);
- juce::Rectangle<int> graph, stepStrip, detailGraph, sequencerPanel, filterPanel, outputPanel;
+ juce::Rectangle<int> graph, stepStrip, detailGraph, sequencerPanel, filterPanel, outputPanel, setupBounds;
+ static constexpr int designWidth=1536, designHeight=950;
+ float uiScale=1.f;
+ int renderQuality=1;
  std::unique_ptr<juce::TextButton> copyStep, pasteStep, resetStep, undoButton, redoButton, snapButton;
  struct ShapeEdit {int step;bool sequence;di::ShapeSequencer::Shape before,after;};
  std::vector<ShapeEdit> undoStack, redoStack;
@@ -43,6 +46,10 @@ private:
  void saveUserPreset();
  void loadUserPreset();
  void showShapeMenu();
+ void showSetupMenu();
+ void selectUiScale(int);
+ void selectRenderQuality(int);
+ void paintFrequencyResponse(juce::Graphics&,juce::Rectangle<int>);
  int selectedStep=0;
  int selectedLane=0;
  std::array<std::unique_ptr<juce::TextButton>,3> laneTabs;
@@ -63,7 +70,7 @@ private:
  std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> fxTypeAttachment;
  std::unique_ptr<juce::TextButton> fxToggle, saturatorToggle;
  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> saturatorAttachment;
- std::unique_ptr<juce::TextButton> presetButton, shapePresetButton, sequencePrev, sequenceNext;
+ std::unique_ptr<juce::TextButton> presetButton, shapePresetButton, sequencePrev, sequenceNext, setupButton;
  juce::String presetName {"Custom"};
  std::unique_ptr<juce::FileChooser> presetChooser;
  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> fxToggleAttachment;
