@@ -37,6 +37,7 @@ private:
  di::ShapeSequencer::Shape dragBefore{};
  bool draggingShape=false;
  int dragStep=0;
+ int dragNode=-1;
  bool dragSequence=false;
  di::ShapeSequencer::Shape captureShape(int,bool) const;
  void applyShape(int,bool,const di::ShapeSequencer::Shape&);
