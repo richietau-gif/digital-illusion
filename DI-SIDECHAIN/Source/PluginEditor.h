@@ -43,6 +43,12 @@ private:
     std::array<std::unique_ptr<juce::TextButton>,4> filterTypeButtons;
     std::array<std::unique_ptr<juce::TextButton>,2> filterSlopeButtons;
     std::array<std::unique_ptr<juce::TextButton>,6> presetButtons;
+    std::array<std::unique_ptr<juce::TextButton>,2> curveViewButtons;
+    std::array<std::unique_ptr<juce::TextButton>,2> filterBankButtons;
+    std::unique_ptr<juce::ToggleButton> filterEnvelopeLinkButton;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> filterEnvelopeLinkAttachment;
+    bool filterView=false;
+    int editedFilterBank=0;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> ba;
     DIStudioSkin skin;
     juce::dsp::FFT spectrumFft {11};
