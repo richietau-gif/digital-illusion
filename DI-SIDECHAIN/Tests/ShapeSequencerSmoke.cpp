@@ -71,6 +71,23 @@ int main() {
  check(timeline.getCurrentStep()==4,"Exact PPQ step boundary");
  timeline.seekToStepPosition(std::numeric_limits<double>::quiet_NaN());
  check(timeline.getCurrentStep()==4,"Invalid PPQ must not corrupt step");
+ // Musical position must dominate buffer duration: a tempo change changes
+ // samples per step, not the song-position step chosen at the next block.
+ di::ShapeSequencer tempoTimeline;
+ tempoTimeline.setSteps(8);
+ tempoTimeline.seekToStepPosition(3.25);
+ check(tempoTimeline.getCurrentStep()==3,"Tempo sync initial musical step");
+ for(int i=0;i<128;++i)tempoTimeline.render(24000.);
+ tempoTimeline.seekToStepPosition(3.25+128.0/12000.0);
+ check(tempoTimeline.getCurrentStep()==3,"Tempo change must preserve PPQ step");
+ tempoTimeline.seekToStepPosition(1.5);
+ check(tempoTimeline.getCurrentStep()==1,"Host loop rewind must seek to PPQ step");
+ tempoTimeline.seekToStepPosition(8.0);
+ check(tempoTimeline.getCurrentStep()==0,"Exact sequence loop boundary");
+ tempoTimeline.seekToStepPosition(-8.5);
+ check(tempoTimeline.getCurrentStep()==7,"Negative PPQ loop wrap");
+ tempoTimeline.seekToStepPosition(1e12+2.75);
+ check(tempoTimeline.getCurrentStep()==2,"Large PPQ timeline must wrap");
  check(!di::transportDiscontinuity(-1,0),"Unknown transport sample must not reset");
  check(!di::transportDiscontinuity(1024,1024),"Contiguous transport must not reset");
  check(!di::transportDiscontinuity(1024,1026),"Two-sample host tolerance");
