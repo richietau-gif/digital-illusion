@@ -623,6 +623,11 @@ void DISidechainEditor::updatePoint(const juce::MouseEvent& e){
     if(selectedPoint<0||selectedPoint>=proc.getEnvelopeNodeCount())return;
     const auto q=localDesignPoint(e);
     float x=juce::jlimit(0.f,1.f,(q.x-graph.getX())/graph.getWidth());
+    const float offset=proc.state.getRawParameterValue("envelopeOffset")->load()*.01f;
+    const bool loop=proc.state.getRawParameterValue("playbackMode")->load()>.5f;
+    x-=offset;
+    if(loop){x=std::fmod(x,1.f);if(x<0.f)x+=1.f;}
+    x=juce::jlimit(0.f,1.f,x);
     float y=juce::jlimit(0.f,1.f,(graph.getBottom()-q.y)/graph.getHeight());
     if(snapToGrid){x=std::round(x*16.f)/16.f;y=std::round(y*16.f)/16.f;}
     proc.setEnvelopeNode(selectedPoint,x,y);
@@ -641,7 +646,12 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
     if(q.x>=1005&&q.x<=1104&&q.y>=132&&q.y<=158){snapToGrid=!snapToGrid;repaint();return;}
     if(graph.contains(q)&&e.mods.isAltDown()){
         // Alt-drag the curve segment, with per-segment cubic shaping.
-        const float t=juce::jlimit(0.f,1.f,(q.x-graph.getX())/graph.getWidth());
+        float t=juce::jlimit(0.f,1.f,(q.x-graph.getX())/graph.getWidth());
+        const float offset=proc.state.getRawParameterValue("envelopeOffset")->load()*.01f;
+        const bool loop=proc.state.getRawParameterValue("playbackMode")->load()>.5f;
+        t-=offset;
+        if(loop){t=std::fmod(t,1.f);if(t<0.f)t+=1.f;}
+        t=juce::jlimit(0.f,1.f,t);
         curvatureSegment=proc.getEnvelopeNodeCount()-2;
         for(int i=0;i<proc.getEnvelopeNodeCount()-1;++i)
             if(t<=proc.getEnvelopeNode(i+1).x){curvatureSegment=i;break;}
@@ -655,7 +665,14 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
         float distanceSquared=14.f*14.f;
         for(int i=0;i<proc.getEnvelopeNodeCount();++i){
             const auto node=proc.getEnvelopeNode(i);
-            const float dx=q.x-(graph.getX()+node.x*graph.getWidth());
+            float shifted=node.x+
+                proc.state.getRawParameterValue("envelopeOffset")->load()*.01f;
+            if(proc.state.getRawParameterValue("playbackMode")->load()>.5f){
+                shifted=std::fmod(shifted,1.f);
+                if(shifted<0.f)shifted+=1.f;
+            }
+            if(shifted<0.f||shifted>1.f)continue;
+            const float dx=q.x-(graph.getX()+shifted*graph.getWidth());
             const float dy=q.y-(graph.getBottom()-node.y*graph.getHeight());
             const float d2=dx*dx+dy*dy;
             if(d2<distanceSquared){distanceSquared=d2;selectedPoint=i;}
@@ -699,6 +716,11 @@ void DISidechainEditor::mouseDoubleClick(const juce::MouseEvent& e){
     const auto q=localDesignPoint(e);
     if(!graph.contains(q))return;
     float x=juce::jlimit(0.f,1.f,(q.x-graph.getX())/graph.getWidth());
+    const float offset=proc.state.getRawParameterValue("envelopeOffset")->load()*.01f;
+    const bool loop=proc.state.getRawParameterValue("playbackMode")->load()>.5f;
+    x-=offset;
+    if(loop){x=std::fmod(x,1.f);if(x<0.f)x+=1.f;}
+    x=juce::jlimit(0.f,1.f,x);
     float y=juce::jlimit(0.f,1.f,(graph.getBottom()-q.y)/graph.getHeight());
     if(snapToGrid){x=std::round(x*16.f)/16.f;y=std::round(y*16.f)/16.f;}
     selectedPoint=proc.insertEnvelopeNode(x,y);
