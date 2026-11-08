@@ -515,7 +515,7 @@ void DISidechainEditor::resized(){
     const auto bounds=[sc](float x,float y,float w,float h){
         return juce::Rectangle<int>(juce::roundToInt(x*sc),juce::roundToInt(y*sc),
             juce::jmax(1,juce::roundToInt(w*sc)),juce::jmax(1,juce::roundToInt(h*sc)));};
-    if(sliders.size()!=21||labels.size()!=21||combos.size()!=3||
+    if(sliders.size()!=22||labels.size()!=22||combos.size()!=3||
        sync==nullptr||outputFilterToggle==nullptr||envelopePreset==nullptr||
        filterTypeButtons[0]==nullptr||filterSlopeButtons[0]==nullptr||
        presetButtons[0]==nullptr)return;
@@ -523,6 +523,11 @@ void DISidechainEditor::resized(){
     for(int i=0;i<3;++i)
         combos[(size_t)i]->setBounds(bounds(279.f+i*234.f,181.f,211,25));
     envelopePreset->setBounds(bounds(750,130,188,25));
+    // Compact timing control below the curve, balanced around zero.
+    labels[21]->setBounds(bounds(738,485,91,22));
+    labels[21]->setVisible(true);
+    sliders[21]->setBounds(bounds(837,485,254,24));
+    sliders[21]->setVisible(true);
     sync->setBounds(bounds(1002,180,98,26));
     // Left independent audio transient detector and input.
     const int detector[]={2,7,10,16,17};
