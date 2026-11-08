@@ -23,7 +23,7 @@ static void editorLifecycle(DISidechainProcessor& p)
         std::unique_ptr<juce::AudioProcessorEditor> editor(p.createEditor());
         require(editor != nullptr, "Editor creation failed");
         require(editor->getWidth() == 1380 && editor->getHeight() == 860, "Initial editor size");
-        require(editor->getNumChildComponents() == 70, "Missing editor controls");
+        require(editor->getNumChildComponents() == 71, "Missing editor controls");
         int sliders = 0, combos = 0, buttons = 0;
         for (auto* child : editor->getChildren())
         {
