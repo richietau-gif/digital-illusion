@@ -5,7 +5,8 @@
 #include "FxWaveshaper.h"
 namespace di {
 // Streaming 2x oversampled waveshaper with linear-phase 15-tap half-band FIR.
-// 7 samples of base-rate latency (3.5 up + 3.5 down); compensate dry externally.
+// Nominal 7 base-rate samples of group delay (3.5 up + 3.5 down).
+// The caller must align dry audio and report latency before enabling this path.
 // No heap allocation, locks, or parameter changes in the audio callback.
 class OversampledFx2x {
 public:
@@ -22,7 +23,8 @@ public:
   return filter(down,downIndex,processedB,1.f);
  }
 private:
- // Windowed-sinc lowpass at pi/2, normalized to unity DC.
+ // Symmetric half-band lowpass at pi/2, normalized to unity DC.
+ // Polyphase output selects the odd 2x phase; group delay is 7 base-rate samples.
  static constexpr std::array<float,15> taps{
   -0.00365145f,0.f,0.01617925f,0.f,-0.06841178f,0.f,
   0.30476398f,0.50224000f,0.30476398f,0.f,-0.06841178f,
