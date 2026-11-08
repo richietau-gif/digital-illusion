@@ -49,6 +49,27 @@ int main(){
  check(di::mixAlignedFx(0.25f,0.75f,0.5f)==0.5f,"Half wet interpolates");
  check(di::mixAlignedFx(0.25f,std::numeric_limits<float>::quiet_NaN(),1.f)==0.25f,"Nonfinite wet must not leak");
  check(di::mixAlignedFx(0.25f,0.75f,std::numeric_limits<float>::quiet_NaN())==0.25f,"Nonfinite mix must bypass");
+ // A wet/dry transition must not change the reported 7-sample latency.
+ // With a very small impulse, the oversampled saturator is nearly linear;
+ // the dry impulse and wet impulse must peak on the same output sample.
+ for(float wetAmount:{0.f,0.25f,0.5f,0.75f,1.f}){
+  di::OversampledFx2x wetPath;
+  di::FixedDelay<di::OversampledFx2x::latencySamples> dryPath;
+  int impulsePeak=-1;
+  float impulseMagnitude=0.f;
+  for(int i=0;i<40;++i){
+   const float input=i==0?0.0001f:0.f;
+   const float y=di::mixAlignedFx(dryPath.process(input),
+                                  wetPath.process(input,1.f,0.f),wetAmount);
+   check(std::isfinite(y),"Wet/dry impulse must stay finite");
+   if(std::abs(y)>impulseMagnitude){
+    impulseMagnitude=std::abs(y);
+    impulsePeak=i;
+   }
+  }
+  check(impulsePeak==di::OversampledFx2x::latencySamples,
+        "Wet/dry mixing must preserve fixed latency");
+ }
  // Per-channel state must remain independent under stereo processing.
  di::OversampledFx2x left,right,reference;
  for(int i=0;i<256;++i){
