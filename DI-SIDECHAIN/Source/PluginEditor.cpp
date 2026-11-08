@@ -92,15 +92,19 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  }
  fxTypeBox=std::make_unique<juce::ComboBox>();
  fxTypeBox->addItemList(juce::StringArray{"Saturator","Soft Clipper"},1);
+ fxTypeBox->setTooltip("Legacy FX type selector; independent SATURATOR is controlled by its own ON/OFF button.");
  fxTypeBox->setColour(juce::ComboBox::backgroundColourId,juce::Colour(0xff212b36));
  fxTypeBox->setColour(juce::ComboBox::textColourId,juce::Colours::white);
  fxTypeBox->setColour(juce::ComboBox::outlineColourId,edge);
  addAndMakeVisible(*fxTypeBox);
  fxTypeAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(p.state,"fxType",*fxTypeBox);
  fxToggle=std::make_unique<juce::TextButton>("OFF");
+ fxToggle->setTooltip("Toggle FX processing. The separate Saturator can run at the same time.");
  addAndMakeVisible(*fxToggle);
  fxToggleAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(p.state,"fxEnabled",*fxToggle);
- saturatorToggle=std::make_unique<juce::TextButton>("OFF");addAndMakeVisible(*saturatorToggle);
+ saturatorToggle=std::make_unique<juce::TextButton>("OFF");
+ saturatorToggle->setTooltip("Independent 2x oversampled saturator; can be combined with FX.");
+ addAndMakeVisible(*saturatorToggle);
  saturatorAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(p.state,"saturatorEnabled",*saturatorToggle);
  // Two independent switches: their state is owned by the processor and saved by the host.
  for(auto* b:{fxToggle.get(),saturatorToggle.get()}){
