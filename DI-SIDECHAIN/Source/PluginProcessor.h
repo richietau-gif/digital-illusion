@@ -1,6 +1,7 @@
 #pragma once
 #include <JuceHeader.h>
 #include <array>
+#include "ShapeSequencer.h"
 class DISidechainProcessor : public juce::AudioProcessor {
 public:
  DISidechainProcessor();
@@ -25,10 +26,12 @@ public:
  juce::AudioProcessorValueTreeState state;
  std::array<std::atomic<float>,8> points;
  std::atomic<float> meter {0};
+ std::atomic<int> activeSequenceStep {0};
 private:
  static juce::AudioProcessorValueTreeState::ParameterLayout makeParams();
  struct FilterChannel {juce::dsp::LinkwitzRileyFilter<float> low, high;};
  std::array<FilterChannel,2> filters;
+ di::ShapeSequencer sequencer;
  double sr=44100, phase=1, envelopeLength=0.25, detector=0;
  int refractory=0; bool armed=true; float smoothGain=1;
  float curve(double) const;
