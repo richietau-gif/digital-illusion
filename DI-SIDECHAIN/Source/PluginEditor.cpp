@@ -22,7 +22,7 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
   auto s=std::make_unique<juce::Slider>();
   s->setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
   s->setTextBoxStyle(juce::Slider::TextBoxBelow,false,100,20);
-  s->setColour(juce::Slider::rotarySliderFillColourId,green);
+  s->setColour(juce::Slider::rotarySliderFillColourId,i<2?green:juce::Colour(0xff24def0));
   s->setColour(juce::Slider::rotarySliderOutlineColourId,edge);
   s->setColour(juce::Slider::thumbColourId,juce::Colours::white);
   s->setColour(juce::Slider::textBoxTextColourId,juce::Colours::white);
@@ -51,7 +51,8 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  sequenceToggle=std::make_unique<juce::ToggleButton>("SEQUENCER ON");
  addAndMakeVisible(*sequenceToggle);
  sequenceAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(p.state,"sequenceEnabled",*sequenceToggle);
- sequenceCount=std::make_unique<juce::Slider>(juce::Slider::LinearHorizontal,juce::Slider::TextBoxRight);
+ sequenceCount=std::make_unique<juce::Slider>(juce::Slider::IncDecButtons,juce::Slider::TextBoxLeft);
+ sequenceCount->setIncDecButtonsMode(juce::Slider::incDecButtonsNotDraggable);
  sequenceCount->setRange(1,16,1);
  sequenceCount->setColour(juce::Slider::trackColourId,green);
  sequenceCount->setColour(juce::Slider::thumbColourId,green);
@@ -108,6 +109,10 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
   b->setColour(juce::ToggleButton::textColourId,juce::Colours::white);
  }
  presetButton=std::make_unique<juce::TextButton>("PRESETS  -  Custom");
+ setupButton=std::make_unique<juce::TextButton>("SETUP");
+ setupBounds={1427,32,92,41};
+ buttonStyle(*setupButton);addAndMakeVisible(*setupButton);
+ setupButton->onClick=[this]{showSetupMenu();};
  shapePresetButton=std::make_unique<juce::TextButton>("SHAPE PRESETS");
  sequencePrev=std::make_unique<juce::TextButton>("<");
  sequenceNext=std::make_unique<juce::TextButton>(">");
@@ -144,7 +149,10 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  for(int i=0;i<4;++i){filterButtons[i]=std::make_unique<juce::TextButton>(filterNames[i]);filterButtons[i]->onClick=[this,i]{selectFilter(i);};addAndMakeVisible(*filterButtons[i]);}
  if(combos.size()>0)combos[0]->setVisible(false);
  refreshFilterButtons();refreshFxButtons();
- setSize(1536,950);
+ renderQuality=juce::jlimit(0,2,(int)p.state.getRawParameterValue("renderQuality")->load());
+ const int scaleIndex=juce::jlimit(0,2,(int)p.state.getRawParameterValue("uiScale")->load());
+ uiScale=scaleIndex==0?.5f:scaleIndex==1?.75f:1.f;
+ setSize(juce::roundToInt(designWidth*uiScale),juce::roundToInt(designHeight*uiScale));
  startTimerHz(24);
 }
 di::ShapeSequencer::Shape DISidechainEditor::captureShape(int step,bool sequence) const {
@@ -359,7 +367,7 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  text(g,"CURVE",{32,591,84,19},12,faint);
  text(g,"Drag a node to change the step shape.",{29,645,192,28},12,faint);
  const juce::String laneName=selectedLane==0?"VOLUME":selectedLane==1?"FILTER":"PAN";
- text(g,laneName+"   /   STEP "+juce::String(selectedStep+1),{231,501,265,22},14,laneColour,true);
+ text(g,laneName+"   /   STEP "+juce::String(selectedStep+1),{231,531,265,16},12,laneColour,true);
  paintShape(g,detailGraph,selectedStep,true);
  text(g,"Drag nodes to edit. Toggle SNAP for 1/16 increments.",{232,667,496,19},11,faint);
  // Six interactive shape palette buttons (mouseDown hits corresponding rectangles).
@@ -477,10 +485,11 @@ void DISidechainEditor::resized() {
   if(auto* child=getChildComponent(i))child->setTransform(transform);
 }
 void DISidechainEditor::updatePoint(const juce::MouseEvent& e) {
- if(!detailGraph.contains(e.getPosition()))return;
+ if(!detailGraph.contains((e.position/uiScale).toInt()))return;
  const auto r=detailGraph;
- const int i=juce::jlimit(0,7,juce::roundToInt((e.position.x-r.getX())/juce::jmax(1,r.getWidth())*7.f));
- float v=juce::jlimit(0.f,1.f,(r.getBottom()-e.position.y)/(float)juce::jmax(1,r.getHeight()));
+ const auto point=e.position/uiScale;
+ const int i=juce::jlimit(0,7,juce::roundToInt((point.x-r.getX())/juce::jmax(1,r.getWidth())*7.f));
+ float v=juce::jlimit(0.f,1.f,(r.getBottom()-point.y)/(float)juce::jmax(1,r.getHeight()));
  if(sequenceToggle->getToggleState()&&selectedLane==0&&shapeOffset)
   v=juce::jlimit(0.f,1.f,v-(float)shapeOffset->getValue());
  if(snapButton&&snapButton->getToggleState())v=juce::jlimit(0.f,1.f,std::round(v*16.f)/16.f);
@@ -489,14 +498,19 @@ void DISidechainEditor::updatePoint(const juce::MouseEvent& e) {
 }
 void DISidechainEditor::updateDetailPoint(const juce::MouseEvent& e){updatePoint(e);}
 void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
- if(juce::Rectangle<int>(25,98,173,47).contains(e.getPosition())){sequenceToggle->setToggleState(false,juce::sendNotificationSync);selectedLane=0;repaint();return;}
- if(juce::Rectangle<int>(207,98,185,47).contains(e.getPosition())){sequenceToggle->setToggleState(true,juce::sendNotificationSync);repaint();return;}
- if(stepStrip.contains(e.getPosition())){
+ const auto pos=(e.position/uiScale).toInt();
+ // Six shape palette shortcuts mirror the dedicated shape preset browser.
+ for(int i=0;i<6;++i)if(juce::Rectangle<int>(734+(i%3)*48,552+(i/3)*48,42,40).contains(pos)){
+  applyShapePreset(i);return;
+ }
+ if(juce::Rectangle<int>(24,117,153,43).contains(pos)){sequenceToggle->setToggleState(false,juce::sendNotificationSync);selectedLane=0;repaint();return;}
+ if(juce::Rectangle<int>(183,117,155,43).contains(pos)){sequenceToggle->setToggleState(true,juce::sendNotificationSync);repaint();return;}
+ if(stepStrip.contains(pos)){
   const int count=juce::jlimit(1,16,(int)sequenceCount->getValue());
-  selectedStep=juce::jlimit(0,count-1,(e.getPosition().x-stepStrip.getX())*count/juce::jmax(1,stepStrip.getWidth()));
+  selectedStep=juce::jlimit(0,count-1,(pos.x-stepStrip.getX())*count/juce::jmax(1,stepStrip.getWidth()));
   repaint();return;
  }
- if(detailGraph.contains(e.getPosition())){
+ if(detailGraph.contains(pos)){
   draggingShape=true;dragStep=selectedStep+(sequenceToggle->getToggleState()?selectedLane*32:0);dragSequence=sequenceToggle->getToggleState();
   dragBefore=captureShape(dragStep,dragSequence);
  }
