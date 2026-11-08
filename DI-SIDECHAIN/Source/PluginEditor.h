@@ -4,12 +4,13 @@
 class DISidechainEditor : public juce::AudioProcessorEditor,private juce::Timer {
 public:
  explicit DISidechainEditor(DISidechainProcessor&);
+ ~DISidechainEditor() override {setLookAndFeel(nullptr);}
  void paint(juce::Graphics&) override;
  void resized() override;
  void mouseDown(const juce::MouseEvent&) override;
  void mouseDrag(const juce::MouseEvent&) override;
 private:
- void timerCallback() override {repaint();}
+ void timerCallback() override {refreshFilterButtons();repaint();}
  void updatePoint(const juce::MouseEvent&);
  DITheme theme;
  DISidechainProcessor& proc;
