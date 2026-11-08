@@ -74,12 +74,13 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  }
  const double divisions[]={0.125,0.25,0.5,1,2,4,8};
  envelopeLength=get("sync")>0.5?60.0/juce::jmax(1.0,bpm)*divisions[juce::jlimit(0,6,(int)get("division"))]:get("length")/1000.0;
+ const bool tempoSync=get("sync")>0.5f;
  const bool sequenceOn=get("sequenceEnabled")>0.5f;
  sequencer.setSteps((int)get("sequenceSteps"));
  for(auto& lane:modulationSequencers)lane.setSteps((int)get("sequenceSteps"));
  // Re-anchor each audio block to the DAW's PPQ timeline when tempo sync is enabled.
  // This corrects accumulated drift and aligns loop restarts to musical bars.
- if(sequenceOn&&get("sync")>0.5f&&hasPlayingPpq){
+ if(sequenceOn&&tempoSync&&hasPlayingPpq){
   const double beatsPerStep=divisions[juce::jlimit(0,6,(int)get("division"))];
   const double position=hostPpq/beatsPerStep;
   sequencer.seekToStepPosition(position);
@@ -107,7 +108,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
   // In tempo-sync mode, incoming kicks/notes trigger the ducking envelope,
   // not the song-position sequencer. Otherwise frequent notes pin it to step 1.
   // Free-running (millisecond) mode retains explicit retrigger behaviour.
-  if(sequenceOn&&di::ShapeSequencer::shouldRestartOnTrigger(get("sync")>0.5f)){
+  if(sequenceOn&&di::ShapeSequencer::shouldRestartOnTrigger(tempoSync)){
    sequencer.trigger();
    for(auto& lane:modulationSequencers)lane.trigger();
   }
