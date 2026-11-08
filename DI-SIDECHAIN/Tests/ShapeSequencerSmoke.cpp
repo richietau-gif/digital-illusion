@@ -115,6 +115,13 @@ int main() {
   check(std::abs(seekCheck.render(128.)-static_cast<float>(expectedStep)/15.f)<1e-6f,
         "DAW PPQ seek rendered wrong step envelope");
  }
+ check(di::nextTransportSample(1000,128)==1128,"Transport block advance incorrect");
+ check(di::nextTransportSample(-1,128)==-1,"Unknown transport position must stay unknown");
+ check(di::nextTransportSample(1000,-1)==-1,"Negative block size must be rejected");
+ check(di::nextTransportSample(std::numeric_limits<std::int64_t>::max()-128,128)
+       ==std::numeric_limits<std::int64_t>::max(),"Transport limit boundary incorrect");
+ check(di::nextTransportSample(std::numeric_limits<std::int64_t>::max()-127,128)
+       ==-1,"Transport advance must reject signed overflow");
  check(!di::transportDiscontinuity(-1,0),"Unknown transport sample must not reset");
  check(!di::transportDiscontinuity(1024,1024),"Contiguous transport must not reset");
  check(!di::transportDiscontinuity(1024,1026),"Two-sample host tolerance");
