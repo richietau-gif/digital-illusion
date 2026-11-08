@@ -121,6 +121,15 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p) : AudioProcessorEd
         if(i>=13)s->setNumDecimalPlacesToDisplay(2);
         if(!rotary)s->setTextBoxStyle(juce::Slider::TextBoxRight,false,67,23);
         s->setColour(juce::Slider::textBoxTextColourId,pale);
+        if(i==22){
+            s->setComponentID("filterEnvelopeMorph");
+            s->setColour(juce::Slider::thumbColourId,juce::Colour(0xffaf8bff));
+        }
+        if(i==23){
+            s->setComponentID("filterEnvelopeFollower");
+            s->setColour(juce::Slider::thumbColourId,juce::Colour(0xff4ba8ec));
+            s->setDoubleClickReturnValue(true,0.);
+        }
         if(i==21){
             s->setComponentID("envelopeOffset");
             s->setColour(juce::Slider::thumbColourId,juce::Colour(0xff35dce7));
