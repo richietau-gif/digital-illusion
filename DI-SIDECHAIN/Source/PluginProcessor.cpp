@@ -155,7 +155,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  const float panLeft=pan>0.f?std::cos(pan*juce::MathConstants<float>::halfPi):1.f;
  const float panRight=pan<0.f?std::cos(-pan*juce::MathConstants<float>::halfPi):1.f;
  const float filterLaneGain=1.f-filterRange*(1.f-filterEnv);
- for(int ch=0;ch<2;++ch){float dry=main.getSample(ch,i),wet=dry*smoothGain;
+ for(int ch=0;ch<2;++ch){float dry=main.getSample(ch,i);if(!std::isfinite(dry))dry=0.f;float wet=dry*smoothGain;
  if(mode!=0){auto& f=filters[ch];float low=f.low.processSample(0,dry),high=f.high.processSample(0,dry);float affected=mode==1?low:mode==2?high:dry-low-high;wet=dry+affected*(smoothGain-1);}
  float out=dry+(wet-dry)*mix;
  // Filter lane affects the selected frequency band, while Full mode remains full-band.
@@ -166,7 +166,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  const float fxDry=fxDryDelay[ch].process(out);
  const float fxProcessed=oversampledFx[ch].process(out,smoothedFxDrive,smoothedFxType);
  out=di::mixAlignedFx(fxDry,fxProcessed,smoothedFxWet*fxBlend);
- if(!std::isfinite(out))out=dry;main.setSample(ch,i,out);peak=juce::jmax(peak,std::abs(out));}
+ if(!std::isfinite(out))out=0.f;main.setSample(ch,i,out);peak=juce::jmax(peak,std::abs(out));}
  }
  meter.store(peak);midi.clear();
 }
