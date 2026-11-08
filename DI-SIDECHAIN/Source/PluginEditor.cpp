@@ -122,7 +122,19 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  text(g,"100%",{18,186,57,20},12,muted);
  text(g,"50%",{18,292,57,20},12,muted);
  text(g,"0%",{18,390,57,20},12,muted);
- paintShape(g,graph,selectedStep,true);
+ const bool sequenced=sequenceToggle->getToggleState();
+ if(sequenced) {
+  // Four successive shapes across the overview, with a live step cursor.
+  const int total=juce::jlimit(1,32,(int)sequenceCount->getValue());
+  const int first=(selectedStep/4)*4;
+  for(int k=0;k<4;++k) {
+   auto cell=juce::Rectangle<int>(graph.getX()+k*graph.getWidth()/4,graph.getY(),graph.getWidth()/4,graph.getHeight());
+   paintShape(g,cell,(first+k)%total,false);
+   if((first+k)%total==proc.activeSequenceStep.load(std::memory_order_relaxed)){
+    g.setColour(green);g.fillRect(cell.getX(),cell.getY(),3,cell.getHeight());
+   }
+  }
+ } else paintShape(g,graph,selectedStep,false);
  const int count=juce::jlimit(1,32,(int)sequenceCount->getValue());
  const int playing=proc.activeSequenceStep.load(std::memory_order_relaxed);
  for(int i=0;i<count;++i){
@@ -156,7 +168,7 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  text(g,"FILTER MODE", {35,766,170,20},13,muted);
  text(g,"TRIGGER SOURCE", {290,766,180,20},13,muted);
  text(g,"BEAT DIVISION", {540,766,180,20},13,muted);
- text(g,"Controls below are connected to the current audio engine", {28,910,700,20},12,muted);
+ text(g,"LIVE DSP CONTROLS  /  ACTIVE", {35,907,400,20},12,green);
  text(g,"LEVEL", {1230,764,95,23},14,muted);
  text(g,"DRY / WET", {1370,764,120,23},14,muted);
  const float peak=juce::jlimit(0.f,1.f,proc.meter.load(std::memory_order_relaxed));
@@ -182,8 +194,8 @@ void DISidechainEditor::resized() {
  for(int i=0;i<8;++i){labels[i]->setBounds(xs[i],830,115,20);sliders[i]->setBounds(xs[i],851,110,78);}
 }
 void DISidechainEditor::updatePoint(const juce::MouseEvent& e) {
- const auto r=detailGraph.contains(e.getPosition())?detailGraph:graph;
- if(!r.contains(e.getPosition()))return;
+ if(!detailGraph.contains(e.getPosition()))return;
+ const auto r=detailGraph;
  const int i=juce::jlimit(0,7,juce::roundToInt((e.position.x-r.getX())/juce::jmax(1,r.getWidth())*7.f));
  const float v=juce::jlimit(0.f,1.f,(r.getBottom()-e.position.y)/(float)juce::jmax(1,r.getHeight()));
  if(sequenceToggle->getToggleState())proc.setSequencePoint(selectedStep,i,v);else proc.points[i]=v;
