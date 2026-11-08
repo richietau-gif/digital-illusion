@@ -158,6 +158,7 @@ void DISidechainEditor::paintShape(juce::Graphics& g,juce::Rectangle<int> r,int 
  for(int i=1;i<8;++i){const int x=r.getX()+r.getWidth()*i/8;g.drawVerticalLine(x,(float)r.getY(),(float)r.getBottom());}
  for(int i=1;i<4;++i){const int y=r.getY()+r.getHeight()*i/4;g.drawHorizontalLine(y,(float)r.getX(),(float)r.getRight());}
  const bool seq=sequenceToggle->getToggleState();
+ const auto laneColour=selectedLane==0?orange:selectedLane==1?juce::Colour(0xff44bbff):juce::Colour(0xffc55bff);
  const float offset=seq&&selectedLane==0&&shapeOffset? (float)shapeOffset->getValue():0.f;
  auto value=[&](int i){return seq?(selectedLane==0?proc.getSequencePoint(step,i):proc.getModulationPoint(selectedLane-1,step,i)):proc.points[i].load();};
  juce::Path p;
@@ -169,12 +170,12 @@ void DISidechainEditor::paintShape(juce::Graphics& g,juce::Rectangle<int> r,int 
   if(j==0)p.startNewSubPath(px,py);else p.lineTo(px,py);
  }
  juce::Path fill=p;fill.lineTo((float)r.getRight(),(float)r.getBottom());fill.lineTo((float)r.getX(),(float)r.getBottom());fill.closeSubPath();
- g.setColour(orange.withAlpha(.20f));g.fillPath(fill);
- g.setColour(orange);g.strokePath(p,juce::PathStrokeType(drawNodes?3.f:2.f));
+ g.setColour(laneColour.withAlpha(.20f));g.fillPath(fill);
+ g.setColour(laneColour);g.strokePath(p,juce::PathStrokeType(drawNodes?3.f:2.f));
  if(drawNodes)for(int i=0;i<8;++i){
   const float x=r.getX()+r.getWidth()*i/7.f,y=r.getBottom()-juce::jlimit(0.f,1.f,value(i)+offset)*r.getHeight();
   g.setColour(juce::Colour(0xff121821));g.fillEllipse(x-6,y-6,12,12);
-  g.setColour(orange);g.drawEllipse(x-5,y-5,10,10,2.f);
+  g.setColour(laneColour);g.drawEllipse(x-5,y-5,10,10,2.f);
  }
 }
 void DISidechainEditor::paint(juce::Graphics& g) {
@@ -190,7 +191,7 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  g.setColour(sequenceToggle->getToggleState()?green:edge);
  g.fillRoundedRectangle(juce::Rectangle<float>(207,98,185,47),9.f);
  text(g,"SEQUENCER", {233,105,153,31},19,sequenceToggle->getToggleState()?bg:muted,true);
- text(g,"MULTI-LANE  ·  COMING SOON", {424,106,305,32},16,muted);
+ text(g,"MULTI-LANE  ·  3 ACTIVE LANES", {424,106,305,32},16,green);
  text(g,"FX  ·  COMING SOON", {755,106,245,32},16,muted);
  text(g,"TRIGGER", {1055,106,100,32},15,muted,true);
  text(g,"DI SIDECHAIN 4.0  •  EXPERIMENTAL", {1160,52,340,22},13,muted);
@@ -224,9 +225,10 @@ void DISidechainEditor::paint(juce::Graphics& g) {
   if(w>=23){
    juce::Path mini;
    for(int j=0;j<8;++j){float x=r.getX()+3+(r.getWidth()-6)*j/7.f;
-    float y=r.getBottom()-4-proc.getSequencePoint(i,j)*(r.getHeight()-23);
+    const float node=selectedLane==0?proc.getSequencePoint(i,j):proc.getModulationPoint(selectedLane-1,i,j);
+    float y=r.getBottom()-4-node*(r.getHeight()-23);
     if(j==0)mini.startNewSubPath(x,y);else mini.lineTo(x,y);}
-   g.setColour(orange);g.strokePath(mini,juce::PathStrokeType(1.5f));
+   g.setColour(selectedColour);g.strokePath(mini,juce::PathStrokeType(1.5f));
   }
  }
  paintPanel(g,sequencerPanel,"SEQUENCER");
@@ -236,10 +238,12 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  paintPanel(g,outputPanel,"OUTPUT  /  SIDECHAIN");
  text(g,"STEPS", {35,520,100,23},14,muted);
  text(g,"LENGTH / RATE", {215,520,180,23},14,muted);
- text(g,"EDIT STEP "+juce::String(selectedStep+1), {463,518,220,22},14,orange,true);
+ const auto selectedColour=selectedLane==0?orange:selectedLane==1?juce::Colour(0xff44bbff):juce::Colour(0xffc55bff);
+ const juce::String selectedName=selectedLane==0?"VOLUME":selectedLane==1?"FILTER":"PAN";
+ text(g,selectedName+"  /  STEP "+juce::String(selectedStep+1), {463,518,230,22},14,selectedColour,true);
  paintShape(g,detailGraph,selectedStep,true);
  text(g,"Drag nodes to edit  •  Copy / Paste / Reset", {464,664,480,23},13,muted);
- text(g,"OFFSET ±", {970,665,90,23},13,orange,true);
+ text(g,"OFFSET ±  (VOLUME)", {970,665,175,23},12,orange,true);
  text(g,"LANE EDITOR", {1225,505,230,18},12,muted);
  text(g,"SEQUENCED", {1370,523,130,24},14,sequenceToggle->getToggleState()?green:muted,true);
  text(g,"FILTER  •  DUCK DEPTH", {1225,566,280,23},14,juce::Colour(0xff44bbff));
@@ -266,7 +270,7 @@ void DISidechainEditor::resized() {
  if(copyStep)copyStep->setBounds(969,544,208,33);
  if(pasteStep)pasteStep->setBounds(969,586,208,33);
  if(resetStep)resetStep->setBounds(969,628,208,33);
- if(shapeOffset)shapeOffset->setBounds(1050,665,127,28);
+ if(shapeOffset){shapeOffset->setBounds(1100,665,77,28);shapeOffset->setEnabled(selectedLane==0);}
  for(int i=0;i<3;++i)if(laneTabs[i]){laneTabs[i]->setBounds(1225+i*92,527,86,30);laneTabs[i]->setToggleState(selectedLane==i,juce::dontSendNotification);}
  if(laneSliders[0])laneSliders[0]->setBounds(1225,588,275,28);
  if(laneSliders[1])laneSliders[1]->setBounds(1225,646,275,28);
@@ -284,6 +288,8 @@ void DISidechainEditor::updatePoint(const juce::MouseEvent& e) {
  const auto r=detailGraph;
  const int i=juce::jlimit(0,7,juce::roundToInt((e.position.x-r.getX())/juce::jmax(1,r.getWidth())*7.f));
  float v=juce::jlimit(0.f,1.f,(r.getBottom()-e.position.y)/(float)juce::jmax(1,r.getHeight()));
+ if(sequenceToggle->getToggleState()&&selectedLane==0&&shapeOffset)
+  v=juce::jlimit(0.f,1.f,v-(float)shapeOffset->getValue());
  if(snapButton&&snapButton->getToggleState())v=juce::jlimit(0.f,1.f,std::round(v*16.f)/16.f);
  if(sequenceToggle->getToggleState()){if(selectedLane==0)proc.setSequencePoint(selectedStep,i,v);else proc.setModulationPoint(selectedLane-1,selectedStep,i,v);}else proc.points[i]=v;
  repaint();
