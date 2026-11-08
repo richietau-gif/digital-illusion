@@ -84,6 +84,63 @@ static void envelopeTimingOffsetRegression()
             "Default offset must be neutral for older Ableton sets");
 }
 
+static float measuredFilterBankAudio(float morph)
+{
+    DISidechainProcessor p;
+    p.prepareToPlay(48000.,256);
+    set(p,"trigger",2.f); // MIDI note starts the One Shot, no external bus.
+    set(p,"playbackMode",0.f);
+    set(p,"sync",0.f);
+    set(p,"length",1000.f);
+    set(p,"depth",0.f); // Must work as filter-only modulation.
+    set(p,"filterEnvelopeLink",0.f);
+    set(p,"filterEnvelopeMorph",morph);
+    set(p,"filterEnvelopeFollower",0.f);
+    set(p,"outputFilterOn",1.f);
+    set(p,"outputFilterType",0.f);
+    set(p,"outputFilterMin",120.f);
+    set(p,"outputFilterMax",16000.f);
+    set(p,"outputFilterAmount",1.f);
+    for(int i=0;i<DISidechainProcessor::filterEnvelopePoints;++i){
+        p.setFilterEnvelopePoint(0,i,0.f); // Closed
+        p.setFilterEnvelopePoint(1,i,1.f); // Open
+    }
+    juce::AudioBuffer<float> buffer(2,256);
+    juce::MidiBuffer midi;
+    double sum=0.;
+    int n=0;
+    for(int block=0;block<28;++block){
+        for(int i=0;i<256;++i){
+            const float sample=.25f*std::sin(juce::MathConstants<float>::twoPi*
+                         5000.f*(float)(block*256+i)/48000.f);
+            buffer.setSample(0,i,sample);
+            buffer.setSample(1,i,sample);
+        }
+        midi.clear();
+        if(block==0)midi.addEvent(
+            juce::MidiMessage::noteOn(1,36,(juce::uint8)100),0);
+        p.processBlock(buffer,midi);
+        if(block>8){
+            for(int i=0;i<256;++i){
+                const float x=buffer.getSample(0,i);
+                require(std::isfinite(x),"Independent Filter DSP produced invalid samples");
+                sum+=(double)x*x;++n;
+            }
+        }
+    }
+    p.releaseResources();
+    return (float)std::sqrt(sum/(double)n);
+}
+static void filterMorphAudibleRegression()
+{
+    const float closed=measuredFilterBankAudio(0.f);
+    const float half=measuredFilterBankAudio(.5f);
+    const float open=measuredFilterBankAudio(1.f);
+    require(open>closed*4.f,
+            "Filter-only Morph A/B is not audibly changing high-frequency content");
+    require(half>closed*1.5f&&half<open,
+            "Morph midpoint is not between A and B filter intensities");
+}
 static void independentFilterAndFollowerRegression()
 {
     DISidechainProcessor p;
@@ -1186,6 +1243,7 @@ int main()
         factoryEnvelopePresetsRegression();
         envelopeTimingOffsetRegression();
         independentFilterAndFollowerRegression();
+        filterMorphAudibleRegression();
         factoryPresetGuiRegression();
         editableEnvelopeRoundtrip();
         concurrentEnvelopeEditingStress();
