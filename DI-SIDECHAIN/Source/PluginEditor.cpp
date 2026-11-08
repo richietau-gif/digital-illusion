@@ -372,13 +372,22 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  text(g,"0%",{31,352,46,18},12,white);
  const bool sequenced=sequenceToggle->getToggleState();
  const int count=juce::jlimit(1,16,(int)sequenceCount->getValue());
- const int first=(selectedStep/4)*4;
  if(sequenced) {
-  for(int k=0;k<4;++k) {
-   auto r=juce::Rectangle<int>(graph.getX()+k*graph.getWidth()/4,graph.getY(),graph.getWidth()/4,graph.getHeight());
-   paintShape(g,r,(first+k)%count,false);
-   if((first+k)%count==proc.activeSequenceStep.load(std::memory_order_relaxed)){
-    g.setColour(lime);g.fillRect(r.getX(),r.getY(),3,r.getHeight());
+  // Show the whole active sequence, not merely the four steps around selection.
+  // Graph and clickable thumbnails now use the same absolute step mapping.
+  const int active=proc.activeSequenceStep.load(std::memory_order_relaxed);
+  for(int k=0;k<count;++k) {
+   const int x0=graph.getX()+k*graph.getWidth()/count;
+   const int x1=graph.getX()+(k+1)*graph.getWidth()/count;
+   auto cell=juce::Rectangle<int>(x0,graph.getY(),x1-x0,graph.getHeight());
+   paintShape(g,cell,k,false);
+   if(k==active) {
+    g.setColour(lime.withAlpha(.85f));
+    g.fillRect(cell.getX(),cell.getY(),2,cell.getHeight());
+   }
+   if(k==selectedStep){
+    g.setColour(orange.withAlpha(.5f));
+    g.drawRect(cell,1);
    }
   }
  } else paintShape(g,graph,selectedStep,false);
@@ -449,7 +458,7 @@ void DISidechainEditor::paint(juce::Graphics& g) {
    if(j==0)wave.startNewSubPath(px,py);else wave.lineTo(px,py);
   }
   g.setColour(i==0?orange:i==1?cyan:juce::Colour(0xffd66bfa));g.strokePath(wave,juce::PathStrokeType(2.f));
-  text(g,"ON",{1153,y+13,30,24},12,lime,true);
+  text(g,"EDIT",{1150,y+13,41,24},11,faint,true);
  }
  text(g,"LANE: "+laneName,{1230,504,254,20},13,white,true);
  text(g,"OFFSET",{1231,543,95,20},12,faint);
