@@ -171,7 +171,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  // Run both branches continuously so automation/bypass does not reset FIR history.
  // Fixed 7-sample latency is reported to the host and shared by dry and wet.
  const float fxDry=fxDryDelay[ch].process(out);
- const float fxProcessed=oversampledFx[ch].process(out,smoothedFxDrive,1.f); // FX: soft clipper
+ const float fxProcessed=oversampledFx[ch].process(out,smoothedFxDrive,smoothedFxType); // FX preserves original type and automation
  out=di::mixAlignedFx(fxDry,fxProcessed,smoothedFxWet*fxBlend);
  // Saturator is a separate, independently bypassable stage. Both oversampled
  // processors always run and both dry paths are latency-aligned to avoid clicks.
