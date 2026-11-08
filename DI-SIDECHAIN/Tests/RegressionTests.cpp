@@ -23,7 +23,7 @@ static void editorLifecycle(DISidechainProcessor& p)
         std::unique_ptr<juce::AudioProcessorEditor> editor(p.createEditor());
         require(editor != nullptr, "Editor creation failed");
         require(editor->getWidth() == 1380 && editor->getHeight() == 860, "Initial editor size");
-        require(editor->getNumChildComponents() == 60, "Missing editor controls");
+        require(editor->getNumChildComponents() == 62, "Missing editor controls");
         int sliders = 0, combos = 0, buttons = 0;
         for (auto* child : editor->getChildren())
         {
@@ -32,7 +32,7 @@ static void editorLifecycle(DISidechainProcessor& p)
             combos += dynamic_cast<juce::ComboBox*>(child) != nullptr;
             buttons += dynamic_cast<juce::ToggleButton*>(child) != nullptr;
         }
-        require(sliders == 21 && combos == 4 && buttons == 2, "Control types changed");
+        require(sliders == 22 && combos == 4 && buttons == 2, "Control types changed");
         editor->setSize(1500, 860);
         editor->setSize(1380, 860);
         require(editor->createComponentSnapshot(editor->getLocalBounds()).isValid(), "Editor paint failed");
@@ -48,6 +48,40 @@ static void editorLifecycle(DISidechainProcessor& p)
         set(p, "depth", 1.0f);
         juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
     }
+}
+
+static void envelopeTimingOffsetRegression()
+{
+    DISidechainProcessor p;
+    p.applyEnvelopePreset(1); // Tight Kick, early minimum at x=0.012
+    const float raw=p.evaluateEnvelope(.25);
+    require(std::abs(p.evaluateShiftedEnvelope(.25,false)-raw)<.000001f,
+            "Zero timing offset changed legacy envelope");
+    set(p,"envelopeOffset",25.f);
+    require(std::abs(p.evaluateShiftedEnvelope(.5,false)-raw)<.0001f,
+            "Positive timing offset should delay curve right by 25%");
+    require(std::abs(p.evaluateShiftedEnvelope(.12,false)-1.f)<.0001f,
+            "One Shot positive offset must hold neutral gain before delayed start");
+    set(p,"envelopeOffset",-25.f);
+    require(std::abs(p.evaluateShiftedEnvelope(0.,false)-raw)<.0001f,
+            "Negative timing offset should advance the curve left by 25%");
+    require(std::abs(p.evaluateShiftedEnvelope(.95,false)-1.f)<.0001f,
+            "One Shot must end neutral after advanced curve finishes");
+    set(p,"envelopeOffset",40.f);
+    require(std::abs(p.evaluateShiftedEnvelope(.1,true)-p.evaluateEnvelope(.7))<.0001f,
+            "LOOP offset must wrap around instead of clipping");
+    require(std::abs(p.evaluateShiftedEnvelope(.65,true)-p.evaluateEnvelope(.25))<.0001f,
+            "LOOP shifted output does not follow the reference shape");
+
+    juce::MemoryBlock saved;
+    p.getStateInformation(saved);
+    DISidechainProcessor restored;
+    restored.setStateInformation(saved.getData(),(int)saved.getSize());
+    require(std::abs(restored.state.getRawParameterValue("envelopeOffset")->load()-40.f)<.001f,
+            "Ableton project restore lost envelope timing offset");
+    DISidechainProcessor legacy;
+    require(std::abs(legacy.state.getRawParameterValue("envelopeOffset")->load())<.000001f,
+            "Default offset must be neutral for older Ableton sets");
 }
 
 static void factoryEnvelopePresetsRegression()
@@ -138,8 +172,20 @@ static void factoryPresetGuiRegression()
         if(id.startsWith("filter-slope-"))++slopeButtons;
         if(id.startsWith("factory-preset-"))++factoryButtons;
     }
-    require(visibleSliders==21,
+    require(visibleSliders==22,
             "Filter and sidechain knobs must always be simultaneously visible");
+    juce::Slider* offsetSlider=nullptr;
+    for(auto* child:editor->getChildren())
+        if(child->getComponentID()=="envelopeOffset")
+            offsetSlider=dynamic_cast<juce::Slider*>(child);
+    require(offsetSlider!=nullptr&&offsetSlider->isVisible(),
+            "Cyan signed timing offset must remain visible under the envelope");
+    require(offsetSlider->getMinimum()==-50.&&offsetSlider->getMaximum()==50.,
+            "Offset range must support ±50%");
+    offsetSlider->setValue(-17.5,juce::sendNotificationSync);
+    require(std::abs(processor.state.getRawParameterValue("envelopeOffset")->load()+17.5f)<.1f,
+            "Offset slider is not connected to the audio engine");
+
     require(rotary==8,"Studio master and filter must have eight rotary controls");
     require(factoryButtons==6,"Studio preset bank should have six one-click buttons");
     require(filterButtons==4&&slopeButtons==2&&bandPass!=nullptr,
@@ -1051,6 +1097,7 @@ int main()
         liveWobbleCutoffRegression();
         envelopeInterpolationRegression();
         factoryEnvelopePresetsRegression();
+        envelopeTimingOffsetRegression();
         factoryPresetGuiRegression();
         editableEnvelopeRoundtrip();
         concurrentEnvelopeEditingStress();
