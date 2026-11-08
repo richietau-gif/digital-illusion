@@ -235,6 +235,20 @@ void DISidechainEditor::refreshFxButtons() {
  if(fxToggle)fxToggle->setButtonText(fxToggle->getToggleState()?"ON":"OFF");
  if(saturatorToggle)saturatorToggle->setButtonText(saturatorToggle->getToggleState()?"ON":"OFF");
 }
+void DISidechainEditor::syncUiPreferences() {
+ // Host state restore may occur while an existing editor stays open.
+ if(auto* scale=proc.state.getRawParameterValue("uiScale")) {
+  const int index=juce::jlimit(0,2,(int)scale->load(std::memory_order_relaxed));
+  const float target=index==0?.5f:index==1?.75f:1.f;
+  if(std::abs(uiScale-target)>0.001f){
+   uiScale=target;
+   setSize(juce::roundToInt(designWidth*uiScale),
+           juce::roundToInt(designHeight*uiScale));
+  }
+ }
+ if(auto* quality=proc.state.getRawParameterValue("renderQuality"))
+  renderQuality=juce::jlimit(0,2,(int)quality->load(std::memory_order_relaxed));
+}
 void DISidechainEditor::paintPanel(juce::Graphics& g,juce::Rectangle<int> r,const juce::String& name) {
  const auto f=r.toFloat();
  g.setColour(juce::Colour(0xff030b12).withAlpha(.5f));
