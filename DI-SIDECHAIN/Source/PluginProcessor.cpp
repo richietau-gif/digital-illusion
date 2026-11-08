@@ -257,6 +257,7 @@ void DISidechainProcessor::setFilterEnvelopePoint(int bank,int index,float y) no
     if(bank<0||bank>=2||index<0||index>=filterEnvelopePoints||!std::isfinite(y))return;
     filterEnvelopeBanks[(size_t)bank][(size_t)index].store(
         juce::jlimit(0.f,1.f,y),std::memory_order_relaxed);
+    filterBanksInitialized.store(true,std::memory_order_release);
 }
 float DISidechainProcessor::evaluateFilterBank(int bank,double t,bool loop) const noexcept {
     if(!std::isfinite(t))return 1.f;
@@ -278,7 +279,8 @@ float DISidechainProcessor::evaluateFilterBank(int bank,double t,bool loop) cons
     return juce::jlimit(0.f,1.f,left+(right-left)*u);
 }
 float DISidechainProcessor::evaluateFilterEnvelope(double t,bool loop) const noexcept {
-    if(state.getRawParameterValue("filterEnvelopeLink")->load(std::memory_order_relaxed)>.5f)
+    if(state.getRawParameterValue("filterEnvelopeLink")->load(std::memory_order_relaxed)>.5f ||
+       !filterBanksInitialized.load(std::memory_order_acquire))
         return evaluateShiftedEnvelope(t,loop);
     const float morph=juce::jlimit(0.f,1.f,
         state.getRawParameterValue("filterEnvelopeMorph")->load(std::memory_order_relaxed));
@@ -286,6 +288,8 @@ float DISidechainProcessor::evaluateFilterEnvelope(double t,bool loop) const noe
     return a+(b-a)*morph;
 }
 void DISidechainProcessor::copyVolumeShapeToFilterBanks() noexcept {
+    // First unlink only: never overwrite user edits when LINK is toggled.
+    if(filterBanksInitialized.exchange(true,std::memory_order_acq_rel))return;
     // On unlink, preserve the sound by sampling the volume curve.
     for(int i=0;i<filterEnvelopePoints;++i){
         const float sample=evaluateEnvelope((double)i/(filterEnvelopePoints-1));
@@ -538,6 +542,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
 void DISidechainProcessor::getStateInformation(juce::MemoryBlock& dest){
     auto tree=state.copyState();
     for(int i=0;i<8;++i)tree.setProperty("point"+juce::String(i),points[i].load(),nullptr);
+    tree.setProperty("filterBanksInitialized",filterBanksInitialized.load(),nullptr);
     for(int bank=0;bank<2;++bank)
       for(int i=0;i<filterEnvelopePoints;++i)
         tree.setProperty("filterEnv"+juce::String(bank)+"_"+juce::String(i),
@@ -590,6 +595,9 @@ void DISidechainProcessor::setStateInformation(const void* data,int bytes){
                     if(std::isfinite(v))setFilterEnvelopePoint(bank,i,v);
                 }
               }
+            filterBanksInitialized.store(
+                (bool)tree.getProperty("filterBanksInitialized",false),
+                std::memory_order_release);
             state.replaceState(tree);
         }
     }
