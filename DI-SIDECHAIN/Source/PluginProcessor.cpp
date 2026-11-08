@@ -319,6 +319,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  const float targetFilterDrive=juce::jlimit(0.f,1.f,get("outputFilterDrive"));
  const float filterAmount=juce::jlimit(0.f,1.f,get("outputFilterAmount"));
  const float followerAmount=juce::jlimit(-1.f,1.f,get("filterEnvelopeFollower"));
+ const bool filterLinked=get("filterEnvelopeLink")>.5f;
  const double followerAttack=std::exp(-1.0/(sr*.010));
  const double followerRelease=std::exp(-1.0/(sr*.080));
  const float cutoffMin=juce::jlimit(20.f,(float)(sr*.45),get("outputFilterMin"));
@@ -438,8 +439,8 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  const double followCoeff=detectorSample>=followerLevel?followerAttack:followerRelease;
  followerLevel=(float)(followCoeff*followerLevel+(1.-followCoeff)*detectorSample);
  if(i==n-1)visualFollowerLevel.store(followerLevel,std::memory_order_relaxed);
- const float filterEnv=filterPhase>=1.0?1.f:
-     evaluateFilterEnvelope(filterPhase,playbackMode==1);
+ const float filterEnv=filterLinked?env:(filterPhase>=1.0?1.f:
+     evaluateFilterEnvelope(filterPhase,playbackMode==1));
  const float followerMod=followerAmount*(juce::jlimit(0.f,1.f,followerLevel*2.f)-.5f);
  const float shaped=1.f-filterAmount*(1.f-
        juce::jlimit(0.f,1.f,filterEnv+followerMod));
