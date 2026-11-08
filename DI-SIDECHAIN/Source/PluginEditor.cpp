@@ -114,7 +114,8 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
   b->setColour(juce::ToggleButton::tickColourId,green);
   b->setColour(juce::ToggleButton::textColourId,juce::Colours::white);
  }
- presetButton=std::make_unique<juce::TextButton>("PRESETS  -  Custom");
+ presetName=p.state.state.getProperty("presetName","Custom").toString();
+ presetButton=std::make_unique<juce::TextButton>("PRESETS  -  "+presetName);
  setupButton=std::make_unique<TransparentTextButton>();
  setupButton->setTooltip("SETUP - Plugin settings");
  setupBounds={1449,31,61,45};
@@ -619,7 +620,9 @@ void DISidechainEditor::applyFactoryPreset(int index) {
  const char* names[]={"Classic Duck","Deep Pump","Sidechain 4/4",
                       "Breakbeat Pump","Pump Rise","Wobble"};
  index=juce::jlimit(0,5,index);
- presetName=names[index];presetButton->setButtonText("PRESETS  -  "+presetName);
+ presetName=names[index];
+ proc.state.state.setProperty("presetName",presetName,nullptr);
+ presetButton->setButtonText("PRESETS  -  "+presetName);
  // The legacy sidechain mode reads proc.points rather than sequencePoints.
  // Set the audible envelope as well as the bank so Classic Duck is effective.
  const auto legacyBefore=captureShape(0,false);
@@ -744,6 +747,8 @@ void DISidechainEditor::saveUserPreset() {
    if(!safe)return;
    const auto file=chooser.getResult();
    if(file==juce::File())return;
+   safe->presetName=file.getFileNameWithoutExtension();
+   safe->proc.state.state.setProperty("presetName",safe->presetName,nullptr);
    juce::MemoryBlock data;safe->proc.getStateInformation(data);
    if(file.replaceWithData(data.getData(),data.getSize())) {
     safe->presetName=file.getFileNameWithoutExtension();
@@ -775,6 +780,7 @@ void DISidechainEditor::loadUserPreset() {
      safe->renderQuality=juce::jlimit(0,2,(int)quality->load());
     safe->selectedStep=juce::jlimit(0,juce::jlimit(1,16,(int)safe->sequenceCount->getValue())-1,safe->selectedStep);
     safe->presetName=file.getFileNameWithoutExtension();
+    safe->proc.state.state.setProperty("presetName",safe->presetName,nullptr);
     safe->presetButton->setButtonText("PRESETS  -  "+safe->presetName);
     safe->repaint();
    }
