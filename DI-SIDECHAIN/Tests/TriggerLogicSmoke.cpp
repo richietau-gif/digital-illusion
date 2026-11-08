@@ -60,5 +60,19 @@ int main(){
   if(holdoff>0)--holdoff;
  }
  check(fires==2,"Separated audio kicks must retrigger independently");
+ // MIDI-only must keep responding to dense notes even while audio holdoff runs.
+ fires=0;
+ holdoff=20;
+ for(int sample=0;sample<32;++sample){
+  const bool midi=sample==1||sample==2||sample==3||sample==20;
+  if(shouldFireTrigger(midi,true,true,holdoff,2))++fires;
+  if(holdoff>0)--holdoff;
+ }
+ check(fires==4,"MIDI-only dense notes must bypass audio holdoff");
+ // Audio-only must never respond to MIDI notes, even with no holdoff.
+ fires=0;
+ for(int sample=0;sample<32;++sample)
+  if(shouldFireTrigger(sample%2==0,false,true,0,1))++fires;
+ check(fires==0,"Audio-only must ignore dense MIDI events");
  return 0;
 }
