@@ -50,6 +50,16 @@ int main() {
  pan.setShape(0,invalid);
  auto safe=pan.getShape(0);
  check(safe[0]==1.f&&safe[1]==0.f&&safe[2]==1.f,"Shape sanitization failed");
+ // Host or automation corruption must not produce an invalid array index.
+ di::ShapeSequencer::Shape finiteShape{};
+ finiteShape.fill(0.4f);
+ for(double position:{std::numeric_limits<double>::quiet_NaN(),
+                      std::numeric_limits<double>::infinity(),
+                      -std::numeric_limits<double>::infinity()}){
+  const float output=di::ShapeSequencer::evaluate(finiteShape,position);
+  check(std::isfinite(output)&&std::abs(output-0.4f)<1e-6f,
+        "Nonfinite phase must produce a safe finite envelope");
+ }
  check(!di::ShapeSequencer::shouldRestartOnTrigger(true),"Synced MIDI must not restart sequence");
  check(di::ShapeSequencer::shouldRestartOnTrigger(false),"Free-running MIDI should restart sequence");
  di::ShapeSequencer syncPattern;
