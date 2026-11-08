@@ -34,5 +34,30 @@ int main(){
   if(holdoff>0)--holdoff;
  }
  check(fires==1,"Sustained overlapping audio and MIDI must fire once");
+ // A second kick arriving inside holdoff is consumed, not queued for later.
+ armed=true;
+ holdoff=0;
+ fires=0;
+ for(int sample=0;sample<24;++sample){
+  const bool high=(sample>=1&&sample<=3)||(sample>=5&&sample<=7);
+  if(!high)armed=true;
+  const bool crossing=high&&armed;
+  if(shouldFireTrigger(false,crossing,armed,10,0))++fires;
+  if(di::shouldConsumeAudioPeak(crossing,armed,0))armed=false;
+ }
+ check(fires==0,"Audio crossings inside holdoff must not queue delayed triggers");
+ // Repeated short kicks outside holdoff must remain independently triggerable.
+ armed=true;
+ holdoff=0;
+ fires=0;
+ for(int sample=0;sample<32;++sample){
+  const bool high=sample==1||sample==16;
+  if(!high)armed=true;
+  const bool crossing=high&&armed;
+  if(shouldFireTrigger(false,crossing,armed,holdoff,0)){++fires;holdoff=8;}
+  if(di::shouldConsumeAudioPeak(crossing,armed,0))armed=false;
+  if(holdoff>0)--holdoff;
+ }
+ check(fires==2,"Separated audio kicks must retrigger independently");
  return 0;
 }
