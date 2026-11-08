@@ -287,7 +287,7 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  const auto white=juce::Colour(0xffecf8ff);
  const auto faint=juce::Colour(0xff9bb6c7);
  const auto cyan=DITheme::cyan();
- const auto lime=DITheme::lime();
+ const auto lime=DITheme::lime;
  const auto orange=DITheme::orange();
  // Polished header with an original waveform logo, entirely vector-rendered.
  juce::ColourGradient top(juce::Colour(0xff123448),0.f,0.f,juce::Colour(0xff06111a),0.f,102.f,false);
@@ -323,12 +323,12 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  g.setColour(juce::Colour(0xff102a37));g.fillRoundedRectangle(nav,11.f);
  g.setColour(juce::Colour(0xff24546a));g.drawRoundedRectangle(nav,11.f,1.f);
  const bool enabled=sequenceToggle&&sequenceToggle->getToggleState();
- g.setColour(enabled?juce::Colour(0xff0a2533):lime());
+ g.setColour(enabled?juce::Colour(0xff0a2533):lime);
  g.fillRoundedRectangle(juce::Rectangle<float>(24,117,153,43),8.f);
  text(g,"SIDECHAIN",{40,122,136,30},16,enabled?white:DITheme::dark(),true);
- g.setColour(enabled?lime():juce::Colour(0xff102d3c));
+ g.setColour(enabled?lime:juce::Colour(0xff102d3c));
  g.fillRoundedRectangle(juce::Rectangle<float>(183,117,155,43),8.f);
- if(enabled){g.setColour(lime().withAlpha(.25f));g.drawRoundedRectangle(juce::Rectangle<float>(184,118,153,41),8.f,3.f);}
+ if(enabled){g.setColour(lime.withAlpha(.25f));g.drawRoundedRectangle(juce::Rectangle<float>(184,118,153,41),8.f,3.f);}
  text(g,"SEQUENCER",{199,122,137,30},16,enabled?DITheme::dark():white,true);
  text(g,"STEPS",{503,110,70,14},11,faint);
  text(g,"LENGTH / RATE",{600,110,135,14},11,faint);
@@ -408,7 +408,7 @@ void DISidechainEditor::paint(juce::Graphics& g) {
   auto r=juce::Rectangle<float>(913.f,(float)y,272.f,50.f);
   g.setColour(juce::Colour(0xff0b2030));g.fillRoundedRectangle(r,7.f);
   g.setColour(juce::Colour(0xff295369));g.drawRoundedRectangle(r,7.f,1.f);
-  const auto colour=i==0?lime():i==1?cyan:juce::Colour(0xffd66bfa);
+  const auto colour=i==0?lime:i==1?cyan:juce::Colour(0xffd66bfa);
   g.setColour(selectedLane==i?colour:colour.withAlpha(.5f));
   g.drawRoundedRectangle(juce::Rectangle<float>(917.f,(float)y+5.f,100.f,40.f),7.f,selectedLane==i?2.f:1.f);
   // Native JUCE button overlays the left section, preserving keyboard access.
@@ -420,7 +420,7 @@ void DISidechainEditor::paint(juce::Graphics& g) {
    if(j==0)wave.startNewSubPath(px,py);else wave.lineTo(px,py);
   }
   g.setColour(i==0?orange:i==1?cyan:juce::Colour(0xffd66bfa));g.strokePath(wave,juce::PathStrokeType(2.f));
-  text(g,"ON",{1153,y+13,30,24},12,lime(),true);
+  text(g,"ON",{1153,y+13,30,24},12,lime,true);
  }
  text(g,"LANE: "+laneName,{1230,504,254,20},13,white,true);
  text(g,"OFFSET",{1231,543,95,20},12,faint);
