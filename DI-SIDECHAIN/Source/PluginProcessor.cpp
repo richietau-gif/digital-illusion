@@ -15,6 +15,16 @@ static juce::AudioProcessorValueTreeState::ParameterLayout layoutParams(){
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"mode",1},"Frequency mode",juce::StringArray{"Full","Low","High","Band"},0));
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"trigger",1},"Trigger mode",juce::StringArray{"Audio + MIDI","Audio only","MIDI only"},0));
  p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"sequenceEnabled",1},"Shape sequencer enabled",false));
+ p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"creativeGridEnabled",1},"Creative track sequencer enabled",false));
+ p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"reverbEnabled",1},"Reverb enabled",false));
+ p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"distortEnabled",1},"Distortion enabled",false));
+ p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"reverbReverse",1},"Reverse before reverb",false));
+ p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"reverbModel",1},"Reverb model",juce::StringArray{"Room","Plate","Hall","Shimmer-ish","Space"},0));
+ p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"distortModel",1},"Distortion model",juce::StringArray{"Warm","Acid","Clip","Fold","Modern"},0));
+ f("reverbWet","Reverb wet",0,1,.3f); f("reverbLength","Reverb length",.1f,8.f,3.f);
+ f("reverbDecay","Reverb decay",0,1,.6f);
+ f("distortWet","Distortion wet",0,1,.4f); f("distortDrive","Distortion drive dB",0,24,8);
+
  p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"fxEnabled",1},"FX enabled",false));
  p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"saturatorEnabled",1},"Independent saturator enabled",false));
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"clipperMode",1},"Clipper mode",juce::StringArray{"Off","Soft","Hard"},0));
@@ -34,6 +44,15 @@ DISidechainProcessor::DISidechainProcessor():AudioProcessor(BusesProperties().wi
  const float defaults[8]={1,0.92f,0.08f,0.02f,0.32f,0.75f,0.95f,1};for(int i=0;i<8;++i)points[i]=defaults[i];
  for(auto& shape:sequencePoints)for(int i=0;i<8;++i)shape[i].store(defaults[i]);
  for(int lane=0;lane<2;++lane)for(auto& shape:modulationPoints[lane])for(int i=0;i<8;++i)shape[i].store(lane==0?1.f:0.5f);
+ for(auto& track:gridCells)for(auto& cell:track)cell.store(false,std::memory_order_relaxed);
+}
+void DISidechainProcessor::setGridCell(int track,int step,bool enabled) noexcept {
+ if(track>=0&&track<gridTracks&&step>=0&&step<gridSteps)
+  gridCells[(size_t)track][(size_t)step].store(enabled,std::memory_order_relaxed);
+}
+bool DISidechainProcessor::getGridCell(int track,int step) const noexcept {
+ return track>=0&&track<gridTracks&&step>=0&&step<gridSteps&&
+        gridCells[(size_t)track][(size_t)step].load(std::memory_order_relaxed);
 }
 void DISidechainProcessor::setSequencePoint(int step,int node,float value) noexcept {if(step>=0&&step<32&&node>=0&&node<8&&std::isfinite(value))sequencePoints[step][node].store(juce::jlimit(0.f,1.f,value),std::memory_order_relaxed);}
 float DISidechainProcessor::getSequencePoint(int step,int node) const noexcept {return step>=0&&step<32&&node>=0&&node<8?sequencePoints[step][node].load(std::memory_order_relaxed):1.f;}
@@ -46,7 +65,7 @@ float DISidechainProcessor::getModulationPoint(int lane,int step,int node) const
   ?modulationPoints[lane][step][node].load(std::memory_order_relaxed):(lane==1?0.5f:1.f);
 }
 bool DISidechainProcessor::isBusesLayoutSupported(const BusesLayout& b) const {return b.getMainInputChannelSet()==juce::AudioChannelSet::stereo()&&b.getMainOutputChannelSet()==juce::AudioChannelSet::stereo()&&(b.inputBuses.size()<2||b.inputBuses[1].isDisabled()||b.inputBuses[1]==juce::AudioChannelSet::mono()||b.inputBuses[1]==juce::AudioChannelSet::stereo());}
-void DISidechainProcessor::prepareToPlay(double sampleRate,int maxBlock){sr=sampleRate;setLatencySamples(2*di::OversampledFx2x::latencySamples);for(auto& fx:oversampledFx)fx.reset();for(auto& fx:saturatorFx)fx.reset();for(auto& delay:fxDryDelay)delay.reset();for(auto& delay:saturatorDryDelay)delay.reset();saturatorBlend=state.getRawParameterValue("saturatorEnabled")->load()>0.5f?1.f:0.f;phase=1;sequencer.reset();for(auto& lane:modulationSequencers)lane.reset();activeSequenceStep.store(0);detector=0;armed=true;refractory=0;smoothGain=1;expectedTransportSample=-1;wasTransportPlaying=false;fxBlend=state.getRawParameterValue("fxEnabled")->load()>0.5f?1.f:0.f;const auto safeInitial=[this](const char* id,float low,float high,float fallback){const float value=state.getRawParameterValue(id)->load();return std::isfinite(value)?juce::jlimit(low,high,value):fallback;};smoothedFxDrive=juce::Decibels::decibelsToGain(safeInitial("fxDrive",0.f,24.f,0.f));smoothedFxWet=safeInitial("fxMix",0.f,1.f,1.f);smoothedFxType=safeInitial("fxType",0.f,1.f,0.f);juce::dsp::ProcessSpec spec{sampleRate,(juce::uint32)juce::jmax(1,maxBlock),1};for(auto& c:filters){c.low.prepare(spec);c.high.prepare(spec);c.low.setType(juce::dsp::LinkwitzRileyFilterType::lowpass);c.high.setType(juce::dsp::LinkwitzRileyFilterType::highpass);c.low.reset();c.high.reset();}}
+void DISidechainProcessor::prepareToPlay(double sampleRate,int maxBlock){sr=sampleRate;creativeFx.prepare(sampleRate);setLatencySamples(2*di::OversampledFx2x::latencySamples);for(auto& fx:oversampledFx)fx.reset();for(auto& fx:saturatorFx)fx.reset();for(auto& delay:fxDryDelay)delay.reset();for(auto& delay:saturatorDryDelay)delay.reset();saturatorBlend=state.getRawParameterValue("saturatorEnabled")->load()>0.5f?1.f:0.f;phase=1;sequencer.reset();for(auto& lane:modulationSequencers)lane.reset();activeSequenceStep.store(0);detector=0;armed=true;refractory=0;smoothGain=1;expectedTransportSample=-1;wasTransportPlaying=false;fxBlend=state.getRawParameterValue("fxEnabled")->load()>0.5f?1.f:0.f;const auto safeInitial=[this](const char* id,float low,float high,float fallback){const float value=state.getRawParameterValue(id)->load();return std::isfinite(value)?juce::jlimit(low,high,value):fallback;};smoothedFxDrive=juce::Decibels::decibelsToGain(safeInitial("fxDrive",0.f,24.f,0.f));smoothedFxWet=safeInitial("fxMix",0.f,1.f,1.f);smoothedFxType=safeInitial("fxType",0.f,1.f,0.f);juce::dsp::ProcessSpec spec{sampleRate,(juce::uint32)juce::jmax(1,maxBlock),1};for(auto& c:filters){c.low.prepare(spec);c.high.prepare(spec);c.low.setType(juce::dsp::LinkwitzRileyFilterType::lowpass);c.high.setType(juce::dsp::LinkwitzRileyFilterType::highpass);c.low.reset();c.high.reset();}}
 float DISidechainProcessor::curve(double t) const {if(!std::isfinite(t))t=0.;t=juce::jlimit(0.0,1.0,t);double x=t*7;int i=juce::jmin(6,(int)x);const auto safePoint=[this](int node){const float value=points[node].load(std::memory_order_relaxed);return std::isfinite(value)?juce::jlimit(0.f,1.f,value):1.f;};float a=safePoint(i),b=safePoint(i+1);float u=(float)(x-i);u=u*u*(3-2*u);return a+(b-a)*u;}
 void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::MidiBuffer& midi){
  juce::ScopedNoDenormals noDenormals;
@@ -76,6 +95,18 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  const float filterRange=juce::jlimit(0.f,1.f,filterMod);
  const bool fxEnabled=get("fxEnabled")>0.5f;
  const bool saturatorEnabled=get("saturatorEnabled")>0.5f;
+ const bool creativeGrid=get("creativeGridEnabled")>0.5f;
+ const bool reverbEnabled=get("reverbEnabled")>0.5f;
+ const bool distortEnabled=get("distortEnabled")>0.5f;
+ const bool reverseReverb=get("reverbReverse")>0.5f;
+ const int reverbModel=(int)bounded("reverbModel",0.f,4.f,0.f);
+ const int distortModel=(int)bounded("distortModel",0.f,4.f,0.f);
+ const float reverbWet=bounded("reverbWet",0.f,1.f,.3f);
+ const float reverbLength=bounded("reverbLength",.1f,8.f,3.f);
+ const float reverbDecay=bounded("reverbDecay",0.f,1.f,.6f);
+ const float distortWet=bounded("distortWet",0.f,1.f,.4f);
+ const float distortDrive=bounded("distortDrive",0.f,24.f,8.f);
+
  const int fxType=(int)bounded("fxType",0.f,1.f,0.f);
  int clipperMode=(int)bounded("clipperMode",0.f,2.f,0.f);
  if(clipperMode==0 && fxEnabled) clipperMode=fxType>0?1:2;
@@ -189,10 +220,23 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  const float satProcessed=saturatorFx[ch].process(out,saturatorDrive,0.f);
  out=di::mixAlignedFx(satDry,satProcessed,smoothedFxWet*saturatorBlend);
  if(!std::isfinite(out))out=0.f;main.setSample(ch,i,out);peak=juce::jmax(peak,std::abs(out));}
+ // Grid effect lanes: indices 6/7 are REVERB and DISTORT respectively.
+ // In legacy mode, the new effects remain opt-in and ignore step cells.
+ const int currentStep=activeSequenceStep.load(std::memory_order_relaxed);
+ const bool verbCell=!creativeGrid||getGridCell(6,currentStep);
+ const bool distCell=!creativeGrid||getGridCell(7,currentStep);
+ float left=main.getSample(0,i),right=main.getSample(1,i);
+ creativeFx.process(left,right,distortEnabled&&distCell,reverbEnabled&&verbCell,
+                    distortModel,distortDrive,distortWet,
+                    reverbModel,reverbWet,reverbLength,reverbDecay,reverseReverb&&verbCell);
+ main.setSample(0,i,left);main.setSample(1,i,right);
+ peak=juce::jmax(peak,juce::jmax(std::abs(left),std::abs(right)));
  }
  meter.store(peak);midi.clear();
 }
-void DISidechainProcessor::getStateInformation(juce::MemoryBlock& dest){auto tree=state.copyState();for(int i=0;i<8;++i)tree.setProperty("point"+juce::String(i),points[i].load(),nullptr);for(int k=0;k<32;++k)for(int j=0;j<8;++j)tree.setProperty("seq_"+juce::String(k)+"_"+juce::String(j),getSequencePoint(k,j),nullptr);for(int lane=0;lane<2;++lane)for(int k=0;k<32;++k)for(int j=0;j<8;++j)tree.setProperty("mod_"+juce::String(lane)+"_"+juce::String(k)+"_"+juce::String(j),getModulationPoint(lane,k,j),nullptr);if(auto xml=tree.createXml())copyXmlToBinary(*xml,dest);}
+void DISidechainProcessor::getStateInformation(juce::MemoryBlock& dest){auto tree=state.copyState();for(int i=0;i<8;++i)tree.setProperty("point"+juce::String(i),points[i].load(),nullptr);for(int k=0;k<32;++k)for(int j=0;j<8;++j)tree.setProperty("seq_"+juce::String(k)+"_"+juce::String(j),getSequencePoint(k,j),nullptr);for(int lane=0;lane<2;++lane)for(int k=0;k<32;++k)for(int j=0;j<8;++j)tree.setProperty("mod_"+juce::String(lane)+"_"+juce::String(k)+"_"+juce::String(j),getModulationPoint(lane,k,j),nullptr);for(int t=0;t<gridTracks;++t)for(int k=0;k<gridSteps;++k)
+ tree.setProperty("grid_"+juce::String(t)+"_"+juce::String(k),getGridCell(t,k),nullptr);
+ if(auto xml=tree.createXml())copyXmlToBinary(*xml,dest);}
 void DISidechainProcessor::setStateInformation(const void* data,int bytes){
  if(auto xml=getXmlFromBinary(data,bytes)){
   auto tree=juce::ValueTree::fromXml(*xml);
@@ -211,6 +255,10 @@ void DISidechainProcessor::setStateInformation(const void* data,int bytes){
    setSequencePoint(k,j,restored("seq_"+juce::String(k)+"_"+juce::String(j),volumeDefaults[j]));
   for(int lane=0;lane<2;++lane)for(int k=0;k<32;++k)for(int j=0;j<8;++j)
    setModulationPoint(lane,k,j,restored("mod_"+juce::String(lane)+"_"+juce::String(k)+"_"+juce::String(j),lane==0?1.f:.5f));
+  for(int t=0;t<gridTracks;++t)for(int k=0;k<gridSteps;++k){
+   const auto key="grid_"+juce::String(t)+"_"+juce::String(k);
+   setGridCell(t,k,tree.hasProperty(key)?(bool)tree.getProperty(key):false);
+  }
   state.replaceState(tree);
  }
 }
