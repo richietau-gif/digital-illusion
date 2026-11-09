@@ -110,10 +110,18 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
    if(i==0)proc.setGridCell(selectedTrack,selectedStep,!proc.getGridCell(selectedTrack,selectedStep));
    else proc.setCellFxFlag(selectedTrack,selectedStep,i==4?3:i-1,
                            !proc.getCellFxFlag(selectedTrack,selectedStep,i==4?3:i-1));
+   // FX selection turns the step on automatically. Reverse also selects
+   // the reverb send so a whoosh isn't silently configured but inaudible.
+   if(i==3&&proc.getCellFxFlag(selectedTrack,selectedStep,2))
+    proc.setCellFxFlag(selectedTrack,selectedStep,0,true);
+   if(i>=1&&i<=3&&proc.getCellFxFlag(selectedTrack,selectedStep,i==3?2:i-1))
+    proc.setGridCell(selectedTrack,selectedStep,true);
    if(i==1&&proc.getCellFxFlag(selectedTrack,selectedStep,0)&&reverbOnButton&&!reverbOnButton->getToggleState())
     reverbOnButton->setToggleState(true,juce::sendNotificationSync);
    if(i==2&&proc.getCellFxFlag(selectedTrack,selectedStep,1)&&distortOnButton&&!distortOnButton->getToggleState())
     distortOnButton->setToggleState(true,juce::sendNotificationSync);
+   if(i==3&&proc.getCellFxFlag(selectedTrack,selectedStep,2)&&reverbOnButton&&!reverbOnButton->getToggleState())
+    reverbOnButton->setToggleState(true,juce::sendNotificationSync);
    refreshCellControls();repaint();
   };
  }
