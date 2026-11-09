@@ -422,8 +422,11 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  // Grid effect lanes: indices 6/7 are REVERB and DISTORT respectively.
  // In legacy mode, the new effects remain opt-in and ignore step cells.
  const int currentStep=activeSequenceStep.load(std::memory_order_relaxed);
- bool verbCell=!creativeGrid,distCell=!creativeGrid,reverseCell=false,delayCell=!creativeGrid;
- if(creativeGrid){
+ // Cell FX routing applies only while SEQUENCER is actually active.
+ // In SIDECHAIN mode, enabled effects must remain continuously usable.
+ const bool gatedFx=creativeGrid&&sequenceOn;
+ bool verbCell=!gatedFx,distCell=!gatedFx,reverseCell=false,delayCell=!gatedFx;
+ if(gatedFx){
   for(int track=0;track<6;++track){
    if(!getGridCell(track,currentStep))continue; // BYP skips DUCK only, not independent FX sends
    verbCell=verbCell||getCellFxFlag(track,currentStep,0);
