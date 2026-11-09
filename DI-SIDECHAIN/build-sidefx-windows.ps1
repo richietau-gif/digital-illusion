@@ -1,4 +1,4 @@
-# Builds DI SIDEFX as a separate VST3 alongside DI SIDECHAIN.
+# Builds DI SEQFX as a separate VST3 alongside DI SIDECHAIN.
 # Run from the repository root:
 # powershell -ExecutionPolicy Bypass -File .\DI-SIDECHAIN\build-sidefx-windows.ps1
 [CmdletBinding()]
@@ -12,10 +12,10 @@ Set-StrictMode -Version Latest
 
 $source = $PSScriptRoot
 if ([string]::IsNullOrWhiteSpace($BuildDirectory)) {
-  $BuildDirectory = Join-Path (Split-Path $source -Parent) 'build\di-sidefx-local'
+  $BuildDirectory = Join-Path (Split-Path $source -Parent) 'build\di-seqfx-local'
 }
 $BuildDirectory = [System.IO.Path]::GetFullPath($BuildDirectory)
-$artifactDirectory = Join-Path $BuildDirectory 'DISidefx_artefacts\Release\VST3'
+$artifactDirectory = Join-Path $BuildDirectory 'DISeqfx_artefacts\Release\VST3'
 $packageDirectory = Join-Path $BuildDirectory 'packages'
 
 function Run-Checked([string]$command, [string[]]$arguments) {
@@ -33,9 +33,9 @@ Run-Checked 'ctest' @('--test-dir', $BuildDirectory, '-C', 'Release',
 
 $bundles = @(Get-ChildItem -LiteralPath $artifactDirectory -Filter '*.vst3' -Directory)
 if ($bundles.Count -ne 1) {
-  throw "Expected exactly one DI SIDEFX VST3 bundle in $artifactDirectory, found $($bundles.Count)"
+  throw "Expected exactly one DI SEQFX VST3 bundle in $artifactDirectory, found $($bundles.Count)"
 }
-if ($bundles[0].Name -ne 'DI SIDEFX.vst3') {
+if ($bundles[0].Name -ne 'DI SEQFX.vst3') {
   throw "Unexpected VST3 name: $($bundles[0].Name)"
 }
 if (-not [string]::IsNullOrWhiteSpace($PluginvalExe)) {
@@ -50,10 +50,10 @@ if (-not [string]::IsNullOrWhiteSpace($PluginvalExe)) {
 
 if (-not $SkipPackage) {
   New-Item -ItemType Directory -Force -Path $packageDirectory | Out-Null
-  $zip = Join-Path $packageDirectory 'DI-SIDEFX-5.2B-Windows-x64.zip'
+  $zip = Join-Path $packageDirectory 'DI-SEQFX-5.4-Windows-x64.zip'
   if (Test-Path -LiteralPath $zip) { Remove-Item -LiteralPath $zip -Force }
   Compress-Archive -LiteralPath $bundles[0].FullName -DestinationPath $zip -CompressionLevel Optimal
   if (-not (Test-Path -LiteralPath $zip)) { throw "ZIP packaging failed" }
   Write-Host "ZIP: $zip"
 }
-Write-Host "PASS: DI SIDEFX VST3 built and CTest completed."
+Write-Host "PASS: DI SEQFX VST3 built and CTest completed."
