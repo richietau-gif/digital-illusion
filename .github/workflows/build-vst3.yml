@@ -1,6 +1,9 @@
-name: Build DI SIDEFX 5.2B VST3 (manual)
+name: Build DI SIDEFX 5.3 Windows VST3
 
 on:
+  push:
+    branches:
+      - feature/di-sidechain-v5.2b-grid
   workflow_dispatch:
 
 permissions:
@@ -40,22 +43,22 @@ jobs:
           if (Test-Path pluginval-stdout.log) { Get-Content pluginval-stdout.log }
           if (Test-Path pluginval-stderr.log) { Get-Content pluginval-stderr.log }
           if ($p.ExitCode -ne 0) { throw "pluginval exited with code $($p.ExitCode)" }
-      - name: Package DI SIDEFX 5.2B
+      - name: Package DI SIDEFX 5.3
         id: package
-        if: ${{ always() && steps.build.outcome == 'success' && steps.ctest.outcome == 'success' }}
+        if: ${{ success() && steps.build.outcome == 'success' && steps.ctest.outcome == 'success' && steps.pluginval.outcome == 'success' }}
         shell: pwsh
         run: |
           $vstPath = "build/sidefx/DISidefx_artefacts/Release/VST3"
           $vst = Get-ChildItem -LiteralPath $vstPath -Filter "*.vst3" -Directory | Select-Object -First 1
           if (-not $vst) { throw "Missing VST3 bundle" }
-          Compress-Archive -LiteralPath $vst.FullName -DestinationPath "DI-SIDEFX-5.2B-Windows-x64.zip" -CompressionLevel Optimal -Force
-          if (-not (Test-Path "DI-SIDEFX-5.2B-Windows-x64.zip")) { throw "ZIP not created" }
+          Compress-Archive -LiteralPath $vst.FullName -DestinationPath "DI-SIDEFX-5.3-Windows-x64.zip" -CompressionLevel Optimal -Force
+          if (-not (Test-Path "DI-SIDEFX-5.3-Windows-x64.zip")) { throw "ZIP not created" }
       - name: Upload Windows VST3 ZIP
         if: ${{ always() && steps.package.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
-          name: DI-SIDEFX-5.2B-Windows-x64
-          path: DI-SIDEFX-5.2B-Windows-x64.zip
+          name: DI-SIDEFX-5.3-Windows-x64
+          path: DI-SIDEFX-5.3-Windows-x64.zip
           if-no-files-found: error
           retention-days: 14
       - name: Upload pluginval logs
