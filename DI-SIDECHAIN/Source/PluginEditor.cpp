@@ -28,7 +28,8 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  for(int i=0;i<8;++i) {
   auto s=std::make_unique<juce::Slider>();
   s->setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-  s->setTextBoxStyle(juce::Slider::TextBoxBelow,false,78,18);
+  s->setTextBoxStyle(juce::Slider::NoTextBox,false,0,0);
+  s->setTooltip(juce::String(names[i])+" — drag up/down; double-click to reset.");
   s->textFromValueFunction=[i](double value){
    if(i==0||i==1)return juce::String(value,2);
    if(i==4||i==6)return juce::String(value,0);
@@ -287,7 +288,7 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  const char* sliderIds[]={"reverbWet","reverbLength","reverbDecay","distortWet","distortDrive"};
  for(int i=0;i<5;++i){
   creativeSliders[i]=std::make_unique<juce::Slider>(juce::Slider::LinearHorizontal,juce::Slider::TextBoxRight);
-  creativeSliders[i]->setTextBoxStyle(juce::Slider::TextBoxRight,false,63,22);
+  creativeSliders[i]->setTextBoxStyle(juce::Slider::TextBoxRight,false,68,22);
   creativeSliders[i]->textFromValueFunction=[i](double v){return juce::String(v,i==4?1:2);};
   creativeSliders[i]->setColour(juce::Slider::trackColourId,i<3?juce::Colour(0xff24def0):orange);
   creativeSliders[i]->setColour(juce::Slider::thumbColourId,i<3?juce::Colour(0xff24def0):orange);
@@ -401,10 +402,34 @@ void DISidechainEditor::selectFilter(int index) {
  }
  refreshFilterButtons();
 }
+void DISidechainEditor::updateContextualControls(){
+ const auto raw=[this](const char* key)->float {
+  const auto* p=proc.state.getRawParameterValue(key);
+  return p?p->load(std::memory_order_relaxed):0.f;
+ };
+ const int mode=juce::jlimit(0,3,(int)raw("mode"));
+ const int trigger=juce::jlimit(0,2,(int)raw("trigger"));
+ const bool synced=raw("sync")>.5f;
+ // FULL mode has no band cutoff; LOW uses high crossover,
+ // HIGH uses low crossover; BAND uses both crossovers.
+ const bool lowEnabled=mode==2||mode==3;
+ const bool highEnabled=mode==1||mode==3;
+ const bool audioTrigger=trigger!=2;
+ if(sliders.size()>=8){
+  sliders[3]->setEnabled(!synced); // free-running envelope length
+  sliders[5]->setEnabled(lowEnabled);
+  sliders[6]->setEnabled(highEnabled);
+  sliders[2]->setEnabled(audioTrigger);
+  sliders[7]->setEnabled(audioTrigger);
+ }
+ if(combos.size()>=3)combos[2]->setEnabled(synced);
+ if(sync)sync->setEnabled(true);
+}
 void DISidechainEditor::refreshFilterButtons(){
  const auto* raw=proc.state.getRawParameterValue("mode");
  const int selected=raw?juce::jlimit(0,3,(int)raw->load()):0;
  for(int i=0;i<4;++i)if(filterButtons[i])filterButtons[i]->setToggleState(i==selected,juce::dontSendNotification);
+ updateContextualControls();
 }
 void DISidechainEditor::refreshFxButtons() {
  if(fxToggle)fxToggle->setButtonText(fxToggle->getToggleState()?"ON":"OFF");
