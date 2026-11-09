@@ -650,7 +650,7 @@ void DISidechainEditor::paint(juce::Graphics& g) {
   const int left=graph.getX()+labelWidth;
   const int available=graph.getRight()-left;
   const int top=graph.getY()+23;
-  const float rowHeight=(graph.getBottom()-top)/6.f;
+  const float rowHeight=(graph.getBottom()-top-32.f)/6.f;
   for(int step=0;step<count;++step){
    const int x0=left+step*available/count,x1=left+(step+1)*available/count;
    text(g,juce::String(step+1),{x0+5,graph.getY()+1,x1-x0-10,18},11,
@@ -710,6 +710,25 @@ void DISidechainEditor::paint(juce::Graphics& g) {
     flag(rvb,"R",cyan);
     if(bypass)flag(true,"X",orange);
    }
+  }
+  // The transport is row seven of exactly the SAME column geometry.
+  const int sequenceY=top+juce::roundToInt(6.f*rowHeight)+2;
+  const int sequenceH=juce::jmax(18,graph.getBottom()-sequenceY);
+  g.setColour(juce::Colour(0xff182c36));
+  g.fillRoundedRectangle(juce::Rectangle<float>((float)graph.getX(),(float)sequenceY,
+    (float)labelWidth-4,(float)sequenceH-1),3.f);
+  text(g,"SEQUENCE",{graph.getX()+7,sequenceY,labelWidth-12,sequenceH-1},11,cyan,true);
+  for(int step=0;step<count;++step){
+   const int x0=left+step*available/count,x1=left+(step+1)*available/count;
+   const auto cell=juce::Rectangle<float>((float)x0+2,(float)sequenceY+1,
+    (float)juce::jmax(1,x1-x0-4),(float)sequenceH-3);
+   g.setColour(step==active?lime:juce::Colour(0xff213b4a));
+   g.fillRoundedRectangle(cell,3.f);
+   if(step==active){
+    g.setColour(juce::Colour(0xff0b181c).withAlpha(.65f));
+    g.fillRoundedRectangle(cell.reduced(4.f,5.f),2.f);
+   }
+   if(step==selectedStep){g.setColour(orange);g.drawRoundedRectangle(cell,3.f,1.7f);}
   }
  } else paintShape(g,graph,selectedStep,false);
  const auto laneColour=selectedLane==0?orange:selectedLane==1?cyan:juce::Colour(0xffd36afb);
@@ -895,8 +914,8 @@ void DISidechainEditor::refreshCreativePage(){
 void DISidechainEditor::resized() {
  // All child component bounds use design pixels. The parent editor, graph
  // renderer and pointer handling use the same scale to avoid mismatched hitboxes.
- graph={79,201,1428,176};
- stepStrip={78,392,1430,42};
+ graph={79,201,1428,220};
+ stepStrip={195,390,1312,30};
  detailGraph={230,549,488,110};
  sequencerPanel={12,456,873,240};
  filterPanel={12,706,1110,232};
