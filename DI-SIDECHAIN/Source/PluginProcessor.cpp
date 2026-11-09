@@ -117,11 +117,14 @@ float DISidechainProcessor::getDuckTrackLength(int t) const noexcept {
  return t>=0&&t<6?duckLength[(size_t)t].load(std::memory_order_relaxed):1.f;
 }
 void DISidechainProcessor::setDuckCurvePoint(int t,int j,float v) noexcept {
- if(t>=0&&t<6&&j>=0&&j<8&&std::isfinite(v))
+ if(t>=0&&t<6&&j>=0&&j<8&&std::isfinite(v)){
   duckCurve[(size_t)t][(size_t)j].store(juce::jlimit(0.f,1.f,v),std::memory_order_relaxed);
+  auto dc=getDynamicDuckCurve(t);
+  if(j<dc.count){dc.y[(size_t)j]=juce::jlimit(0.f,1.f,v);setDynamicDuckCurve(t,dc);}
+ }
 }
 float DISidechainProcessor::getDuckCurvePoint(int t,int j) const noexcept {
- return t>=0&&t<6&&j>=0&&j<8?duckCurve[(size_t)t][(size_t)j].load(std::memory_order_relaxed):1.f;
+ return t>=0&&t<6&&j>=0&&j<8?getDynamicDuckCurve(t).evaluate(j/7.f):1.f;
 }
 void DISidechainProcessor::setCellFxFlag(int track,int step,int flag,bool enabled) noexcept {
  if(track<0||track>=6||step<0||step>=gridSteps||flag<0||flag>4)return;
