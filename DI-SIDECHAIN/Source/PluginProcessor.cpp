@@ -138,7 +138,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  if(!std::isfinite(smoothedFxWet))smoothedFxWet=fxWet;
  smoothedFxDrive=drive+(smoothedFxDrive-drive)*fxParameterSmoothing;
  smoothedFxWet=fxWet+(smoothedFxWet-fxWet)*fxParameterSmoothing;
- smoothedFxType=(float)fxType+(smoothedFxType-(float)fxType)*fxSmoothing;
+ smoothedFxType=(float)clipperMode+(smoothedFxType-(float)clipperMode)*fxSmoothing;
  while(hasEvent&&midiPos<=i){if(msg.isNoteOn()&&msg.getVelocity()>0)midiNoteOn=true;hasEvent=it.getNextEvent(msg,midiPos);}
  if(hasSide&&trig!=2&&side.getNumSamples()>=n){const float v=di::sidechainPeak(side.getSample(0,i),side.getNumChannels()>1?side.getSample(1,i):0.f,side.getNumChannels()>1);detector=di::followPeak(detector,(double)v,detectorRelease);if(detector<threshold*.65)armed=true;if(armed&&detector>=threshold)audioPeak=true;}
  const bool fire=di::shouldFireTrigger(midiNoteOn,audioPeak,armed,refractory,trig);

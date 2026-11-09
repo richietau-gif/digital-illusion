@@ -22,6 +22,7 @@ int main(){
 
  check(std::abs(di::processFx(0.7f,4.f,0.f)-di::saturate(0.7f,4.f))<1e-6f,"saturator endpoint");
  check(std::abs(di::processFx(0.7f,4.f,1.f)-di::softClip(2.8f))<1e-6f,"clipper endpoint");
+ check(di::processFx(2.f,4.f,2.f)==1.f&&di::processFx(-2.f,4.f,2.f)==-1.f,"hard clip endpoint");
  check(di::processFx(std::numeric_limits<float>::quiet_NaN(),4.f,0.f)==0.f,"NaN input sanitized");
  check(std::isfinite(di::processFx(0.5f,std::numeric_limits<float>::infinity(),0.5f)),"infinite drive sanitized");
  return 0;
