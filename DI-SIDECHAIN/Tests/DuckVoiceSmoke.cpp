@@ -29,6 +29,18 @@ int main(){
  check(std::abs(engine.process(0,cells,100.)-.7f)<1e-5f,"ghost independent depth");
  for(int i=0;i<50;++i)engine.process(0,cells,100.);
  check(engine.process(0,cells,100.)==1.f,"ghost independent length");
+ // MIDI note can trigger mid-step without restarting the sequencer clock.
+ engine.reset();
+ engine.setTrack(0,di::DuckVoiceEngine::TrackSettings{});
+ auto live=engine.getTrack(0);
+ live.shape.fill(0.f);live.depth=1.f;live.duration=.2f;
+ engine.setTrack(0,live);
+ cells.fill(false);
+ check(engine.process(0,cells,100.)==1.f,"no event before MIDI note");
+ engine.triggerTrack(0,100.,.4f);
+ check(std::abs(engine.process(0,cells,100.)-.6f)<1e-5f,"velocity-scaled MIDI duck");
+ for(int n=0;n<20;++n)engine.process(0,cells,100.);
+ check(engine.process(0,cells,100.)==1.f,"MIDI duck terminates in held step");
  kick.duration=std::nanf("");kick.depth=-3.f;
  engine.setTrack(0,kick);
  check(engine.getTrack(0).depth==0.f&&engine.getTrack(0).duration==1.f,"sanitize invalid settings");
