@@ -162,7 +162,7 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  saturatorDriveSlider->setRange(0.0,24.0,0.1);
  saturatorDriveSlider->setTextBoxStyle(juce::Slider::NoTextBox,false,0,0);
  saturatorDriveSlider->setTooltip("Saturator drive 0-24 dB");
- saturatorDriveSlider->setTextBoxStyle(juce::Slider::TextBoxRight,false,59,20);
+ saturatorDriveSlider->setTextBoxStyle(juce::Slider::NoTextBox,false,0,0);
  saturatorDriveSlider->textFromValueFunction=[](double v){return juce::String(juce::roundToInt(v/24.*100.))+"%";};
  saturatorDriveSlider->valueFromTextFunction=[](const juce::String& value){return value.getDoubleValue()*24./100.;};
  saturatorDriveSlider->setColour(juce::Slider::trackColourId,green);saturatorDriveSlider->setColour(juce::Slider::thumbColourId,green);
@@ -316,7 +316,8 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
   *toggleButtons[i]=std::make_unique<juce::TextButton>(toggleLabels[i]);
   (*toggleButtons[i])->setClickingTogglesState(true);
   (*toggleButtons[i])->setColour(juce::TextButton::buttonColourId,juce::Colour(0xff172d3b));
-  (*toggleButtons[i])->setColour(juce::TextButton::buttonOnColourId,green);
+  (*toggleButtons[i])->setColour(juce::TextButton::buttonOnColourId,
+   i==1||i==3?juce::Colour(0xff5b9eff):i==2?juce::Colour(0xffffa454):green);
   (*toggleButtons[i])->setColour(juce::TextButton::textColourOffId,juce::Colours::white);
   (*toggleButtons[i])->setColour(juce::TextButton::textColourOnId,bg);
   addAndMakeVisible(**toggleButtons[i]);
@@ -346,8 +347,8 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
    const double parsed=value.getDoubleValue();
    return (i==0||i==3||i==6)?parsed/100.:parsed;
   };
-  creativeSliders[i]->setColour(juce::Slider::trackColourId,(i<3||i==5)?juce::Colour(0xff24def0):orange);
-  creativeSliders[i]->setColour(juce::Slider::thumbColourId,(i<3||i==5)?juce::Colour(0xff24def0):orange);
+  creativeSliders[i]->setColour(juce::Slider::trackColourId,(i<3||i==5)?juce::Colour(0xff5b9eff):juce::Colour(0xffffa454));
+  creativeSliders[i]->setColour(juce::Slider::thumbColourId,(i<3||i==5)?juce::Colour(0xff5b9eff):juce::Colour(0xffffa454));
   creativeSliders[i]->setColour(juce::Slider::textBoxTextColourId,juce::Colours::white);
   creativeSliders[i]->setColour(juce::Slider::textBoxOutlineColourId,juce::Colours::transparentBlack);
   addAndMakeVisible(*creativeSliders[i]);
@@ -718,7 +719,9 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  text(g,"SEQUENCER",{199,122,137,30},16,enabled?DITheme::dark():white,true);
  text(g,"STEPS",{503,110,70,14},11,faint);
  text(g,"LENGTH / RATE",{630,110,135,14},11,faint);
- text(g,"DRIVE %",{1283,110,85,14},11,faint);
+ text(g,"DRIVE "+juce::String(juce::roundToInt(
+  proc.state.getRawParameterValue("saturatorDrive")->load()/24.f*100.f))+"%",
+  {1283,110,115,14},11,faint);
  text(g,"WET "+juce::String(juce::roundToInt(
   proc.state.getRawParameterValue("fxMix")->load()*100.f))+"%",{1405,110,102,14},11,faint);
  text(g,"SCENES",{784,180,83,20},12,faint,true);
