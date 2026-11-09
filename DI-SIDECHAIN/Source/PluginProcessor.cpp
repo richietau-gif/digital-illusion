@@ -76,7 +76,33 @@ DISidechainProcessor::DISidechainProcessor():AudioProcessor(BusesProperties().wi
   duckLength[(size_t)t].store(1.f,std::memory_order_relaxed);
   constexpr float defaultShape[8]={0.f,.02f,.2f,.65f,.9f,1.f,1.f,1.f};
   for(int j=0;j<8;++j)duckCurve[(size_t)t][(size_t)j].store(defaultShape[j],std::memory_order_relaxed);
+  di::DynamicCurve dynamic;
+  duckDynamicCount[(size_t)t].store(dynamic.count,std::memory_order_relaxed);
+  for(int j=0;j<di::DynamicCurve::capacity;++j){
+   duckDynamicX[(size_t)t][(size_t)j].store(dynamic.x[(size_t)j],std::memory_order_relaxed);
+   duckDynamicY[(size_t)t][(size_t)j].store(dynamic.y[(size_t)j],std::memory_order_relaxed);
+  }
  }
+}
+di::DynamicCurve DISidechainProcessor::getDynamicDuckCurve(int track) const noexcept {
+ di::DynamicCurve c;
+ if(track<0||track>=6)return c;
+ const auto t=(size_t)track;
+ c.count=juce::jlimit(2,di::DynamicCurve::capacity,duckDynamicCount[t].load(std::memory_order_acquire));
+ for(int i=0;i<c.count;++i){
+  c.x[(size_t)i]=duckDynamicX[t][(size_t)i].load(std::memory_order_relaxed);
+  c.y[(size_t)i]=duckDynamicY[t][(size_t)i].load(std::memory_order_relaxed);
+ }
+ return c;
+}
+void DISidechainProcessor::setDynamicDuckCurve(int track,const di::DynamicCurve& c) noexcept {
+ if(track<0||track>=6||c.count<2||c.count>di::DynamicCurve::capacity)return;
+ const auto t=(size_t)track;
+ for(int i=0;i<c.count;++i){
+  duckDynamicX[t][(size_t)i].store(c.x[(size_t)i],std::memory_order_relaxed);
+  duckDynamicY[t][(size_t)i].store(c.y[(size_t)i],std::memory_order_relaxed);
+ }
+ duckDynamicCount[t].store(c.count,std::memory_order_release);
 }
 void DISidechainProcessor::setDuckTrackDepth(int t,float v) noexcept {
  if(t>=0&&t<6&&std::isfinite(v))duckDepth[(size_t)t].store(juce::jlimit(0.f,1.f,v),std::memory_order_relaxed);
@@ -266,6 +292,8 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
    di::DuckVoiceEngine::TrackSettings settings;
    settings.depth=getDuckTrackDepth(t);
    settings.duration=getDuckTrackLength(t);
+   settings.dynamicCurve=getDynamicDuckCurve(t);
+   settings.useDynamic=true;
    for(int node=0;node<8;++node)settings.shape[(size_t)node]=getDuckCurvePoint(t,node);
    duckVoices.setTrack(t,settings);
   }
@@ -397,6 +425,12 @@ void DISidechainProcessor::getStateInformation(juce::MemoryBlock& dest){auto tre
  for(int t=0;t<6;++t) {
   tree.setProperty("duckDepth_"+juce::String(t),getDuckTrackDepth(t),nullptr);
   tree.setProperty("duckLength_"+juce::String(t),getDuckTrackLength(t),nullptr);
+  const auto dc=getDynamicDuckCurve(t);
+  tree.setProperty("duckDynCount_"+juce::String(t),dc.count,nullptr);
+  for(int j=0;j<dc.count;++j){
+   tree.setProperty("duckDynX_"+juce::String(t)+"_"+juce::String(j),dc.x[(size_t)j],nullptr);
+   tree.setProperty("duckDynY_"+juce::String(t)+"_"+juce::String(j),dc.y[(size_t)j],nullptr);
+  }
   for(int j=0;j<8;++j)tree.setProperty("duckCurve_"+juce::String(t)+"_"+juce::String(j),getDuckCurvePoint(t,j),nullptr);
  }
  if(auto xml=tree.createXml())copyXmlToBinary(*xml,dest);}
@@ -436,6 +470,13 @@ void DISidechainProcessor::setStateInformation(const void* data,int bytes){
   for(int t=0;t<6;++t){
    setDuckTrackDepth(t,(float)tree.getProperty("duckDepth_"+juce::String(t),1.f));
    setDuckTrackLength(t,(float)tree.getProperty("duckLength_"+juce::String(t),1.f));
+   di::DynamicCurve dc;
+   dc.count=juce::jlimit(2,di::DynamicCurve::capacity,(int)tree.getProperty("duckDynCount_"+juce::String(t),8));
+   for(int j=0;j<dc.count;++j){
+    dc.x[(size_t)j]=(float)tree.getProperty("duckDynX_"+juce::String(t)+"_"+juce::String(j),j/7.f);
+    dc.y[(size_t)j]=(float)tree.getProperty("duckDynY_"+juce::String(t)+"_"+juce::String(j),dc.y[(size_t)j]);
+   }
+   setDynamicDuckCurve(t,dc);
    constexpr float shape[8]={0.f,.02f,.2f,.65f,.9f,1.f,1.f,1.f};
    for(int j=0;j<8;++j)setDuckCurvePoint(t,j,(float)tree.getProperty("duckCurve_"+juce::String(t)+"_"+juce::String(j),shape[j]));
   }
