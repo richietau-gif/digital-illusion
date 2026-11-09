@@ -194,6 +194,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  const float lengthRaw=get("length");
  const double lengthSeconds=std::isfinite(lengthRaw)?juce::jlimit(10.f,2000.f,lengthRaw)/1000.0:0.25;
  envelopeLength=get("sync")>0.5?60.0/bpm*divisions[divisionIndex]:lengthSeconds;
+ creativeFx.setReverseWindowSeconds(envelopeLength);
  const bool tempoSync=get("sync")>0.5f;
  const bool sequenceOn=get("sequenceEnabled")>0.5f;
  const int sequenceSteps=(int)bounded("sequenceSteps",1.f,16.f,16.f);
