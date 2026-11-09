@@ -44,8 +44,10 @@ DISidechainProcessor::DISidechainProcessor():AudioProcessor(BusesProperties().wi
  const float defaults[8]={1,0.92f,0.08f,0.02f,0.32f,0.75f,0.95f,1};for(int i=0;i<8;++i)points[i]=defaults[i];
  for(auto& shape:sequencePoints)for(int i=0;i<8;++i)shape[i].store(defaults[i]);
  for(int lane=0;lane<2;++lane)for(auto& shape:modulationPoints[lane])for(int i=0;i<8;++i)shape[i].store(lane==0?1.f:0.5f);
- for(auto& track:gridCells)for(auto& cell:track)cell.store(false,std::memory_order_relaxed);
- for(auto& cell:gridReverseCells)cell.store(false,std::memory_order_relaxed);
+ for(auto& scene:sceneCells)for(auto& track:scene)for(auto& cell:track)
+  cell.store(false,std::memory_order_relaxed);
+ for(auto& scene:sceneReverseCells)for(auto& cell:scene)
+  cell.store(false,std::memory_order_relaxed);
  for(int t=0;t<6;++t){
   duckDepth[(size_t)t].store(1.f,std::memory_order_relaxed);
   duckLength[(size_t)t].store(1.f,std::memory_order_relaxed);
@@ -72,19 +74,35 @@ void DISidechainProcessor::setDuckCurvePoint(int t,int j,float v) noexcept {
 float DISidechainProcessor::getDuckCurvePoint(int t,int j) const noexcept {
  return t>=0&&t<6&&j>=0&&j<8?duckCurve[(size_t)t][(size_t)j].load(std::memory_order_relaxed):1.f;
 }
+void DISidechainProcessor::setGridScene(int scene) noexcept {
+ activeGridScene.store(juce::jlimit(0,gridScenes-1,scene),std::memory_order_release);
+}
+int DISidechainProcessor::getGridScene() const noexcept {
+ return juce::jlimit(0,gridScenes-1,activeGridScene.load(std::memory_order_acquire));
+}
+void DISidechainProcessor::copyGridScene(int source,int destination) noexcept {
+ if(source<0||source>=gridScenes||destination<0||destination>=gridScenes||source==destination)return;
+ for(int t=0;t<gridTracks;++t)for(int k=0;k<gridSteps;++k)
+  sceneCells[(size_t)destination][(size_t)t][(size_t)k].store(
+   sceneCells[(size_t)source][(size_t)t][(size_t)k].load(std::memory_order_relaxed),std::memory_order_relaxed);
+ for(int k=0;k<gridSteps;++k)
+  sceneReverseCells[(size_t)destination][(size_t)k].store(
+   sceneReverseCells[(size_t)source][(size_t)k].load(std::memory_order_relaxed),std::memory_order_relaxed);
+}
 void DISidechainProcessor::setGridReverse(int step,bool enabled) noexcept {
- if(step>=0&&step<gridSteps)gridReverseCells[(size_t)step].store(enabled,std::memory_order_relaxed);
+ if(step>=0&&step<gridSteps)
+  sceneReverseCells[(size_t)getGridScene()][(size_t)step].store(enabled,std::memory_order_relaxed);
 }
 bool DISidechainProcessor::getGridReverse(int step) const noexcept {
- return step>=0&&step<gridSteps&&gridReverseCells[(size_t)step].load(std::memory_order_relaxed);
+ return step>=0&&step<gridSteps&&sceneReverseCells[(size_t)getGridScene()][(size_t)step].load(std::memory_order_relaxed);
 }
 void DISidechainProcessor::setGridCell(int track,int step,bool enabled) noexcept {
  if(track>=0&&track<gridTracks&&step>=0&&step<gridSteps)
-  gridCells[(size_t)track][(size_t)step].store(enabled,std::memory_order_relaxed);
+  sceneCells[(size_t)getGridScene()][(size_t)track][(size_t)step].store(enabled,std::memory_order_relaxed);
 }
 bool DISidechainProcessor::getGridCell(int track,int step) const noexcept {
  return track>=0&&track<gridTracks&&step>=0&&step<gridSteps&&
-        gridCells[(size_t)track][(size_t)step].load(std::memory_order_relaxed);
+  sceneCells[(size_t)getGridScene()][(size_t)track][(size_t)step].load(std::memory_order_relaxed);
 }
 void DISidechainProcessor::setSequencePoint(int step,int node,float value) noexcept {if(step>=0&&step<32&&node>=0&&node<8&&std::isfinite(value))sequencePoints[step][node].store(juce::jlimit(0.f,1.f,value),std::memory_order_relaxed);}
 float DISidechainProcessor::getSequencePoint(int step,int node) const noexcept {return step>=0&&step<32&&node>=0&&node<8?sequencePoints[step][node].load(std::memory_order_relaxed):1.f;}
@@ -283,9 +301,15 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  }
  meter.store(peak);midi.clear();
 }
-void DISidechainProcessor::getStateInformation(juce::MemoryBlock& dest){auto tree=state.copyState();for(int i=0;i<8;++i)tree.setProperty("point"+juce::String(i),points[i].load(),nullptr);for(int k=0;k<32;++k)for(int j=0;j<8;++j)tree.setProperty("seq_"+juce::String(k)+"_"+juce::String(j),getSequencePoint(k,j),nullptr);for(int lane=0;lane<2;++lane)for(int k=0;k<32;++k)for(int j=0;j<8;++j)tree.setProperty("mod_"+juce::String(lane)+"_"+juce::String(k)+"_"+juce::String(j),getModulationPoint(lane,k,j),nullptr);for(int t=0;t<gridTracks;++t)for(int k=0;k<gridSteps;++k)
- tree.setProperty("grid_"+juce::String(t)+"_"+juce::String(k),getGridCell(t,k),nullptr);
- for(int k=0;k<gridSteps;++k)tree.setProperty("gridReverse_"+juce::String(k),getGridReverse(k),nullptr);
+void DISidechainProcessor::getStateInformation(juce::MemoryBlock& dest){auto tree=state.copyState();for(int i=0;i<8;++i)tree.setProperty("point"+juce::String(i),points[i].load(),nullptr);for(int k=0;k<32;++k)for(int j=0;j<8;++j)tree.setProperty("seq_"+juce::String(k)+"_"+juce::String(j),getSequencePoint(k,j),nullptr);for(int lane=0;lane<2;++lane)for(int k=0;k<32;++k)for(int j=0;j<8;++j)tree.setProperty("mod_"+juce::String(lane)+"_"+juce::String(k)+"_"+juce::String(j),getModulationPoint(lane,k,j),nullptr);tree.setProperty("gridScene",getGridScene(),nullptr);
+ for(int scene=0;scene<gridScenes;++scene){
+  for(int t=0;t<gridTracks;++t)for(int k=0;k<gridSteps;++k)
+   tree.setProperty("scene_"+juce::String(scene)+"_"+juce::String(t)+"_"+juce::String(k),
+    sceneCells[(size_t)scene][(size_t)t][(size_t)k].load(std::memory_order_relaxed),nullptr);
+  for(int k=0;k<gridSteps;++k)
+   tree.setProperty("reverse_"+juce::String(scene)+"_"+juce::String(k),
+    sceneReverseCells[(size_t)scene][(size_t)k].load(std::memory_order_relaxed),nullptr);
+ }
  for(int t=0;t<6;++t) {
   tree.setProperty("duckDepth_"+juce::String(t),getDuckTrackDepth(t),nullptr);
   tree.setProperty("duckLength_"+juce::String(t),getDuckTrackLength(t),nullptr);
@@ -310,14 +334,17 @@ void DISidechainProcessor::setStateInformation(const void* data,int bytes){
    setSequencePoint(k,j,restored("seq_"+juce::String(k)+"_"+juce::String(j),volumeDefaults[j]));
   for(int lane=0;lane<2;++lane)for(int k=0;k<32;++k)for(int j=0;j<8;++j)
    setModulationPoint(lane,k,j,restored("mod_"+juce::String(lane)+"_"+juce::String(k)+"_"+juce::String(j),lane==0?1.f:.5f));
-  for(int t=0;t<gridTracks;++t)for(int k=0;k<gridSteps;++k){
-   const auto key="grid_"+juce::String(t)+"_"+juce::String(k);
-   setGridCell(t,k,tree.hasProperty(key)?(bool)tree.getProperty(key):false);
+  for(int scene=0;scene<gridScenes;++scene){
+   for(int t=0;t<gridTracks;++t)for(int k=0;k<gridSteps;++k){
+    const auto key="scene_"+juce::String(scene)+"_"+juce::String(t)+"_"+juce::String(k);
+    sceneCells[(size_t)scene][(size_t)t][(size_t)k].store((bool)tree.getProperty(key,false),std::memory_order_relaxed);
+   }
+   for(int k=0;k<gridSteps;++k){
+    const auto key="reverse_"+juce::String(scene)+"_"+juce::String(k);
+    sceneReverseCells[(size_t)scene][(size_t)k].store((bool)tree.getProperty(key,false),std::memory_order_relaxed);
+   }
   }
-  for(int k=0;k<gridSteps;++k){
-   const auto key="gridReverse_"+juce::String(k);
-   setGridReverse(k,tree.hasProperty(key)?(bool)tree.getProperty(key):false);
-  }
+  setGridScene((int)tree.getProperty("gridScene",0));
   for(int t=0;t<6;++t){
    setDuckTrackDepth(t,(float)tree.getProperty("duckDepth_"+juce::String(t),1.f));
    setDuckTrackLength(t,(float)tree.getProperty("duckLength_"+juce::String(t),1.f));
