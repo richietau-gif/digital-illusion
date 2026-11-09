@@ -465,68 +465,51 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  const bool sequenced=sequenceToggle->getToggleState();
  const int count=juce::jlimit(1,16,(int)sequenceCount->getValue());
  if(sequenced) {
-  // v5.2B: simultaneous, omniGRID-inspired overview of the three
-  // existing modulation lanes. Cells visualize their actual stored curves;
-  // the DSP, state format, automation and selected-step editor stay intact.
+  // The rows are independent trigger tracks, NOT Volume/Filter/Pan lanes.
+  // FX rows 7/8 provide per-step reverb and distortion sends.
   const int active=proc.activeSequenceStep.load(std::memory_order_relaxed);
-  constexpr int labelWidth=112;
-  const int gridLeft=graph.getX()+labelWidth;
-  const int gridWidth=graph.getRight()-gridLeft;
-  const int top=graph.getY()+25;
-  const int rowHeight=(graph.getBottom()-top)/3;
-  const char* names[]={"VOLUME","FILTER","PAN"};
-  const juce::Colour colours[]={orange,cyan,juce::Colour(0xffd36afb)};
+  constexpr int labelWidth=116;
+  const int gridLeft=graph.getX()+labelWidth, gridWidth=graph.getRight()-gridLeft;
+  const int top=graph.getY()+23, rowHeight=(graph.getBottom()-top)/8;
+  const char* names[]={"TRACK 1","TRACK 2","TRACK 3","TRACK 4","TRACK 5","TRACK 6","REVERB","DISTORT"};
+  const juce::Colour colours[]={lime,lime,lime,lime,lime,lime,cyan,orange};
   for(int step=0;step<count;++step) {
    const int x0=gridLeft+step*gridWidth/count;
    const int x1=gridLeft+(step+1)*gridWidth/count;
-   text(g,juce::String(step+1),{x0+5,graph.getY()+3,x1-x0-7,18},11,
+   text(g,juce::String(step+1),{x0+4,graph.getY()+2,x1-x0-8,16},10,
         step==active?lime:faint,step==selectedStep);
    if(step==active) {
-    g.setColour(lime.withAlpha(.23f));
-    g.fillRect(x0,top,juce::jmax(1,x1-x0),rowHeight*3);
+    g.setColour(lime.withAlpha(.17f));
+    g.fillRect(x0,top,juce::jmax(1,x1-x0),graph.getBottom()-top);
    }
   }
-  for(int lane=0;lane<3;++lane) {
-   const int y=top+lane*rowHeight;
-   const auto colour=colours[lane];
-   g.setColour(lane==selectedLane?colour.withAlpha(.18f):juce::Colour(0xff0c202b));
-   g.fillRoundedRectangle(juce::Rectangle<float>((float)graph.getX(),(float)y,
-                                                   (float)labelWidth-7,(float)rowHeight-3),4.f);
-   text(g,names[lane],{graph.getX()+9,y+7,labelWidth-16,rowHeight-15},13,
-        lane==selectedLane?colour:white,true);
+  for(int track=0;track<8;++track) {
+   const int y=top+track*rowHeight;
+   g.setColour(track==selectedTrack?juce::Colour(0xff234451):juce::Colour(0xff102432));
+   g.fillRect(graph.getX(),y,labelWidth-4,rowHeight-1);
+   text(g,names[track],{graph.getX()+5,y+1,labelWidth-9,rowHeight-2},11,
+        track==selectedTrack?colours[track]:white,track==selectedTrack);
    for(int step=0;step<count;++step) {
     const int x0=gridLeft+step*gridWidth/count;
     const int x1=gridLeft+(step+1)*gridWidth/count;
-    const auto cell=juce::Rectangle<float>((float)x0+2,(float)y+2,
-                                           (float)juce::jmax(1,x1-x0-4),
-                                           (float)rowHeight-5);
-    float sum=0.f,lo=1.f,hi=0.f;
-    for(int node=0;node<8;++node) {
-     const float v=juce::jlimit(0.f,1.f,lane==0
-       ?proc.getSequencePoint(step,node)
-       :proc.getModulationPoint(lane-1,step,node));
-     sum+=v;lo=juce::jmin(lo,v);hi=juce::jmax(hi,v);
+    const auto cell=juce::Rectangle<float>((float)x0+1,(float)y+1,
+       (float)juce::jmax(1,x1-x0-3),(float)rowHeight-2);
+    const bool on=proc.getGridCell(track,step);
+    g.setColour(on?colours[track]:juce::Colour(0xff23313b));
+    g.fillRoundedRectangle(cell,2.f);
+    if(step==selectedStep&&track==selectedTrack) {
+     g.setColour(juce::Colour(0xffffb84d));g.drawRoundedRectangle(cell,2.f,1.7f);
     }
-    const float avg=sum/8.f;
-    g.setColour(juce::Colour(0xff132b37));g.fillRoundedRectangle(cell,4.f);
-    // A saturated block shows the step's actual envelope intensity;
-    // a narrow highlight captures modulation variation within that step.
-    const auto fill=cell.reduced(3.f);
-    const float fillHeight=juce::jmax(3.f,fill.getHeight()*avg);
-    g.setColour(colour.withAlpha(.35f+.65f*avg));
-    g.fillRoundedRectangle(juce::Rectangle<float>(fill.getX(),fill.getBottom()-fillHeight,
-                                                  fill.getWidth(),fillHeight),3.f);
-    g.setColour(colour.withAlpha(.65f));
-    g.drawHorizontalLine((int)(cell.getBottom()-3.f-(cell.getHeight()-6.f)*hi),
-                         cell.getX()+4.f,cell.getRight()-4.f);
-    if(step==selectedStep&&lane==selectedLane) {
-     g.setColour(orange);g.drawRoundedRectangle(cell,4.f,2.f);
-    } else if(step==active) {
-     g.setColour(lime.withAlpha(.75f));g.drawRoundedRectangle(cell,4.f,1.f);
+    // Tiny reverse-before-reverb switch in each REVERB cell.
+    if(track==6) {
+     const bool reversed=proc.getGridReverse(step);
+     const auto arrow=juce::Rectangle<float>(cell.getRight()-14.f,cell.getY()+1.f,12.f,cell.getHeight()-2.f);
+     g.setColour(reversed?orange:juce::Colour(0xff566874));
+     g.fillRoundedRectangle(arrow,2.f);
+     text(g,"<",arrow.toNearestInt(),10,reversed?bg:white,true);
     }
    }
   }
-  text(g,"CLICK A CELL TO EDIT ITS CURVE",{graph.getX()+8,graph.getY()-18,410,16},11,faint);
  } else paintShape(g,graph,selectedStep,false);
  const auto laneColour=selectedLane==0?orange:selectedLane==1?cyan:juce::Colour(0xffd36afb);
  const int playing=proc.activeSequenceStep.load(std::memory_order_relaxed);
@@ -601,6 +584,25 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  text(g,"VOLUME OFFSET",{1226,543,110,20},11,selectedLane==0?faint:faint.withAlpha(.55f));
  text(g,"FILTER DEPTH",{1231,592,110,20},12,cyan);
  text(g,"PAN DEPTH",{1231,640,110,20},12,juce::Colour(0xffd66bfa));
+ if(selectedTrack>=6&&sequenced) {
+  paintPanel(g,{12,456,1512,240},selectedTrack==6?"REVERB TRACK":"DISTORT TRACK");
+  text(g,selectedTrack==6?"REVERB  |  PRE-FX REVERSE  <  |  TAIL CONTINUES":
+                    "DISTORT  |  PER-STEP DRIVE  |  MODERN WAVESHAPING",
+       {36,472,900,20},12,white,true);
+  text(g,"MODEL",{372,489,145,17},11,faint);
+  if(selectedTrack==6){
+   text(g,"DRY / WET",{180,551,170,16},12,cyan,true);
+   text(g,"LENGTH",{620,551,170,16},12,cyan,true);
+   text(g,"DECAY",{1060,551,170,16},12,cyan,true);
+   text(g,"The < arrow in any REVERB cell reverses its input window before the reverb.",
+        {41,660,1250,20},12,faint);
+  } else {
+   text(g,"DRY / WET",{180,551,170,16},12,orange,true);
+   text(g,"DRIVE (dB)",{620,551,170,16},12,orange,true);
+   text(g,"Five tones: Warm, Acid, Clip, Fold and Modern.",
+        {41,660,1250,20},12,faint);
+  }
+ }
  // Always visible frequency controls and output meters.
  paintPanel(g,filterPanel,"FILTER");
  paintPanel(g,outputPanel,"OUTPUT / SIDECHAIN");
@@ -739,22 +741,25 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
  }
  if(juce::Rectangle<int>(24,117,153,43).contains(pos)){sequenceToggle->setToggleState(false,juce::sendNotificationSync);selectedLane=0;repaint();return;}
  if(juce::Rectangle<int>(183,117,155,43).contains(pos)){sequenceToggle->setToggleState(true,juce::sendNotificationSync);repaint();return;}
- // v5.2B: a grid click selects both the lane and its exact step.
- // Editing remains in the detail curve editor, so clicks cannot accidentally
- // overwrite modulation values while navigating the overview.
+ // Grid cell click toggles an event; the narrow < area on REVERB
+ // independently toggles reverse for THAT step, not the whole reverb.
  if(sequenceToggle->getToggleState()&&graph.contains(pos)) {
-  constexpr int labelWidth=112;
-  const int gridLeft=graph.getX()+labelWidth;
-  const int top=graph.getY()+25;
-  if(pos.x>=gridLeft&&pos.y>=top) {
+  constexpr int labelWidth=116;
+  const int left=graph.getX()+labelWidth,top=graph.getY()+23;
+  if(pos.x>=left&&pos.y>=top) {
    const int count=juce::jlimit(1,16,(int)sequenceCount->getValue());
-   selectedStep=juce::jlimit(0,count-1,(pos.x-gridLeft)*count/
-                            juce::jmax(1,graph.getRight()-gridLeft));
-   selectedLane=juce::jlimit(0,2,(pos.y-top)*3/
-                            juce::jmax(1,graph.getBottom()-top));
-   for(int j=0;j<3;++j)if(laneTabs[j])
-    laneTabs[j]->setToggleState(j==selectedLane,juce::dontSendNotification);
-   if(shapeOffset)shapeOffset->setEnabled(selectedLane==0);
+   const int cellWidth=juce::jmax(1,(graph.getRight()-left)/count);
+   selectedStep=juce::jlimit(0,count-1,(pos.x-left)*count/juce::jmax(1,graph.getRight()-left));
+   selectedTrack=juce::jlimit(0,7,(pos.y-top)*8/juce::jmax(1,graph.getBottom()-top));
+   const int x1=left+(selectedStep+1)*(graph.getRight()-left)/count;
+   if(selectedTrack==6&&pos.x>=x1-16) {
+    proc.setGridReverse(selectedStep,!proc.getGridReverse(selectedStep));
+   } else {
+    proc.setGridCell(selectedTrack,selectedStep,!proc.getGridCell(selectedTrack,selectedStep));
+   }
+   if(gridModeButton&&!gridModeButton->getToggleState())
+    gridModeButton->setToggleState(true,juce::sendNotificationSync);
+   refreshCreativePage();
    repaint();
   }
   return;
