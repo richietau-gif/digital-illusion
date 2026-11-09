@@ -149,6 +149,8 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  };
  saturatorDriveSlider=std::make_unique<juce::Slider>(juce::Slider::LinearHorizontal,juce::Slider::TextBoxRight);
  saturatorDriveSlider->setRange(0.0,24.0,0.1);
+ saturatorDriveSlider->setTextBoxStyle(juce::Slider::NoTextBox,false,0,0);
+ saturatorDriveSlider->setTooltip("Saturator drive 0-24 dB");
  saturatorDriveSlider->setTextBoxStyle(juce::Slider::TextBoxRight,false,59,20);
  saturatorDriveSlider->textFromValueFunction=[](double v){return juce::String(v,1);};saturatorDriveSlider->setTextValueSuffix(" dB");
  saturatorDriveSlider->setColour(juce::Slider::trackColourId,green);saturatorDriveSlider->setColour(juce::Slider::thumbColourId,green);
@@ -210,7 +212,8 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  };
  const char* fxIds[]={"fxDrive","fxMix"};
  for(int i=0;i<2;++i){
-  fxSliders[i]=std::make_unique<juce::Slider>(juce::Slider::LinearHorizontal,juce::Slider::TextBoxRight);
+  fxSliders[i]=std::make_unique<juce::Slider>(juce::Slider::LinearHorizontal,juce::Slider::NoTextBox);
+  fxSliders[i]->setTooltip(i==0?"Legacy FX drive dB": "FX wet mix, 0% dry to 100% wet");
   fxSliders[i]->setColour(juce::Slider::trackColourId,juce::Colour(0xffffb84d));
   fxSliders[i]->setColour(juce::Slider::thumbColourId,juce::Colour(0xffffb84d));
   fxSliders[i]->setColour(juce::Slider::textBoxTextColourId,juce::Colours::white);
@@ -767,10 +770,10 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  }
  text(g,"TRACK "+juce::String(selectedTrack+1)+"  ·  STEP "+juce::String(selectedStep+1),
       {1225,480,278,21},12,white,true);
- text(g,"CELL ROUTING  ·  ON / OFF / FX",{1226,499,279,17},10,faint);
+ text(g,"CELL ROUTING  ·  DUCK / FX / BYPASS",{1226,499,279,17},10,faint);
  text(g,"DUCK DEPTH",{1226,567,225,16},11,lime,true);
  text(g,"ENVELOPE LENGTH (STEPS)",{1226,619,264,16},11,orange,true);
- text(g,"BYP disables this cell; R/D badges show active FX.",
+ text(g,"BYP skips ducking; R/D remain active.",
       {1226,671,284,15},10,faint);
  // Always visible frequency controls and output meters.
  paintPanel(g,filterPanel,"FILTER");
@@ -780,7 +783,10 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  text(g,"BEAT DIVISION",{594,747,150,18},11,faint);
  text(g,"LOW / HIGH FREQUENCY RESPONSE",{756,745,330,18},11,faint);
  const char* knobs[]={"SENSITIVITY","LENGTH","SMOOTH","LOW HZ","HIGH HZ","RETRIGGER"};
- for(int i=0;i<6;++i)text(g,knobs[i],{29+i*116,805,112,19},11,faint);
+ for(int i=0;i<6;++i){
+  const bool enabled=sliders.size()>static_cast<size_t>(i+2)&&sliders[(size_t)(i+2)]->isEnabled();
+  text(g,knobs[i],{29+i*116,805,112,19},11,enabled?faint:faint.withAlpha(.32f));
+ }
  paintFrequencyResponse(g,{755,790,348,106});
  text(g,"DEPTH",{1170,766,110,20},13,white,true);
  text(g,"MIX",{1320,766,110,20},13,white,true);
