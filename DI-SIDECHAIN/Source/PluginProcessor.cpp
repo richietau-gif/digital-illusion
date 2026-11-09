@@ -19,6 +19,9 @@ static juce::AudioProcessorValueTreeState::ParameterLayout layoutParams(){
   range.setSkewForCentre(2200.f);
   p.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"high",1},"Upper frequency edge",range,400.f));}f("retrigger","Trigger holdoff milliseconds",1,250,35);f("shapeOffset","Shape vertical offset",-1,1,0);f("panMod","Pan modulation amount",-1,1,0);f("filterMod","Filter modulation amount",0,1,0);f("fxDrive","Legacy FX drive dB",0,24,0);f("saturatorDrive","Saturator drive dB",0,24,0);f("fxMix","FX wet mix",0,1,1);
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"mode",1},"Frequency mode",juce::StringArray{"Full","Low","High","Band"},0));
+ p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"filterModel",1},
+  "Filter character",juce::StringArray{"Clean","Analog Ladder"},0));
+ f("ladderResonance","Ladder resonance",0.f,.95f,.25f);
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"trigger",1},"Trigger mode",juce::StringArray{"Audio + MIDI","Audio only","MIDI only"},0));
  p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"sequenceEnabled",1},"Shape sequencer enabled",true));
  p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"creativeGridEnabled",1},"Creative track sequencer enabled",true));
@@ -184,7 +187,7 @@ float DISidechainProcessor::getModulationPoint(int lane,int step,int node) const
   ?modulationPoints[lane][step][node].load(std::memory_order_relaxed):(lane==1?0.5f:1.f);
 }
 bool DISidechainProcessor::isBusesLayoutSupported(const BusesLayout& b) const {return b.getMainInputChannelSet()==juce::AudioChannelSet::stereo()&&b.getMainOutputChannelSet()==juce::AudioChannelSet::stereo()&&(b.inputBuses.size()<2||b.inputBuses[1].isDisabled()||b.inputBuses[1]==juce::AudioChannelSet::mono()||b.inputBuses[1]==juce::AudioChannelSet::stereo());}
-void DISidechainProcessor::prepareToPlay(double sampleRate,int maxBlock){sr=sampleRate;creativeFx.prepare(sampleRate);duckVoices.reset();setLatencySamples(2*di::OversampledFx2x::latencySamples+di::CreativeDistort2x::latencySamples);for(auto& fx:oversampledFx)fx.reset();for(auto& fx:saturatorFx)fx.reset();for(auto& delay:fxDryDelay)delay.reset();for(auto& delay:saturatorDryDelay)delay.reset();saturatorBlend=state.getRawParameterValue("saturatorEnabled")->load()>0.5f?1.f:0.f;phase=1;sequencer.reset();for(auto& lane:modulationSequencers)lane.reset();activeSequenceStep.store(0);detector=0;armed=true;refractory=0;smoothGain=1;expectedTransportSample=-1;wasTransportPlaying=false;fxBlend=state.getRawParameterValue("fxEnabled")->load()>0.5f?1.f:0.f;const auto safeInitial=[this](const char* id,float low,float high,float fallback){const float value=state.getRawParameterValue(id)->load();return std::isfinite(value)?juce::jlimit(low,high,value):fallback;};smoothedFxDrive=juce::Decibels::decibelsToGain(safeInitial("fxDrive",0.f,24.f,0.f));smoothedFxWet=safeInitial("fxMix",0.f,1.f,1.f);smoothedFxType=safeInitial("fxType",0.f,1.f,0.f);juce::dsp::ProcessSpec spec{sampleRate,(juce::uint32)juce::jmax(1,maxBlock),1};for(auto& c:filters){c.low.prepare(spec);c.high.prepare(spec);c.low.setType(juce::dsp::LinkwitzRileyFilterType::lowpass);c.high.setType(juce::dsp::LinkwitzRileyFilterType::highpass);c.low.reset();c.high.reset();}}
+void DISidechainProcessor::prepareToPlay(double sampleRate,int maxBlock){sr=sampleRate;creativeFx.prepare(sampleRate);duckVoices.reset();setLatencySamples(2*di::OversampledFx2x::latencySamples+di::CreativeDistort2x::latencySamples);for(auto& fx:oversampledFx)fx.reset();for(auto& fx:saturatorFx)fx.reset();for(auto& delay:fxDryDelay)delay.reset();for(auto& delay:saturatorDryDelay)delay.reset();saturatorBlend=state.getRawParameterValue("saturatorEnabled")->load()>0.5f?1.f:0.f;phase=1;sequencer.reset();for(auto& lane:modulationSequencers)lane.reset();activeSequenceStep.store(0);detector=0;armed=true;refractory=0;smoothGain=1;expectedTransportSample=-1;wasTransportPlaying=false;fxBlend=state.getRawParameterValue("fxEnabled")->load()>0.5f?1.f:0.f;const auto safeInitial=[this](const char* id,float low,float high,float fallback){const float value=state.getRawParameterValue(id)->load();return std::isfinite(value)?juce::jlimit(low,high,value):fallback;};smoothedFxDrive=juce::Decibels::decibelsToGain(safeInitial("fxDrive",0.f,24.f,0.f));smoothedFxWet=safeInitial("fxMix",0.f,1.f,1.f);smoothedFxType=safeInitial("fxType",0.f,1.f,0.f);juce::dsp::ProcessSpec spec{sampleRate,(juce::uint32)juce::jmax(1,maxBlock),1};for(auto& c:filters){c.low.prepare(spec);c.high.prepare(spec);c.low.setType(juce::dsp::LinkwitzRileyFilterType::lowpass);c.high.setType(juce::dsp::LinkwitzRileyFilterType::highpass);c.low.reset();c.high.reset();c.ladderLow.prepare(sampleRate);c.ladderHigh.prepare(sampleRate);}}
 float DISidechainProcessor::curve(double t) const {if(!std::isfinite(t))t=0.;t=juce::jlimit(0.0,1.0,t);double x=t*7;int i=juce::jmin(6,(int)x);const auto safePoint=[this](int node){const float value=points[node].load(std::memory_order_relaxed);return std::isfinite(value)?juce::jlimit(0.f,1.f,value):1.f;};float a=safePoint(i),b=safePoint(i+1);float u=(float)(x-i);u=u*u*(3-2*u);return a+(b-a)*u;}
 void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::MidiBuffer& midi){
  juce::ScopedNoDenormals noDenormals;
@@ -199,6 +202,8 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
   return std::isfinite(value)?juce::jlimit(low,high,value):fallback;
  };
  const int mode=(int)bounded("mode",0.f,3.f,0.f);
+ const bool analogFilter=bounded("filterModel",0.f,1.f,0.f)>.5f;
+ const float resonance=bounded("ladderResonance",0.f,.95f,.25f);
  const int trig=(int)bounded("trigger",0.f,2.f,0.f);
  const float depth=bounded("depth",0.f,1.f,1.f);
  const float mix=bounded("mix",0.f,1.f,1.f);
@@ -247,7 +252,12 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  const float saturatorTarget=saturatorEnabled?1.f:0.f;
  const float fxSmoothing=std::exp(-1.f/(float)(0.01*sr));
  const float fxParameterSmoothing=std::exp(-1.f/(float)(0.005*sr));
- for(auto& c:filters){c.low.setCutoffFrequency(lo);c.high.setCutoffFrequency(mode==3?hi:lo);}
+ for(auto& c:filters){
+  c.low.setCutoffFrequency(lo);
+  c.high.setCutoffFrequency(mode==3?hi:lo);
+  c.ladderLow.setCutoff(lo,resonance);
+  c.ladderHigh.setCutoff(hi,resonance);
+ }
  double bpm=120;
  double hostPpq=0.;bool hasPlayingPpq=false;
  if(auto* ph=getPlayHead()){
@@ -369,7 +379,19 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  const float panRight=pan<0.f?std::cos(-pan*juce::MathConstants<float>::halfPi):1.f;
  const float filterLaneGain=1.f-filterRange*(1.f-filterEnv);
  for(int ch=0;ch<2;++ch){float dry=main.getSample(ch,i);if(!std::isfinite(dry))dry=0.f;float wet=dry*smoothGain;
- if(mode!=0){auto& f=filters[ch];float low=f.low.processSample(0,dry),high=f.high.processSample(0,dry);float affected=mode==1?low:mode==2?high:dry-low-high;wet=dry+affected*(smoothGain-1);}
+ if(mode!=0){
+  auto& f=filters[ch];
+  float affected=0.f;
+  if(analogFilter){
+   const float low=f.ladderLow.process(dry);
+   const float high=f.ladderHigh.process(dry);
+   affected=mode==1?low:mode==2?dry-low:high-low;
+  } else {
+   const float low=f.low.processSample(0,dry),high=f.high.processSample(0,dry);
+   affected=mode==1?low:mode==2?high:dry-low-high;
+  }
+  wet=dry+affected*(smoothGain-1);
+ }
  float out=dry+(wet-dry)*mix;
  // Filter lane affects the selected frequency band, while Full mode remains full-band.
  if(filterRange>0.f&&mode!=0)out=dry+(out-dry)*filterLaneGain;
