@@ -65,6 +65,8 @@ private:
  int selectedStep=0;
  int selectedLane=0;
  int selectedTrack=0;
+ std::array<std::unique_ptr<juce::TextButton>,4> sceneButtons;
+ std::unique_ptr<juce::TextButton> copySceneButton;
  std::unique_ptr<juce::Slider> duckDepthSlider,duckLengthSlider;
  void refreshDuckControls();
  void refreshCreativePage();
