@@ -1,5 +1,6 @@
 #include "PluginEditor.h"
 #include "CurveSelection.h"
+#include "CurvePresets.h"
 #include <cmath>
 #include <limits>
 
@@ -758,13 +759,11 @@ void DISidechainEditor::paint(juce::Graphics& g) {
    juce::Path shape;
    for(int j=0;j<=24;++j){
     const float t=j/24.f;
-    const float v=i==0?t*t*(3.f-2.f*t):i==1?t:i==2?std::sqrt(t):i==3?(t>.5f?1.f:0.f):
-      i==4?1.f-t:i==5?std::abs(std::sin(t*juce::MathConstants<float>::pi)):
-      i==6?1.f-t*t:i==7?(j%8<4?.9f:.1f):t*t*(3.f-2.f*t);
+    const float v=di::sampleCurvePreset(i,t);
     if(j==0)shape.startNewSubPath(x+7.f,y+30.f-23.f*v);
     else shape.lineTo(x+7.f+28.f*t,y+30.f-23.f*v);
    }
-   g.setColour(i==0?orange:cyan);
+   g.setColour(i==0?lime:cyan);
    g.strokePath(shape,juce::PathStrokeType(1.8f));
   }
  }else{
@@ -1060,17 +1059,6 @@ void DISidechainEditor::applyFactoryPreset(int index) {
  return;
 }
 void DISidechainEditor::applyShapePreset(int index) {
- const float shapes[][8]={
-  {1.f,.82f,.4f,.05f,.13f,.42f,.79f,1.f},
-  {0.f,.04f,.14f,.32f,.68f,.92f,1.f,1.f},
-  {1.f,1.f,.98f,.9f,.7f,.42f,.15f,0.f},
-  {0.f,0.f,0.f,0.f,1.f,1.f,1.f,1.f},
-  {1.f,.8f,.4f,.1f,.1f,.4f,.8f,1.f},
-  {0.f,.14f,.28f,.43f,.57f,.72f,.86f,1.f},
-  {1.f,.75f,.25f,.05f,.05f,.25f,.75f,1.f},
-  {1.f,.2f,.8f,.15f,.85f,.2f,.8f,1.f},
-  {0.f,.1f,.35f,.7f,.9f,.9f,.98f,1.f}
- };
  index=juce::jlimit(0,8,index);
  const bool seq=sequenceToggle->getToggleState();
  // A preset must edit the SAME curve that the visible editor renders.
@@ -1078,7 +1066,12 @@ void DISidechainEditor::applyShapePreset(int index) {
  // while Filter/Pan retain independent per-step modulation curves.
  const int key=currentShapeKey();
  auto before=captureShape(key,seq),after=before;
- for(int i=0;i<8;++i)after[i]=shapes[index][i];
+ for(int i=0;i<8;++i)after[i]=di::curvePresets[(size_t)index][(size_t)i];
+ if(seq&&selectedLane==0&&selectedTrack<6) {
+  di::DynamicCurve dc;
+  for(int i=0;i<8;++i)dc.y[(size_t)i]=after[(size_t)i];
+  proc.setDynamicDuckCurve(selectedTrack,dc);
+ }
  applyShape(key,seq,after);pushEdit(key,seq,before,after);
  repaint();
 }
