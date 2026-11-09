@@ -265,7 +265,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
    midiNoteOn=true;
    // MIDI notes 36..41 independently play six duck voices. Velocity scales depth.
    // MIDI events are handled at their exact in-block sample offset.
-   if(sequenceOn&&creativeGrid){
+   if(sequenceOn&&creativeGrid&&trig!=1){
     const int track=msg.getNoteNumber()-36;
     if(track>=0&&track<di::DuckVoiceEngine::tracks)
      duckVoices.triggerTrack(track,envelopeLength*sr,msg.getFloatVelocity());
