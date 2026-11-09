@@ -38,6 +38,19 @@ int main() {
  seq.trigger();
  check(seq.getCurrentStep()==0,"MIDI trigger must restart first step");
  check(std::abs(seq.render(1.))<1e-6f,"Trigger must restart first step value");
+ // Absolute generation must advance even when the visible step number is fixed.
+ di::ShapeSequencer oneStep;
+ oneStep.setSteps(1);oneStep.reset();
+ check(oneStep.getStepGeneration()==0,"generation reset");
+ for(int i=0;i<4;++i){
+  oneStep.render(1.);
+  check(oneStep.getCurrentStep()==0,"one-step modulo remains zero");
+  check(oneStep.getStepGeneration()==static_cast<std::uint64_t>(i+1),"generation advances each cycle");
+ }
+ oneStep.seekToStepPosition(64.75);
+ check(oneStep.getStepGeneration()==64,"generation anchors to PPQ");
+ oneStep.render(4.);
+ check(oneStep.getStepGeneration()==65,"generation advances after seek");
  // Regression: Pan modulation neutral midpoint must remain centered.
  di::ShapeSequencer pan;
  pan.setSteps(1);

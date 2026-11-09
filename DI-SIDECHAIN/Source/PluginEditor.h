@@ -64,6 +64,18 @@ private:
  void paintFrequencyResponse(juce::Graphics&,juce::Rectangle<int>);
  int selectedStep=0;
  int selectedLane=0;
+ int selectedTrack=0;
+ std::array<std::unique_ptr<juce::TextButton>,4> sceneButtons;
+ std::unique_ptr<juce::TextButton> copySceneButton;
+ std::unique_ptr<juce::Slider> duckDepthSlider,duckLengthSlider;
+ void refreshDuckControls();
+ void refreshCreativePage();
+ std::unique_ptr<juce::TextButton> gridModeButton, reverbOnButton, distortOnButton, reverseButton;
+ std::array<std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>,4> creativeButtonAttachments;
+ std::array<std::unique_ptr<juce::ComboBox>,2> creativeModelBoxes;
+ std::array<std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>,2> creativeModelAttachments;
+ std::array<std::unique_ptr<juce::Slider>,5> creativeSliders;
+ std::array<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>,5> creativeSliderAttachments;
  std::array<std::unique_ptr<juce::TextButton>,3> laneTabs;
  std::unique_ptr<juce::ToggleButton> sequenceToggle;
  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> sequenceAttachment;
