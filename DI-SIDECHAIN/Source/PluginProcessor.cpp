@@ -231,7 +231,19 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  smoothedFxDrive=drive+(smoothedFxDrive-drive)*fxParameterSmoothing;
  smoothedFxWet=fxWet+(smoothedFxWet-fxWet)*fxParameterSmoothing;
  smoothedFxType=(float)clipperMode+(smoothedFxType-(float)clipperMode)*fxSmoothing;
- while(hasEvent&&midiPos<=i){if(msg.isNoteOn()&&msg.getVelocity()>0)midiNoteOn=true;hasEvent=it.getNextEvent(msg,midiPos);}
+ while(hasEvent&&midiPos<=i){
+  if(msg.isNoteOn()&&msg.getVelocity()>0){
+   midiNoteOn=true;
+   // MIDI notes 36..41 independently play six duck voices. Velocity scales depth.
+   // MIDI events are handled at their exact in-block sample offset.
+   if(sequenceOn&&creativeGrid){
+    const int track=msg.getNoteNumber()-36;
+    if(track>=0&&track<di::DuckVoiceEngine::tracks)
+     duckVoices.triggerTrack(track,envelopeLength*sr,msg.getFloatVelocity());
+   }
+  }
+  hasEvent=it.getNextEvent(msg,midiPos);
+ }
  if(hasSide&&trig!=2&&side.getNumSamples()>=n){const float v=di::sidechainPeak(side.getSample(0,i),side.getNumChannels()>1?side.getSample(1,i):0.f,side.getNumChannels()>1);detector=di::followPeak(detector,(double)v,detectorRelease);if(detector<threshold*.65)armed=true;if(armed&&detector>=threshold)audioPeak=true;}
  const bool fire=di::shouldFireTrigger(midiNoteOn,audioPeak,armed,refractory,trig);
  // Consume a threshold crossing even during holdoff or a simultaneous MIDI note.
