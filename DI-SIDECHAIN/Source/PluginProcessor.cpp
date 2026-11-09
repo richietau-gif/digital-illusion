@@ -45,6 +45,13 @@ DISidechainProcessor::DISidechainProcessor():AudioProcessor(BusesProperties().wi
  for(auto& shape:sequencePoints)for(int i=0;i<8;++i)shape[i].store(defaults[i]);
  for(int lane=0;lane<2;++lane)for(auto& shape:modulationPoints[lane])for(int i=0;i<8;++i)shape[i].store(lane==0?1.f:0.5f);
  for(auto& track:gridCells)for(auto& cell:track)cell.store(false,std::memory_order_relaxed);
+ for(auto& cell:gridReverseCells)cell.store(false,std::memory_order_relaxed);
+}
+void DISidechainProcessor::setGridReverse(int step,bool enabled) noexcept {
+ if(step>=0&&step<gridSteps)gridReverseCells[(size_t)step].store(enabled,std::memory_order_relaxed);
+}
+bool DISidechainProcessor::getGridReverse(int step) const noexcept {
+ return step>=0&&step<gridSteps&&gridReverseCells[(size_t)step].load(std::memory_order_relaxed);
 }
 void DISidechainProcessor::setGridCell(int track,int step,bool enabled) noexcept {
  if(track>=0&&track<gridTracks&&step>=0&&step<gridSteps)
@@ -196,6 +203,12 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
   panEnv=modulationSequencers[1].render(envelopeLength*sr);
   activeSequenceStep.store(sequencer.getCurrentStep(),std::memory_order_relaxed);}
  else {env=phase>=1?1:curve(phase);phase=juce::jmin(1.0,phase+step);}
+ if(sequenceOn&&creativeGrid){
+  bool activeDuck=false;
+  const int gridStep=activeSequenceStep.load(std::memory_order_relaxed);
+  for(int t=0;t<6;++t)activeDuck=activeDuck||getGridCell(t,gridStep);
+  if(!activeDuck)env=1.f; // inactive trigger rows leave the signal dry
+ }
  if(sequenceOn)env=juce::jlimit(0.f,1.f,env+shapeOffset);
  float target=1-depth*(1-env);smoothGain=coeff*smoothGain+(1-coeff)*target;
  // Independent, opt-in modulation lanes; neutral defaults preserve legacy patches.
@@ -228,7 +241,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  float left=main.getSample(0,i),right=main.getSample(1,i);
  creativeFx.process(left,right,distortEnabled&&distCell,reverbEnabled&&verbCell,
                     distortModel,distortDrive,distortWet,
-                    reverbModel,reverbWet,reverbLength,reverbDecay,reverseReverb&&verbCell);
+                    reverbModel,reverbWet,reverbLength,reverbDecay,(reverseReverb||getGridReverse(currentStep))&&verbCell);
  main.setSample(0,i,left);main.setSample(1,i,right);
  peak=juce::jmax(peak,juce::jmax(std::abs(left),std::abs(right)));
  }
@@ -236,6 +249,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
 }
 void DISidechainProcessor::getStateInformation(juce::MemoryBlock& dest){auto tree=state.copyState();for(int i=0;i<8;++i)tree.setProperty("point"+juce::String(i),points[i].load(),nullptr);for(int k=0;k<32;++k)for(int j=0;j<8;++j)tree.setProperty("seq_"+juce::String(k)+"_"+juce::String(j),getSequencePoint(k,j),nullptr);for(int lane=0;lane<2;++lane)for(int k=0;k<32;++k)for(int j=0;j<8;++j)tree.setProperty("mod_"+juce::String(lane)+"_"+juce::String(k)+"_"+juce::String(j),getModulationPoint(lane,k,j),nullptr);for(int t=0;t<gridTracks;++t)for(int k=0;k<gridSteps;++k)
  tree.setProperty("grid_"+juce::String(t)+"_"+juce::String(k),getGridCell(t,k),nullptr);
+ for(int k=0;k<gridSteps;++k)tree.setProperty("gridReverse_"+juce::String(k),getGridReverse(k),nullptr);
  if(auto xml=tree.createXml())copyXmlToBinary(*xml,dest);}
 void DISidechainProcessor::setStateInformation(const void* data,int bytes){
  if(auto xml=getXmlFromBinary(data,bytes)){
@@ -258,6 +272,10 @@ void DISidechainProcessor::setStateInformation(const void* data,int bytes){
   for(int t=0;t<gridTracks;++t)for(int k=0;k<gridSteps;++k){
    const auto key="grid_"+juce::String(t)+"_"+juce::String(k);
    setGridCell(t,k,tree.hasProperty(key)?(bool)tree.getProperty(key):false);
+  }
+  for(int k=0;k<gridSteps;++k){
+   const auto key="gridReverse_"+juce::String(k);
+   setGridReverse(k,tree.hasProperty(key)?(bool)tree.getProperty(key):false);
   }
   state.replaceState(tree);
  }
