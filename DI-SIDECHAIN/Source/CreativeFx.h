@@ -112,6 +112,8 @@ public:
   lastLength=-1.f;
   lastDecay=-1.f;
   lastDistDriveDb=-1.f;distGain=1.f;
+  lastTone=-1.f;toneCoeff=.5f;
+  dryReverbGain=1.f;
   distBlend=verbBlend=verbSend=0.f;
  }
  // Stage order: distort (optional) -> reverse send (optional) -> reverb.
@@ -139,8 +141,11 @@ public:
   const float distortedR=distortion[1].process(dryR,distModel,distGain);
   // Tone: 0 = mellow lowpass, 1 = open / modern high-frequency edge.
   const float tone=std::clamp(distortTone,0.f,1.f);
-  const float hz=180.f*std::pow(100.f,tone);
-  const float toneCoeff=std::exp(-6.28318530718f*hz/(float)sampleRate);
+  if(tone!=lastTone){
+   lastTone=tone;
+   const float hz=180.f*std::pow(100.f,tone);
+   toneCoeff=std::exp(-6.28318530718f*hz/(float)sampleRate);
+  }
   toneMemory[0]=toneCoeff*toneMemory[0]+(1.f-toneCoeff)*distortedL;
   toneMemory[1]=toneCoeff*toneMemory[1]+(1.f-toneCoeff)*distortedR;
   left=alignedL+distBlend*(toneMemory[0]-alignedL);
@@ -167,8 +172,12 @@ public:
   }
   reverb.processStereo(&sendL,&sendR,1);
   const float rw=verbBlend;
-  left=originalL*(1.f-rw)+rw*sendL;
-  right=originalR*(1.f-rw)+rw*sendR;
+  // Fully dry signal whenever no new reverb send is triggered; old tails
+  // continue independently. Smooth the transition to avoid clicks.
+  const float dryTarget=verbActive?1.f-rw:1.f;
+  dryReverbGain+=fadeCoeff*(dryTarget-dryReverbGain);
+  left=originalL*dryReverbGain+rw*sendL;
+  right=originalR*dryReverbGain+rw*sendR;
   if(!std::isfinite(left))left=0.f;
   if(!std::isfinite(right))right=0.f;
  }
@@ -183,6 +192,7 @@ private:
  int lastModel=-1;
  float lastLength=-1.f,lastDecay=-1.f;
  float lastDistDriveDb=-1.f,distGain=1.f;
+ float lastTone=-1.f,toneCoeff=.5f,dryReverbGain=1.f;
  float distBlend=0.f,verbBlend=0.f,verbSend=0.f,fadeCoeff=.001f;
 };
 } // namespace di
