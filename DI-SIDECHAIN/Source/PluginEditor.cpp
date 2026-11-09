@@ -391,7 +391,7 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  g.setColour(cyan.withAlpha(.23f));g.strokePath(logo,juce::PathStrokeType(6.f));
  g.setColour(cyan);g.strokePath(logo,juce::PathStrokeType(2.5f));
  text(g,"DI SIDECHAIN", {117,30,280,39},32,white,true);
- text(g,"4.1",{365,30,70,39},29,orange,true);
+ text(g,"5.2B",{365,30,100,39},27,orange,true);
  text(g,"D I G I T A L   I L L U S I O N",{120,72,310,16},12,faint);
  g.setColour(juce::Colour(0xff2d5668));g.drawVerticalLine(435,30.f,80.f);
  text(g,"PRESET",{450,43,80,21},12,faint,true);
@@ -432,23 +432,68 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  const bool sequenced=sequenceToggle->getToggleState();
  const int count=juce::jlimit(1,16,(int)sequenceCount->getValue());
  if(sequenced) {
-  // Show the whole active sequence, not merely the four steps around selection.
-  // Graph and clickable thumbnails now use the same absolute step mapping.
+  // v5.2B: simultaneous, omniGRID-inspired overview of the three
+  // existing modulation lanes. Cells visualize their actual stored curves;
+  // the DSP, state format, automation and selected-step editor stay intact.
   const int active=proc.activeSequenceStep.load(std::memory_order_relaxed);
-  for(int k=0;k<count;++k) {
-   const int x0=graph.getX()+k*graph.getWidth()/count;
-   const int x1=graph.getX()+(k+1)*graph.getWidth()/count;
-   auto cell=juce::Rectangle<int>(x0,graph.getY(),x1-x0,graph.getHeight());
-   paintShape(g,cell,k,false);
-   if(k==active) {
-    g.setColour(lime.withAlpha(.85f));
-    g.fillRect(cell.getX(),cell.getY(),2,cell.getHeight());
-   }
-   if(k==selectedStep){
-    g.setColour(orange.withAlpha(.5f));
-    g.drawRect(cell,1);
+  constexpr int labelWidth=112;
+  const int gridLeft=graph.getX()+labelWidth;
+  const int gridWidth=graph.getRight()-gridLeft;
+  const int top=graph.getY()+25;
+  const int rowHeight=(graph.getBottom()-top)/3;
+  const char* names[]={"VOLUME","FILTER","PAN"};
+  const juce::Colour colours[]={orange,cyan,juce::Colour(0xffd36afb)};
+  for(int step=0;step<count;++step) {
+   const int x0=gridLeft+step*gridWidth/count;
+   const int x1=gridLeft+(step+1)*gridWidth/count;
+   text(g,juce::String(step+1),{x0+5,graph.getY()+3,x1-x0-7,18},11,
+        step==active?lime:faint,step==selectedStep);
+   if(step==active) {
+    g.setColour(lime.withAlpha(.23f));
+    g.fillRect(x0,top,juce::jmax(1,x1-x0),rowHeight*3);
    }
   }
+  for(int lane=0;lane<3;++lane) {
+   const int y=top+lane*rowHeight;
+   const auto colour=colours[lane];
+   g.setColour(lane==selectedLane?colour.withAlpha(.18f):juce::Colour(0xff0c202b));
+   g.fillRoundedRectangle(juce::Rectangle<float>((float)graph.getX(),(float)y,
+                                                   (float)labelWidth-7,(float)rowHeight-3),4.f);
+   text(g,names[lane],{graph.getX()+9,y+7,labelWidth-16,rowHeight-15},13,
+        lane==selectedLane?colour:white,true);
+   for(int step=0;step<count;++step) {
+    const int x0=gridLeft+step*gridWidth/count;
+    const int x1=gridLeft+(step+1)*gridWidth/count;
+    const auto cell=juce::Rectangle<float>((float)x0+2,(float)y+2,
+                                           (float)juce::jmax(1,x1-x0-4),
+                                           (float)rowHeight-5);
+    float sum=0.f,lo=1.f,hi=0.f;
+    for(int node=0;node<8;++node) {
+     const float v=juce::jlimit(0.f,1.f,lane==0
+       ?proc.getSequencePoint(step,node)
+       :proc.getModulationPoint(lane-1,step,node));
+     sum+=v;lo=juce::jmin(lo,v);hi=juce::jmax(hi,v);
+    }
+    const float avg=sum/8.f;
+    g.setColour(juce::Colour(0xff132b37));g.fillRoundedRectangle(cell,4.f);
+    // A saturated block shows the step's actual envelope intensity;
+    // a narrow highlight captures modulation variation within that step.
+    const auto fill=cell.reduced(3.f);
+    const float fillHeight=juce::jmax(3.f,fill.getHeight()*avg);
+    g.setColour(colour.withAlpha(.35f+.65f*avg));
+    g.fillRoundedRectangle(juce::Rectangle<float>(fill.getX(),fill.getBottom()-fillHeight,
+                                                  fill.getWidth(),fillHeight),3.f);
+    g.setColour(colour.withAlpha(.65f));
+    g.drawHorizontalLine((int)(cell.getBottom()-3.f-(cell.getHeight()-6.f)*hi),
+                         cell.getX()+4.f,cell.getRight()-4.f);
+    if(step==selectedStep&&lane==selectedLane) {
+     g.setColour(orange);g.drawRoundedRectangle(cell,4.f,2.f);
+    } else if(step==active) {
+     g.setColour(lime.withAlpha(.75f));g.drawRoundedRectangle(cell,4.f,1.f);
+    }
+   }
+  }
+  text(g,"CLICK A CELL TO EDIT ITS CURVE",{graph.getX()+8,graph.getY()-18,410,16},11,faint);
  } else paintShape(g,graph,selectedStep,false);
  const auto laneColour=selectedLane==0?orange:selectedLane==1?cyan:juce::Colour(0xffd36afb);
  const int playing=proc.activeSequenceStep.load(std::memory_order_relaxed);
@@ -636,6 +681,26 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
  }
  if(juce::Rectangle<int>(24,117,153,43).contains(pos)){sequenceToggle->setToggleState(false,juce::sendNotificationSync);selectedLane=0;repaint();return;}
  if(juce::Rectangle<int>(183,117,155,43).contains(pos)){sequenceToggle->setToggleState(true,juce::sendNotificationSync);repaint();return;}
+ // v5.2B: a grid click selects both the lane and its exact step.
+ // Editing remains in the detail curve editor, so clicks cannot accidentally
+ // overwrite modulation values while navigating the overview.
+ if(sequenceToggle->getToggleState()&&graph.contains(pos)) {
+  constexpr int labelWidth=112;
+  const int gridLeft=graph.getX()+labelWidth;
+  const int top=graph.getY()+25;
+  if(pos.x>=gridLeft&&pos.y>=top) {
+   const int count=juce::jlimit(1,16,(int)sequenceCount->getValue());
+   selectedStep=juce::jlimit(0,count-1,(pos.x-gridLeft)*count/
+                            juce::jmax(1,graph.getRight()-gridLeft));
+   selectedLane=juce::jlimit(0,2,(pos.y-top)*3/
+                            juce::jmax(1,graph.getBottom()-top));
+   for(int j=0;j<3;++j)if(laneTabs[j])
+    laneTabs[j]->setToggleState(j==selectedLane,juce::dontSendNotification);
+   if(shapeOffset)shapeOffset->setEnabled(selectedLane==0);
+   repaint();
+  }
+  return;
+ }
  if(stepStrip.contains(pos)){
   const int count=juce::jlimit(1,16,(int)sequenceCount->getValue());
   selectedStep=juce::jlimit(0,count-1,(pos.x-stepStrip.getX())*count/juce::jmax(1,stepStrip.getWidth()));
