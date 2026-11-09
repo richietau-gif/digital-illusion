@@ -2,6 +2,8 @@
 #include <array>
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <limits>
 
 // Six independent, allocation-free duck voices. Events are triggered only on
 // step ENTER, not repeatedly while a step is held. The strongest attenuation
@@ -17,7 +19,7 @@ public:
   Shape shape{{0.f,.02f,.2f,.65f,.9f,1.f,1.f,1.f}};
  };
  void reset() noexcept {
-  lastStep=-1;
+  lastGeneration=std::numeric_limits<std::uint64_t>::max();
   for(auto& v:voices)v=Voice{};
  }
  void setTrack(int track,TrackSettings settings) noexcept {
@@ -43,9 +45,10 @@ public:
   voice.shape=settings.shape;
   voice.active=true;
  }
- float process(int step,const std::array<bool,tracks>& active,double samplesPerStep) noexcept {
-  if(step!=lastStep){
-   lastStep=step;
+ float process(int step,const std::array<bool,tracks>& active,double samplesPerStep,std::uint64_t generation) noexcept {
+  (void)step;
+  if(generation!=lastGeneration){
+   lastGeneration=generation;
    for(int t=0;t<tracks;++t){
     if(!active[static_cast<size_t>(t)])continue;
     triggerTrack(t,samplesPerStep,1.f);
@@ -82,6 +85,6 @@ private:
  }
  std::array<Voice,tracks> voices{};
  std::array<TrackSettings,tracks> tracksData{};
- int lastStep=-1;
+ std::uint64_t lastGeneration=std::numeric_limits<std::uint64_t>::max();
 };
 } // namespace di
