@@ -1151,50 +1151,85 @@ void DISidechainEditor::mouseUp(const juce::MouseEvent&) {
 }
 
 void DISidechainEditor::applyFactoryPreset(int index) {
- // SIDEFX factory programs drive the independent trigger grid, not the
- // legacy single-envelope bank inherited during development.
- index=juce::jlimit(0,5,index);
- const char* names[]={"Classic Duck","Deep Pump","Sidechain 4/4",
-                      "Breakbeat Pump","Pump Rise","Wobble"};
- for(int track=0;track<8;++track)
-  for(int step=0;step<16;++step)proc.setGridCell(track,step,false);
- constexpr float classic[8]={0.f,.05f,.22f,.55f,.83f,1.f,1.f,1.f};
- constexpr float deep[8]={0.f,0.f,.05f,.12f,.35f,.65f,.9f,1.f};
- constexpr float rise[8]={1.f,.9f,.7f,.5f,.3f,.12f,.02f,0.f};
- constexpr float wobble[8]={0.f,1.f,.1f,.9f,.2f,.8f,.15f,1.f};
- for(int track=0;track<6;++track){
-  proc.setDuckTrackDepth(track,track==0?1.f:.55f);
-  proc.setDuckTrackLength(track,1.f);
-  for(int node=0;node<8;++node)
-   proc.setDuckCurvePoint(track,node,index==1?deep[node]:index==4?rise[node]:index==5?wobble[node]:classic[node]);
- }
- for(int step=0;step<16;++step){
-  bool kick=false,snare=false,ghost=false,extra=false;
-  switch(index){
-   case 0: kick=step%4==0;break;
-   case 1: kick=step%2==0;break;
-   case 2: kick=step%4==0;snare=step%8==4;break;
-   case 3: kick=step%4==0;snare=step%8==4;ghost=step%8==3||step%8==7;extra=step==10||step==14;break;
-   case 4: kick=step%4==0;break;
-   default: kick=step%2==0;ghost=step%4==3;break;
+ constexpr const char* names[]={
+  "Classic Duck","Deep Pump","Breakbeat Ghost","Half-time Swing",
+  "Melodic Techno","Wobble Bass","Techno Stutter","Reverse Whoosh",
+  "Dubstep Drive","Ping-Pong Echo"
+ };
+ constexpr int lengths[]={16,8,16,8,16,8,12,8,8,12};
+ index=juce::jlimit(0,9,index);
+ const auto setParameter=[this](const char* key,float value){
+  if(auto* p=proc.state.getParameter(key)){
+   p->beginChangeGesture();p->setValueNotifyingHost(p->convertTo0to1(value));p->endChangeGesture();
   }
-  proc.setGridCell(0,step,kick);
-  proc.setGridCell(1,step,snare);
-  proc.setGridCell(2,step,ghost);
-  proc.setGridCell(3,step,extra);
+ };
+ // Global programs initialize all scenes consistently, including effects.
+ for(int scene=0;scene<4;++scene){
+  proc.setGridScene(scene);
+  for(int track=0;track<6;++track)for(int step=0;step<16;++step){
+   proc.setGridCell(track,step,false);
+   for(int flag=0;flag<5;++flag)proc.setCellFxFlag(track,step,flag,false);
+  }
  }
+ proc.setGridScene(0);
+ constexpr float classic[8]={0.f,.04f,.15f,.45f,.78f,1.f,1.f,1.f};
+ constexpr float deep[8]={0.f,0.f,.04f,.12f,.35f,.67f,.92f,1.f};
+ constexpr float rise[8]={1.f,.9f,.72f,.55f,.34f,.16f,.04f,0.f};
+ constexpr float wobble[8]={0.f,1.f,.08f,.93f,.15f,.86f,.2f,1.f};
+ for(int track=0;track<6;++track){
+  proc.setDuckTrackDepth(track,track==0?1.f:.65f);
+  proc.setDuckTrackLength(track,index==3?.8f:1.f);
+  di::DynamicCurve dc;
+  for(int j=0;j<8;++j)dc.y[(size_t)j]=index==1?deep[j]:index==7?rise[j]:
+                                        index==5||index==8?wobble[j]:classic[j];
+  proc.setDynamicDuckCurve(track,dc);
+  for(int j=0;j<8;++j)proc.setDuckCurvePoint(track,j,dc.y[(size_t)j]);
+ }
+ const auto event=[this](int track,int step){proc.setGridCell(track,step,true);};
+ for(int step=0;step<lengths[index];++step){
+  switch(index){
+   case 0: if(step%4==0)event(0,step);break;
+   case 1: if(step%2==0)event(0,step);break;
+   case 2:
+    if(step==0||step==3||step==8||step==11)event(0,step);
+    if(step==4||step==12)event(1,step);
+    if(step==6||step==14)event(2,step);
+    break;
+   case 3: if(step==0||step==4)event(0,step);if(step==6)event(1,step);break;
+   case 4: if(step%4==0)event(0,step);if(step==7||step==15)event(2,step);break;
+   case 5: if(step%2==0)event(0,step);if(step==3||step==7)event(1,step);break;
+   case 6: if(step%3==0)event(0,step);if(step==2||step==10)event(2,step);break;
+   case 7:
+    if(step==6){event(0,step);proc.setCellFxFlag(0,step,0,true);
+     proc.setCellFxFlag(0,step,2,true);proc.setCellFxFlag(0,step,3,true);}
+    break;
+   case 8:
+    if(step==0||step==3||step==6){
+     event(0,step);proc.setCellFxFlag(0,step,1,true);
+    }
+    break;
+   case 9:
+    if(step%3==0){event(0,step);proc.setCellFxFlag(0,step,4,true);}
+    break;
+  }
+ }
+ setParameter("sequenceEnabled",1.f);
+ setParameter("creativeGridEnabled",1.f);
+ setParameter("sequenceSteps",(float)lengths[index]);
+ setParameter("reverbEnabled",index==7?1.f:0.f);
+ setParameter("distortEnabled",index==8?1.f:0.f);
+ setParameter("delayEnabled",index==9?1.f:0.f);
+ setParameter("delaySync",1.f);
+ setParameter("delayPingpong",index==9?1.f:0.f);
+ setParameter("delayWet",index==9?.42f:.3f);
+ setParameter("delayFeedback",index==9?.55f:.35f);
+ setParameter("reverbWet",index==7?.73f:.3f);
+ setParameter("reverbDecay",index==7?5.f:3.f);
+ selectedStep=0;selectedTrack=0;selectedLane=0;
  presetName=names[index];
  proc.state.state.setProperty("presetName",presetName,nullptr);
  if(presetButton)presetButton->setButtonText("PRESETS  -  "+presetName);
- if(auto* p=proc.state.getParameter("sequenceEnabled")){
-  p->beginChangeGesture();p->setValueNotifyingHost(1.f);p->endChangeGesture();
- }
- if(auto* p=proc.state.getParameter("creativeGridEnabled")){
-  p->beginChangeGesture();p->setValueNotifyingHost(1.f);p->endChangeGesture();
- }
- selectedTrack=0;selectedStep=0;
  refreshDuckControls();refreshCreativePage();repaint();
- return;
 }
 void DISidechainEditor::applyShapePreset(int index) {
  index=juce::jlimit(0,8,index);
@@ -1214,7 +1249,7 @@ void DISidechainEditor::applyShapePreset(int index) {
  repaint();
 }
 void DISidechainEditor::showPresetMenu() {
- juce::PopupMenu menu;const juce::StringArray names{"Classic Duck","Deep Pump","Sidechain 4/4","Breakbeat Pump","Pump Rise","Wobble"};
+ juce::PopupMenu menu;const juce::StringArray names{"Classic Duck","Deep Pump","Breakbeat Ghost","Half-time Swing","Melodic Techno","Wobble Bass","Techno Stutter","Reverse Whoosh","Dubstep Drive","Ping-Pong Echo"};
  for(int i=0;i<names.size();++i)menu.addItem(i+1,names[i]);
  menu.addSeparator();menu.addItem(100,"Save user preset...");menu.addItem(101,"Load user preset...");
  juce::Component::SafePointer<DISidechainEditor> safe(this);
