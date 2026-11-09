@@ -798,10 +798,10 @@ void DISidechainEditor::paint(juce::Graphics& g) {
     int flagX=(int)cell.getRight()-5;
     const auto flag=[&](bool enabled,const juce::String& caption,juce::Colour colour){
      if(!enabled)return;
-     flagX-=16;
+     flagX-=12;
      g.setColour(colour);
-     g.fillRoundedRectangle(juce::Rectangle<float>((float)flagX,(float)cell.getY()+3,14.f,14.f),2.f);
-     text(g,caption,{flagX+2,(int)cell.getY()+3,12,14},9,DITheme::dark(),true);
+     g.fillRoundedRectangle(juce::Rectangle<float>((float)flagX,(float)cell.getY()+3,11.f,12.f),2.f);
+     text(g,caption,{flagX+1,(int)cell.getY()+3,10,12},8.5f,DITheme::dark(),true);
     };
     flag(reverse&&rvb,"<",juce::Colour(0xff579dff));
     flag(dist,"D",juce::Colour(0xffffa454));
