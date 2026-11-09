@@ -15,7 +15,8 @@ int main(){
  for(int i=0;i<count;++i){
   float l=0.f,r=0.f;
   reverse.process(l,r,true);
-  const float expected=(float)(count-1-i)/count;
+  const float gain=std::clamp(std::min(i,count-1-i)/(float)std::max(1,std::min(256,count/4)),0.f,1.f);
+  const float expected=(float)(count-1-i)/count*gain;
   check(std::abs(l-expected)<1e-5f&&std::abs(r+expected)<1e-5f,"reversed previous buffer");
  }
  di::CreativeFx fx;
