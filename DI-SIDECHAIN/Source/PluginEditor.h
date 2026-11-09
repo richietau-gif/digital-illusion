@@ -20,6 +20,7 @@ private:
   repaint();
  }
  void updatePoint(const juce::MouseEvent&);
+ int currentShapeKey() const;
  DITheme theme;
  DISidechainProcessor& proc;
  std::array<std::unique_ptr<juce::TextButton>,4> filterButtons;
