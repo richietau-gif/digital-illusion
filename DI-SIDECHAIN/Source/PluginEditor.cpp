@@ -304,7 +304,7 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
 }
 di::ShapeSequencer::Shape DISidechainEditor::captureShape(int step,bool sequence) const {
  di::ShapeSequencer::Shape shape{};
- if(sequence&&step>=96){
+ if(sequence&&step>=96&&step<102){
   for(int i=0;i<8;++i)shape[i]=proc.getDuckCurvePoint(step-96,i);
   return shape;
  }
@@ -436,7 +436,7 @@ void DISidechainEditor::paintShape(juce::Graphics& g,juce::Rectangle<int> r,int 
  const auto laneColour=selectedLane==0?orange:selectedLane==1?juce::Colour(0xff44bbff):juce::Colour(0xffc55bff);
  const float offset=seq&&selectedLane==0&&shapeOffset? (float)shapeOffset->getValue():0.f;
  auto value=[&](int i){
-  if(seq&&selectedTrack<6&&proc.state.getRawParameterValue("creativeGridEnabled")->load()>0.5f)
+  if(seq&&selectedLane==0&&selectedTrack<6&&proc.state.getRawParameterValue("creativeGridEnabled")->load()>0.5f)
    return proc.getDuckCurvePoint(selectedTrack,i);
   return seq?(selectedLane==0?proc.getSequencePoint(step,i):proc.getModulationPoint(selectedLane-1,step,i)):proc.points[i].load();
  };
@@ -823,7 +823,8 @@ void DISidechainEditor::updatePoint(const juce::MouseEvent& e) {
   v=juce::jlimit(0.f,1.f,v-(float)shapeOffset->getValue());
  if(snapButton&&snapButton->getToggleState())v=juce::jlimit(0.f,1.f,std::round(v*16.f)/16.f);
  if(sequenceToggle->getToggleState()){
-  if(selectedTrack<6&&proc.state.getRawParameterValue("creativeGridEnabled")->load()>0.5f)proc.setDuckCurvePoint(selectedTrack,i,v);
+  if(selectedLane==0&&selectedTrack<6&&proc.state.getRawParameterValue("creativeGridEnabled")->load()>0.5f)
+   proc.setDuckCurvePoint(selectedTrack,i,v);
   else if(selectedLane==0)proc.setSequencePoint(selectedStep,i,v);
   else proc.setModulationPoint(selectedLane-1,selectedStep,i,v);
  }else proc.points[i]=v;
@@ -877,7 +878,7 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
   draggingShape=true;
   dragNode=juce::jlimit(0,7,juce::roundToInt((pos.x-detailGraph.getX())*7.f/juce::jmax(1,detailGraph.getWidth())));
   dragStep=selectedStep+(sequenceToggle->getToggleState()?selectedLane*32:0);
-  if(sequenceToggle->getToggleState()&&selectedTrack<6&&
+  if(sequenceToggle->getToggleState()&&selectedLane==0&&selectedTrack<6&&
      proc.state.getRawParameterValue("creativeGridEnabled")->load()>0.5f)
    dragStep=96+selectedTrack;
   dragSequence=sequenceToggle->getToggleState();
@@ -953,7 +954,12 @@ void DISidechainEditor::applyShapePreset(int index) {
  };
  index=juce::jlimit(0,8,index);
  const bool seq=sequenceToggle->getToggleState();
- const int key=selectedStep+(seq?selectedLane*32:0);
+ // A preset must edit the SAME curve that the visible editor renders.
+ // Volume in GRID mode is the track's own duck envelope (96+track),
+ // while Filter/Pan retain independent per-step modulation curves.
+ const bool grid=seq&&proc.state.getRawParameterValue("creativeGridEnabled")->load()>0.5f;
+ const int key=grid&&selectedLane==0&&selectedTrack<6?96+selectedTrack:
+               selectedStep+(seq?selectedLane*32:0);
  auto before=captureShape(key,seq),after=before;
  for(int i=0;i<8;++i)after[i]=shapes[index][i];
  applyShape(key,seq,after);pushEdit(key,seq,before,after);
