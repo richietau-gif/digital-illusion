@@ -1,39 +1,69 @@
-name: Build DI SIDECHAIN VST3
+name: Build DI SIDEFX 5.2B VST3 (manual)
+
 on:
   workflow_dispatch:
+
+permissions:
+  contents: read
+
 jobs:
   windows-vst3:
-    # windows-2022 includes the Visual Studio 17.0 C++ toolchain used below.
     runs-on: windows-2022
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
-      - uses: lukka/get-cmake@latest
-      - name: Configure
-        run: cmake -S DI-SIDECHAIN -B build -G "Visual Studio 17 2022" -A x64 -DBUILD_TESTING=ON
-      - name: Build
-        run: cmake --build build --config Release --parallel 2
-      - name: Run CTest
-        run: ctest --test-dir build -C Release --output-on-failure
-      - name: Validate VST3 with pluginval
+      - name: Configure JUCE and CTest
+        shell: pwsh
+        run: cmake -S DI-SIDECHAIN -B build/sidefx -G "Visual Studio 17 2022" -A x64 -DBUILD_TESTING=ON
+      - name: Compile Windows x64 Release
+        id: build
+        shell: pwsh
+        run: cmake --build build/sidefx --config Release --parallel 2
+      - name: Run DSP and sequencer tests
+        id: ctest
+        shell: pwsh
+        run: ctest --test-dir build/sidefx -C Release --output-on-failure --no-tests=error
+      - name: Validate VST3 using pluginval
+        id: pluginval
         shell: pwsh
         run: |
-          Invoke-WebRequest -Uri "https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_Windows.zip" -OutFile pluginval.zip
-          Expand-Archive pluginval.zip -DestinationPath pluginval -Force
-          $exe = Get-ChildItem pluginval -Recurse -Filter pluginval.exe | Select-Object -First 1 -ExpandProperty FullName
+          $ErrorActionPreference = "Stop"
+          $vstPath = "build/sidefx/DISidefx_artefacts/Release/VST3"
+          $vst = Get-ChildItem -LiteralPath $vstPath -Filter "*.vst3" -Directory | Select-Object -First 1
+          if (-not $vst) { throw "DI SIDEFX VST3 bundle not found at $vstPath" }
+          Invoke-WebRequest -Uri "https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_Windows.zip" -OutFile "pluginval.zip"
+          Expand-Archive "pluginval.zip" -DestinationPath "pluginval" -Force
+          $exe = Get-ChildItem pluginval -Recurse -Filter pluginval.exe -File | Select-Object -First 1 -ExpandProperty FullName
           if (-not $exe) { throw "pluginval.exe not found" }
-          $vst = Get-ChildItem "build/DISidechain_artefacts/Release/VST3" -Filter "*.vst3" | Select-Object -First 1 -ExpandProperty FullName
-          if (-not $vst) { throw "VST3 not found" }
-          & $exe --strictness-level 5 --validate-in-process --timeout-ms 120000 --validate $vst
-          if ($LASTEXITCODE -ne 0) { throw "pluginval failed with exit code $LASTEXITCODE" }
-      - name: Package release candidate
+          $args = @("--strictness-level","5","--validate-in-process","--timeout-ms","120000","--validate",('"' + $vst.FullName + '"'))
+          $p = Start-Process -FilePath $exe -ArgumentList $args -NoNewWindow -Wait -PassThru -RedirectStandardOutput pluginval-stdout.log -RedirectStandardError pluginval-stderr.log
+          if (Test-Path pluginval-stdout.log) { Get-Content pluginval-stdout.log }
+          if (Test-Path pluginval-stderr.log) { Get-Content pluginval-stderr.log }
+          if ($p.ExitCode -ne 0) { throw "pluginval exited with code $($p.ExitCode)" }
+      - name: Package DI SIDEFX 5.2B
+        id: package
+        if: ${{ always() && steps.build.outcome == 'success' && steps.ctest.outcome == 'success' }}
         shell: pwsh
         run: |
-          $vst = Get-ChildItem "build/DISidechain_artefacts/Release/VST3" -Filter "*.vst3" | Select-Object -First 1
-          if (-not $vst) { throw "VST3 not found for packaging" }
-          Compress-Archive -Path $vst.FullName -DestinationPath "DI-SIDECHAIN-5.0-RC-Windows-x64.zip" -Force
-      - name: Upload VST3
+          $vstPath = "build/sidefx/DISidefx_artefacts/Release/VST3"
+          $vst = Get-ChildItem -LiteralPath $vstPath -Filter "*.vst3" -Directory | Select-Object -First 1
+          if (-not $vst) { throw "Missing VST3 bundle" }
+          Compress-Archive -LiteralPath $vst.FullName -DestinationPath "DI-SIDEFX-5.2B-Windows-x64.zip" -CompressionLevel Optimal -Force
+          if (-not (Test-Path "DI-SIDEFX-5.2B-Windows-x64.zip")) { throw "ZIP not created" }
+      - name: Upload Windows VST3 ZIP
+        if: ${{ always() && steps.package.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
-          name: DI-SIDECHAIN-Windows-VST3
-          path: DI-SIDECHAIN-5.0-RC-Windows-x64.zip
+          name: DI-SIDEFX-5.2B-Windows-x64
+          path: DI-SIDEFX-5.2B-Windows-x64.zip
           if-no-files-found: error
+          retention-days: 14
+      - name: Upload pluginval logs
+        if: ${{ always() && steps.pluginval.outcome == 'failure' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: DI-SIDEFX-pluginval-logs
+          path: |
+            pluginval-stdout.log
+            pluginval-stderr.log
+          if-no-files-found: ignore
