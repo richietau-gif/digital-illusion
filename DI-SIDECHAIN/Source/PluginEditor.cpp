@@ -856,6 +856,12 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
    }
    if(gridModeButton&&!gridModeButton->getToggleState())
     gridModeButton->setToggleState(true,juce::sendNotificationSync);
+   // First activated FX cell also enables its effect; no silent surprise
+   // from an inactive global rack switch while programming the grid.
+   if(selectedTrack==6&&proc.getGridCell(6,selectedStep)&&reverbOnButton&&!reverbOnButton->getToggleState())
+    reverbOnButton->setToggleState(true,juce::sendNotificationSync);
+   if(selectedTrack==7&&proc.getGridCell(7,selectedStep)&&distortOnButton&&!distortOnButton->getToggleState())
+    distortOnButton->setToggleState(true,juce::sendNotificationSync);
    refreshCreativePage();
    refreshDuckControls();
    repaint();
