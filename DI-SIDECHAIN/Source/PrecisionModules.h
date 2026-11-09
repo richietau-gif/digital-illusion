@@ -1,5 +1,6 @@
 #pragma once
 #include <array>
+#include <algorithm>
 #include <cmath>
 namespace precision {
 struct EnvelopeEngine { static float interpolate(float a,float b,float t) noexcept { t=t<0?0:t>1?1:t; return a+(b-a)*t*t*(3.f-2.f*t); } };
