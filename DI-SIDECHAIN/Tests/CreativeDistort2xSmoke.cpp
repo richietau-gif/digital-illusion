@@ -9,7 +9,7 @@ int main() {
   fx.reset();
   float max=0.f;
   for(int i=0;i<8192;++i){
-   const float sample=(i%2==0?.85f:-.85f);
+   const float sample=.85f*std::sin(2.f*3.14159265358979323846f*1000.f*i/48000.f);
    const float output=fx.process(sample,model,25.f);
    check(std::isfinite(output),"nonfinite oversampled output");
    max=std::max(max,std::abs(output));
