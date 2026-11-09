@@ -36,6 +36,13 @@ public:
  std::atomic<int> activeGridScene{0};
  std::array<std::array<std::array<std::atomic<bool>,gridSteps>,gridTracks>,gridScenes> sceneCells{};
  std::array<std::array<std::atomic<bool>,gridSteps>,gridScenes> sceneReverseCells{};
+ // A cell chooses independently whether to apply ducking and which FX sends
+ // are activated. Bit 0 = reverb, bit 1 = distortion, bit 2 = pre-reverb
+ // reverse, bit 3 = bypass this cell (neither envelope nor FX).
+ std::array<std::array<std::array<std::atomic<int>,gridSteps>,6>,gridScenes> sceneCellFx{};
+ void setCellFxFlag(int track,int step,int flag,bool enabled) noexcept;
+ bool getCellFxFlag(int track,int step,int flag) const noexcept;
+ int getCellFxMask(int track,int step) const noexcept;
  void setGridScene(int scene) noexcept;
  int getGridScene() const noexcept;
  void copyGridScene(int source,int destination) noexcept;
