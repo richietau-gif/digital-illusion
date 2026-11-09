@@ -30,8 +30,11 @@ public:
   record[0][static_cast<size_t>(phase)]=inL;
   record[1][static_cast<size_t>(phase)]=inR;
   if(reversed){
-   left=filled?play[0][static_cast<size_t>(window-1-phase)]:0.f;
-   right=filled?play[1][static_cast<size_t>(window-1-phase)]:0.f;
+   // Taper both edges of each reversed block to prevent sharp loop clicks.
+   const int fade=std::max(1,std::min(256,window/4));
+   const float gain=std::clamp(std::min(phase,window-1-phase)/(float)fade,0.f,1.f);
+   left=filled?play[0][static_cast<size_t>(window-1-phase)]*gain:0.f;
+   right=filled?play[1][static_cast<size_t>(window-1-phase)]*gain:0.f;
   }
   if(++phase==window) {
    phase=0;
