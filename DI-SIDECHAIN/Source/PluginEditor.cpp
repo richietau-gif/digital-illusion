@@ -253,7 +253,7 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
   creativeSliderAttachments[i]=std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(p.state,sliderIds[i],*creativeSliders[i]);
  }
  for(int i=0;i<4;++i){
-  sceneButtons[i]=std::make_unique<juce::TextButton>(juce::String::charToString((juce::juce_wchar)('A'+i)));
+  sceneButtons[i]=std::make_unique<juce::TextButton>(juce::String("ABCD").substring(i,i+1));
   buttonStyle(*sceneButtons[i]);
   sceneButtons[i]->setClickingTogglesState(true);
   addAndMakeVisible(*sceneButtons[i]);
@@ -513,13 +513,7 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  text(g,"SATURATOR",{1105,123,105,31},15,white,true);
  text(g,"DRIVE",{1283,110,72,14},11,faint);
  text(g,"WET",{1415,110,60,14},11,faint);
- const bool sceneActive=sequenceToggle&&sequenceToggle->getToggleState();
  text(g,"SCENES",{784,180,83,20},12,faint,true);
- if(copySceneButton)copySceneButton->setVisible(sceneActive);
- for(int j=0;j<4;++j)if(sceneButtons[j]){
-  sceneButtons[j]->setVisible(sceneActive);
-  sceneButtons[j]->setToggleState(proc.getGridScene()==j,juce::dontSendNotification);
- }
  // Shape overview.
  paintPanel(g,{12,177,1512,269},"");
  text(g,"100%",{19,198,58,18},12,white);
@@ -711,6 +705,12 @@ void DISidechainEditor::refreshDuckControls(){
  if(duckLengthSlider)duckLengthSlider->setValue(proc.getDuckTrackLength(selectedTrack),juce::dontSendNotification);
 }
 void DISidechainEditor::refreshCreativePage(){
+ const bool sceneActive=sequenceToggle&&sequenceToggle->getToggleState();
+ if(copySceneButton)copySceneButton->setVisible(sceneActive);
+ for(int j=0;j<4;++j)if(sceneButtons[j]){
+  sceneButtons[j]->setVisible(sceneActive);
+  sceneButtons[j]->setToggleState(proc.getGridScene()==j,juce::dontSendNotification);
+ }
  const bool fxPage=selectedTrack>=6&&sequenceToggle&&sequenceToggle->getToggleState();
  const bool duckPage=selectedTrack<6&&sequenceToggle&&sequenceToggle->getToggleState();
  if(duckDepthSlider)duckDepthSlider->setVisible(duckPage);
