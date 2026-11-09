@@ -33,6 +33,9 @@ if(BUILD_TESTING)
  add_executable(di_fx_combination_smoke Tests/FxCombinationSmoke.cpp)
  target_compile_features(di_fx_combination_smoke PRIVATE cxx_std_17)
  add_test(NAME di_fx_combination_smoke COMMAND di_fx_combination_smoke)
+ add_executable(di_duck_track_grid_smoke Tests/DuckTrackGridSmoke.cpp)
+ target_compile_features(di_duck_track_grid_smoke PRIVATE cxx_std_17)
+ add_test(NAME di_duck_track_grid_smoke COMMAND di_duck_track_grid_smoke)
  # Treat warnings as errors for all standalone DSP regression executables,
  # matching the standalone Tests/CMakeLists.txt configuration.
  foreach(smoke_target IN ITEMS
@@ -42,7 +45,8 @@ if(BUILD_TESTING)
    di_peak_detector_smoke
    di_oversampled_fx_smoke
    di_filter_cutoff_smoke
-   di_fx_combination_smoke)
+   di_fx_combination_smoke
+   di_duck_track_grid_smoke)
   if(MSVC)
    target_compile_options(${smoke_target} PRIVATE /W4 /WX)
   else()
