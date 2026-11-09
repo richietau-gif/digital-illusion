@@ -76,7 +76,9 @@ private:
  std::array<std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>,2> creativeModelAttachments;
  std::array<std::unique_ptr<juce::Slider>,5> creativeSliders;
  std::array<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>,5> creativeSliderAttachments;
- std::array<std::unique_ptr<juce::TextButton>,3> laneTabs;
+ std::array<std::unique_ptr<juce::TextButton>,5> laneTabs;
+ std::array<std::unique_ptr<juce::TextButton>,5> cellControls; // D, RVB, DST, REV, BYPASS
+ void refreshCellControls();
  std::unique_ptr<juce::ToggleButton> sequenceToggle;
  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> sequenceAttachment;
  std::unique_ptr<juce::Slider> sequenceCount;
