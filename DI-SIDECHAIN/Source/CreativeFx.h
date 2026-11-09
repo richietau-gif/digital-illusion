@@ -82,6 +82,7 @@ public:
   lastModel=-1;
   lastLength=-1.f;
   lastDecay=-1.f;
+  lastDistDriveDb=-1.f;distGain=1.f;
   distBlend=verbBlend=verbSend=0.f;
  }
  static float distort(float input,int model,float drive) noexcept {
@@ -112,11 +113,14 @@ public:
   verbBlend+=fadeCoeff*(std::clamp(verbWet,0.f,1.f)-verbBlend);
   // Always run both the oversampled and the seven-sample dry alignment
   // paths. Bypass and automation therefore preserve the reported latency.
-  const float drive=std::clamp(std::pow(10.f,distDrive/20.f),1.f,32.f);
+  if(distDrive!=lastDistDriveDb){
+   lastDistDriveDb=distDrive;
+   distGain=std::clamp(std::pow(10.f,distDrive/20.f),1.f,32.f);
+  }
   const float alignedL=distortionDry[0].process(dryL);
   const float alignedR=distortionDry[1].process(dryR);
-  const float distortedL=distortion[0].process(dryL,distModel,drive);
-  const float distortedR=distortion[1].process(dryR,distModel,drive);
+  const float distortedL=distortion[0].process(dryL,distModel,distGain);
+  const float distortedR=distortion[1].process(dryR,distModel,distGain);
   left=alignedL+distBlend*(distortedL-alignedL);
   right=alignedR+distBlend*(distortedR-alignedR);
   const float originalL=left,originalR=right;
@@ -151,6 +155,7 @@ private:
  juce::Reverb reverb;
  int lastModel=-1;
  float lastLength=-1.f,lastDecay=-1.f;
+ float lastDistDriveDb=-1.f,distGain=1.f;
  float distBlend=0.f,verbBlend=0.f,verbSend=0.f,fadeCoeff=.001f;
 };
 } // namespace di
