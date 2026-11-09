@@ -41,6 +41,14 @@ int main(){
  check(std::abs(engine.process(0,cells,100.)-.6f)<1e-5f,"velocity-scaled MIDI duck");
  for(int n=0;n<20;++n)engine.process(0,cells,100.);
  check(engine.process(0,cells,100.)==1.f,"MIDI duck terminates in held step");
+ // A one-step pattern must retrigger when its absolute clock generation advances.
+ engine.reset();
+ cells.fill(false);cells[0]=true;
+ engine.setTrack(0,kick);
+ check(engine.process(0,cells,100.,100)==0.f,"first one-step event");
+ for(int n=0;n<110;++n)engine.process(0,cells,100.,100);
+ check(engine.process(0,cells,100.,100)==1.f,"one-step event does not self-retrigger");
+ check(engine.process(0,cells,100.,101)==0.f,"one-step event retriggers on next generation");
  kick.duration=std::nanf("");kick.depth=-3.f;
  engine.setTrack(0,kick);
  check(engine.getTrack(0).depth==0.f&&engine.getTrack(0).duration==1.f,"sanitize invalid settings");
