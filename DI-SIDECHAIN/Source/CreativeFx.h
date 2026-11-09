@@ -1,6 +1,7 @@
 #pragma once
 #include <juce_audio_basics/juce_audio_basics.h>
 #include "CreativeDistort2x.h"
+#include "CreativeDelay.h"
 #include "FixedDelay.h"
 #include <array>
 #include <vector>
@@ -90,6 +91,7 @@ public:
   sampleRate=std::isfinite(sr)?std::clamp(sr,8000.,192000.):44100.;
   reverse.prepare(sampleRate);
   predelay.prepare(sampleRate);
+  delay.prepare(sampleRate);
   fadeCoeff=1.f-std::exp(-1.f/(float)(sampleRate*0.005));
   reverb.setSampleRate(sampleRate);
   for(auto& d:distortion)d.reset();
@@ -105,6 +107,7 @@ public:
   reverb.reset();
   reverse.reset();
   predelay.reset();
+  delay.reset();
   toneMemory.fill(0.f);
   for(auto& d:distortion)d.reset();
   for(auto& d:distortionDry)d.reset();
@@ -121,7 +124,9 @@ public:
  void process(float& left,float& right,bool distActive,bool verbActive,
               int distModel,float distDrive,float distWet,
               int verbModel,float verbWet,float verbLength,float verbDecay,bool reversed,
-              float verbPreDelayMs=0.f,float distortTone=1.f) noexcept {
+              float verbPreDelayMs=0.f,float distortTone=1.f,
+              bool delayActive=false,float delayWet=0.f,float delayFeedback=0.f,
+              double delaySeconds=.25,bool delayPingpong=false) noexcept {
   if(!std::isfinite(left))left=0.f;
   if(!std::isfinite(right))right=0.f;
   const float dryL=left,dryR=right;
@@ -178,6 +183,9 @@ public:
   dryReverbGain+=fadeCoeff*(dryTarget-dryReverbGain);
   left=originalL*dryReverbGain+rw*sendL;
   right=originalR*dryReverbGain+rw*sendR;
+  // Delay is downstream of REVERB. Inactive steps stop new input while
+  // existing feedback continues to decay naturally.
+  delay.process(left,right,delayActive,delayWet,delayFeedback,delaySeconds,delayPingpong);
   if(!std::isfinite(left))left=0.f;
   if(!std::isfinite(right))right=0.f;
  }
@@ -185,6 +193,7 @@ private:
  double sampleRate=44100.;
  ReverseSend reverse;
  StereoPredelay predelay;
+ CreativeDelay delay;
  std::array<float,2> toneMemory{};
  std::array<CreativeDistort2x,2> distortion;
  std::array<FixedDelay<CreativeDistort2x::latencySamples>,2> distortionDry;
