@@ -31,7 +31,10 @@ public:
   const float fb=std::clamp(std::isfinite(feedback)?feedback:0.f,0.f,.95f);
   const float w=std::clamp(std::isfinite(wet)?wet:0.f,0.f,1.f);
   const float coeff=1.f-std::exp(-1.f/static_cast<float>(.004*sr));
-  inputGate+=coeff*((enabled?1.f:0.f)-inputGate);
+  // Opening a cell must capture its very first transient. Only gate closing
+  // gets a short ramp; otherwise one-shot drums disappear into the attack.
+  if(enabled)inputGate=1.f;
+  else inputGate+=coeff*(0.f-inputGate);
   const float inL=std::isfinite(left)?left:0.f;
   const float inR=std::isfinite(right)?right:0.f;
   buffer[0][write]=std::clamp(inL*inputGate+fb*(pingpong?dr:dl),-16.f,16.f);
