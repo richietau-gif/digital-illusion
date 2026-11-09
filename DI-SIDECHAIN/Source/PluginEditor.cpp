@@ -163,7 +163,8 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  saturatorDriveSlider->setTextBoxStyle(juce::Slider::NoTextBox,false,0,0);
  saturatorDriveSlider->setTooltip("Saturator drive 0-24 dB");
  saturatorDriveSlider->setTextBoxStyle(juce::Slider::TextBoxRight,false,59,20);
- saturatorDriveSlider->textFromValueFunction=[](double v){return juce::String(v,1);};saturatorDriveSlider->setTextValueSuffix(" dB");
+ saturatorDriveSlider->textFromValueFunction=[](double v){return juce::String(juce::roundToInt(v/24.*100.))+"%";};
+ saturatorDriveSlider->valueFromTextFunction=[](const juce::String& value){return value.getDoubleValue()*24./100.;};
  saturatorDriveSlider->setColour(juce::Slider::trackColourId,green);saturatorDriveSlider->setColour(juce::Slider::thumbColourId,green);
  addAndMakeVisible(*saturatorDriveSlider);
  saturatorDriveAttachment=std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(p.state,"saturatorDrive",*saturatorDriveSlider);
@@ -317,7 +318,17 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  for(int i=0;i<7;++i){
   creativeSliders[i]=std::make_unique<juce::Slider>(juce::Slider::LinearHorizontal,juce::Slider::TextBoxRight);
   creativeSliders[i]->setTextBoxStyle(juce::Slider::TextBoxRight,false,68,22);
-  creativeSliders[i]->textFromValueFunction=[i](double v){return juce::String(v,(i==4||i==5)?1:2);};
+  creativeSliders[i]->textFromValueFunction=[i](double v){
+   if(i==0||i==3||i==6)return juce::String(juce::roundToInt(v*100.))+"%";
+   if(i==2)return juce::String(v,1)+" s";
+   if(i==4)return juce::String(v,1)+" dB";
+   if(i==5)return juce::String(juce::roundToInt(v))+" ms";
+   return juce::String(v,2)+"x";
+  };
+  creativeSliders[i]->valueFromTextFunction=[i](const juce::String& value){
+   const double parsed=value.getDoubleValue();
+   return (i==0||i==3||i==6)?parsed/100.:parsed;
+  };
   creativeSliders[i]->setColour(juce::Slider::trackColourId,(i<3||i==5)?juce::Colour(0xff24def0):orange);
   creativeSliders[i]->setColour(juce::Slider::thumbColourId,(i<3||i==5)?juce::Colour(0xff24def0):orange);
   creativeSliders[i]->setColour(juce::Slider::textBoxTextColourId,juce::Colours::white);
@@ -386,7 +397,8 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  duckDepthSlider=std::make_unique<juce::Slider>(juce::Slider::LinearHorizontal,juce::Slider::TextBoxRight);
  duckDepthSlider->setRange(0.,1.,.01);
  duckDepthSlider->setTextBoxStyle(juce::Slider::TextBoxRight,false,60,20);
- duckDepthSlider->textFromValueFunction=[](double v){return juce::String(v,2);};
+ duckDepthSlider->textFromValueFunction=[](double v){return juce::String(juce::roundToInt(v*100.))+"%";};
+ duckDepthSlider->valueFromTextFunction=[](const juce::String& text){return text.getDoubleValue()/100.;};
  duckDepthSlider->setValue(proc.getDuckTrackDepth(0),juce::dontSendNotification);
  duckDepthSlider->setColour(juce::Slider::trackColourId,green);
  duckDepthSlider->setColour(juce::Slider::thumbColourId,green);
@@ -398,7 +410,7 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  duckLengthSlider=std::make_unique<juce::Slider>(juce::Slider::LinearHorizontal,juce::Slider::TextBoxRight);
  duckLengthSlider->setRange(.05,4.,.05);
  duckLengthSlider->setTextBoxStyle(juce::Slider::TextBoxRight,false,60,20);
- duckLengthSlider->textFromValueFunction=[](double v){return juce::String(v,2);};
+ duckLengthSlider->textFromValueFunction=[](double v){return juce::String(v,2)+" st";};
  duckLengthSlider->setValue(proc.getDuckTrackLength(0),juce::dontSendNotification);
  duckLengthSlider->setColour(juce::Slider::trackColourId,orange);
  duckLengthSlider->setColour(juce::Slider::thumbColourId,orange);
@@ -685,8 +697,9 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  text(g,"SEQUENCER",{199,122,137,30},16,enabled?DITheme::dark():white,true);
  text(g,"STEPS",{503,110,70,14},11,faint);
  text(g,"LENGTH / RATE",{630,110,135,14},11,faint);
- text(g,"DRIVE",{1283,110,72,14},11,faint);
- text(g,"WET",{1415,110,60,14},11,faint);
+ text(g,"DRIVE %",{1283,110,85,14},11,faint);
+ text(g,"WET "+juce::String(juce::roundToInt(
+  proc.state.getRawParameterValue("fxMix")->load()*100.f))+"%",{1405,110,102,14},11,faint);
  text(g,"SCENES",{784,180,83,20},12,faint,true);
  // Shape overview.
  paintPanel(g,{12,177,1512,269},"");
