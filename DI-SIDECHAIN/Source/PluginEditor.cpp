@@ -1,4 +1,5 @@
 #include "PluginEditor.h"
+#include "CurveSelection.h"
 #include <cmath>
 #include <limits>
 
@@ -358,9 +359,7 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
 int DISidechainEditor::currentShapeKey() const {
  const bool seq=sequenceToggle&&sequenceToggle->getToggleState();
  const bool grid=seq&&proc.state.getRawParameterValue("creativeGridEnabled")->load()>0.5f;
- if(grid&&selectedLane==0&&selectedTrack>=0&&selectedTrack<6)
-  return 96+selectedTrack;
- return seq?selectedStep+selectedLane*32:0;
+ return di::resolveCurveKey(seq,grid,selectedLane,selectedTrack,selectedStep);
 }
 di::ShapeSequencer::Shape DISidechainEditor::captureShape(int step,bool sequence) const {
  di::ShapeSequencer::Shape shape{};
