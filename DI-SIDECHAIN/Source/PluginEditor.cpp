@@ -729,6 +729,7 @@ void DISidechainEditor::resized() {
  }
 }
 void DISidechainEditor::updatePoint(const juce::MouseEvent& e) {
+ if(selectedTrack>=6&&sequenceToggle&&sequenceToggle->getToggleState())return;
  // Continue editing the captured node beyond the graph edges; the vertical
  // value is clamped below. Starting a drag outside the graph remains ignored.
  if(!draggingShape&&!detailGraph.contains((e.position/uiScale).toInt()))return;
