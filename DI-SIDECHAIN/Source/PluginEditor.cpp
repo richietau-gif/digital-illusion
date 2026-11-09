@@ -769,82 +769,70 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  const int playing=proc.activeSequenceStep.load(std::memory_order_relaxed);
  // The SEQUENCE row is now part of EVENTS, sharing exact track columns.
  // No duplicate step thumbnails are drawn below the six musical tracks.
- // STEP EDIT (left), five modulation lanes (middle), CELL / TRACK (right).
- paintPanel(g,sequencerPanel,selectedLane==3?"REVERB":selectedLane==4?"DISTORTION":"STEP ENVELOPE");
- paintPanel(g,{897,456,305,240},"MODULATION LANES");
- paintPanel(g,{1212,456,312,240},"CELL / TRACK");
- const juce::Colour lanes[]={lime,cyan,juce::Colour(0xffd16afb),cyan,orange};
- for(int i=0;i<5;++i){
-  const int y=497+i*36;
-  auto r=juce::Rectangle<float>(910.f,(float)y,278.f,31.f);
-  g.setColour(selectedLane==i?juce::Colour(0xff1b4251):juce::Colour(0xff101a25));
-  g.fillRoundedRectangle(r,5.f);
-  g.setColour(lanes[i].withAlpha(selectedLane==i?1.f:.48f));
-  g.drawRoundedRectangle(r,5.f,selectedLane==i?1.6f:.7f);
-  juce::Path wave;
-  for(int j=0;j<=24;++j){
-   const float t=j/24.f;
-   const float modulation=i==3?std::exp(-3.f*t):
-                          i==4?std::sin(12.f*t)*std::exp(-2.f*t):
-                          std::sin(t*juce::MathConstants<float>::twoPi*(i+1));
-   const float py=y+16.f-8.f*modulation;
-   if(j==0)wave.startNewSubPath(1029.f,py);
-   else wave.lineTo(1029.f+125.f*t,py);
-  }
-  g.setColour(lanes[i]);g.strokePath(wave,juce::PathStrokeType(1.65f));
- }
- const bool fxPage=sequenced&&selectedLane>=3;
- if(!fxPage){
-  const juce::String laneName=selectedLane==0?"DUCK ENVELOPE":selectedLane==1?"FILTER":"PAN";
-  text(g,juce::String("TRACK ")+juce::String(selectedTrack+1)+"  /  "+laneName,
-       {28,477,460,18},13,white,true);
-  text(g,juce::String(selectedStep+1)+" / "+juce::String(count),{32,523,150,29},21,orange,true);
-  text(g,"CURVE",{34,590,76,18},11,faint);
+ // STEP EDIT (left), six concise modulation selectors, wide CELL / TRACK.
+ const bool isFX=sequenced&&selectedLane>=3;
+ paintPanel(g,sequencerPanel,selectedLane==3?"REVERB":selectedLane==4?"DISTORTION":
+                      selectedLane==5?"DELAY":"ENVELOPE EDITOR");
+ paintPanel(g,{897,456,222,240},"MODULATION");
+ paintPanel(g,{1129,456,395,240},"CELL / TRACK");
+ // Lane controls themselves provide the full-width, color-filled indicators.
+ // No decorative curves: those implied modulation shapes that do not exist.
+ if(!isFX){
+  const juce::String laneName=selectedLane==0?"VOLUME":selectedLane==1?"FILTER":"PAN";
+  const auto colour=selectedLane==0?lime:selectedLane==1?cyan:juce::Colour(0xffae7cf2);
+  text(g,"TRACK "+juce::String(selectedTrack+1)+"  /  "+laneName,
+       {29,497,510,20},13,colour,true);
+  text(g,juce::String(selectedStep+1)+" / "+juce::String(count),
+       {38,536,150,27},19,colour,true);
   paintShape(g,detailGraph,selectedStep,true);
-  text(g,"Drag points to edit. Shape presets apply to the visible curve.",
-       {232,665,460,18},11,faint);
+  text(g,selectedLane==0?
+     "Drag: move  ·  Double-click: add point  ·  Right-click: remove point":
+     "Drag a point to edit the selected modulation curve",
+       {229,667,625,15},11,faint);
   for(int i=0;i<9;++i){
    const int x=734+(i%3)*48,y=552+(i/3)*42;
    const auto r=juce::Rectangle<float>((float)x,(float)y,42.f,37.f);
-   g.setColour(juce::Colour(0xff122c3b));g.fillRoundedRectangle(r,5.f);
-   g.setColour(juce::Colour(0xff35667b));g.drawRoundedRectangle(r,5.f,1.f);
+   g.setColour(juce::Colour(0xff121c27));g.fillRoundedRectangle(r,4.f);
+   g.setColour(juce::Colour(0xff405363));g.drawRoundedRectangle(r,4.f,1.f);
    juce::Path shape;
-   for(int j=0;j<=24;++j){
-    const float t=j/24.f;
+   for(int j=0;j<=28;++j){
+    const float t=j/28.f;
     const float v=di::sampleCurvePreset(i,t);
-    if(j==0)shape.startNewSubPath(x+7.f,y+30.f-23.f*v);
-    else shape.lineTo(x+7.f+28.f*t,y+30.f-23.f*v);
+    if(j==0)shape.startNewSubPath(x+6.f,y+31.f-24.f*v);
+    else shape.lineTo(x+6.f+30.f*t,y+31.f-24.f*v);
    }
-   g.setColour(i==0?lime:cyan);
-   g.strokePath(shape,juce::PathStrokeType(1.8f));
+   g.setColour(colour);g.strokePath(shape,juce::PathStrokeType(1.7f));
   }
+ }else if(selectedLane==3){
+  const auto rv=juce::Colour(0xff5b9eff);
+  text(g,"REVERB  ·  REVERSE / PREDELAY / TAIL",{32,486,810,22},13,rv,true);
+  text(g,"MIX",{39,549,200,18},12,rv,true);
+  text(g,"ROOM SIZE",{324,549,210,18},12,rv,true);
+  text(g,"DECAY (s, approx.)",{609,549,220,18},12,rv,true);
+  text(g,"PREDELAY (ms)",{39,610,225,17},11,rv,true);
+  text(g,"Use REV on a cell for a pre-reverb whoosh.",{323,649,492,19},11,faint);
+ }else if(selectedLane==4){
+  text(g,"DISTORT  ·  2x OVERSAMPLING",{32,486,700,21},13,orange,true);
+  text(g,"MIX",{39,549,210,18},12,orange,true);
+  text(g,"DRIVE (dB)",{324,549,210,18},12,orange,true);
+  text(g,"TONE",{39,610,210,17},11,orange,true);
+  text(g,"5 characters: Warm / Acid / Clip / Fold / Modern",
+       {322,649,500,19},11,faint);
  }else{
-  const bool verb=selectedLane==3;
-  text(g,verb?"REVERB · SEND / TAIL / REVERSE":"DISTORT · 2x OVERSAMPLING",
-       {30,479,480,22},14,verb?cyan:orange,true);
-  text(g,verb?"MODEL":"WAVESHAPER MODEL",{326,499,215,18},11,faint);
-  if(verb){
-   text(g,"DRY / WET",{39,549,210,18},12,cyan,true);
-   text(g,"LENGTH",{324,549,210,18},12,cyan,true);
-   text(g,"DECAY",{610,549,190,18},12,cyan,true);
-   text(g,"PREDELAY ms",{39,610,225,17},11,cyan,true);
-   text(g,"The selected cell can reverse its captured input before reverb.",
-        {39,648,800,18},11,faint);
-  }else{
-   text(g,"DRY / WET",{39,549,210,18},12,orange,true);
-   text(g,"DRIVE dB",{327,549,210,18},12,orange,true);
-   text(g,"TONE",{39,610,210,17},11,orange,true);
-   text(g,"5 drive types: Warm / Acid / Clip / Fold / Modern",
-        {39,648,780,18},11,faint);
-  }
+  const auto pink=juce::Colour(0xffed6acd);
+  text(g,"DELAY  ·  SYNC / FREE / PING-PONG",{32,486,740,21},13,pink,true);
+  text(g,"MIX",{39,549,210,18},12,pink,true);
+  text(g,"FEEDBACK",{324,549,210,18},12,pink,true);
+  text(g,"TIME (ms, active in FREE)",{610,549,245,18},12,pink,true);
+  text(g,"SYNC follows host BPM and the selected musical division.",
+       {39,649,740,19},11,faint);
  }
- text(g,"TRACK "+juce::String(selectedTrack+1)+"  ·  STEP "+juce::String(selectedStep+1),
-      {1225,480,278,21},12,white,true);
- text(g,"CELL ROUTING  ·  DUCK / FX / BYPASS",{1226,499,279,17},10,faint);
- text(g,"DUCK DEPTH",{1226,567,225,16},11,lime,true);
- text(g,"ENVELOPE LENGTH (STEPS)",{1226,619,264,16},11,orange,true);
- text(g,"BYP skips ducking; R/D remain active.",
-      {1226,671,284,15},10,faint);
+ text(g,"TRACK "+juce::String(selectedTrack+1)+"  /  STEP "+juce::String(selectedStep+1),
+      {1143,485,357,20},13,white,true);
+ text(g,"CELL EFFECT ROUTING",{1143,505,333,16},11,faint);
+ text(g,"DUCK DEPTH",{1143,566,280,17},11,lime,true);
+ text(g,"ENVELOPE LENGTH (STEPS)",{1143,616,349,17},11,orange,true);
+ text(g,"BYP skips volume duck; effects stay available.",{1143,670,353,16},10,faint);
  // Always visible frequency controls and output meters.
  paintPanel(g,filterPanel,"FILTER");
  paintPanel(g,outputPanel,"OUTPUT / SIDECHAIN");
