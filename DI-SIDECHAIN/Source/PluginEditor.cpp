@@ -412,8 +412,8 @@ void DISidechainEditor::updateContextualControls(){
  const bool synced=raw("sync")>.5f;
  // FULL mode has no band cutoff; LOW uses high crossover,
  // HIGH uses low crossover; BAND uses both crossovers.
- const bool lowEnabled=mode==2||mode==3;
- const bool highEnabled=mode==1||mode==3;
+ const bool lowEnabled=mode!=0;
+ const bool highEnabled=mode==3;
  const bool audioTrigger=trigger!=2;
  if(sliders.size()>=8){
   sliders[3]->setEnabled(!synced); // free-running envelope length
@@ -464,10 +464,10 @@ void DISidechainEditor::paintPanel(juce::Graphics& g,juce::Rectangle<int> r,cons
  const auto f=r.toFloat();
  g.setColour(juce::Colour(0xff030b12).withAlpha(.5f));
  g.fillRoundedRectangle(f.translated(1.f,3.f),12.f);
- juce::ColourGradient body(juce::Colour(0xff0b2533),f.getX(),f.getY(),
-                           juce::Colour(0xff06131d),f.getRight(),f.getBottom(),false);
+ juce::ColourGradient body(juce::Colour(0xff141a24),f.getX(),f.getY(),
+                           juce::Colour(0xff0a0e15),f.getRight(),f.getBottom(),false);
  g.setGradientFill(body);g.fillRoundedRectangle(f,11.f);
- g.setColour(juce::Colour(0xff22617a));g.drawRoundedRectangle(f.reduced(.5f),11.f,1.f);
+ g.setColour(juce::Colour(0xff2b4651));g.drawRoundedRectangle(f.reduced(.5f),11.f,1.f);
  auto top=r.removeFromTop(39).toFloat().reduced(1.f);
  juce::ColourGradient header(juce::Colour(0xff163b51),top.getX(),top.getY(),
                              juce::Colour(0xff0a1b27),top.getX(),top.getBottom(),false);
@@ -540,7 +540,7 @@ void DISidechainEditor::paintShape(juce::Graphics& g,juce::Rectangle<int> r,int 
  }
 }
 void DISidechainEditor::paint(juce::Graphics& g) {
- g.fillAll(juce::Colour(0xff06121b));
+ g.fillAll(juce::Colour(0xff06080c));
  g.addTransform(juce::AffineTransform::scale(uiScale));
  const auto white=juce::Colour(0xffecf8ff);
  const auto faint=juce::Colour(0xff9bb6c7);
@@ -548,7 +548,7 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  const auto lime=DITheme::lime();
  const auto orange=DITheme::orange();
  // Polished header with an original waveform logo, entirely vector-rendered.
- juce::ColourGradient top(juce::Colour(0xff123448),0.f,0.f,juce::Colour(0xff06111a),0.f,102.f,false);
+ juce::ColourGradient top(juce::Colour(0xff151e29),0.f,0.f,juce::Colour(0xff080b11),0.f,102.f,false);
  g.setGradientFill(top);g.fillRect(0,0,designWidth,101);
  g.setColour(cyan.withAlpha(.65f));g.drawHorizontalLine(100,12.f,1524.f);
  juce::Path logo;
@@ -617,7 +617,7 @@ void DISidechainEditor::paint(juce::Graphics& g) {
    const int y=top+juce::roundToInt(track*rowHeight);
    const int nextY=top+juce::roundToInt((track+1)*rowHeight);
    const int h=juce::jmax(1,nextY-y-1);
-   g.setColour(track==selectedTrack?juce::Colour(0xff244555):juce::Colour(0xff102637));
+   g.setColour(track==selectedTrack?juce::Colour(0xff244555):juce::Colour(0xff141d29));
    g.fillRoundedRectangle(juce::Rectangle<float>((float)graph.getX(),(float)y,(float)labelWidth-4,(float)h),3.f);
    text(g,"TRACK "+juce::String(track+1),{graph.getX()+7,y,labelWidth-12,h},12,
         track==selectedTrack?lime:white,track==selectedTrack);
@@ -630,7 +630,7 @@ void DISidechainEditor::paint(juce::Graphics& g) {
     const bool rvb=proc.getCellFxFlag(track,step,0);
     const bool dist=proc.getCellFxFlag(track,step,1);
     const bool reverse=proc.getCellFxFlag(track,step,2);
-    g.setColour(!on?juce::Colour(0xff223442):
+    g.setColour(!on?juce::Colour(0xff26303b):
         bypass?juce::Colour(0xff324350):lime);
     g.fillRoundedRectangle(cell,3.f);
     if(on&&bypass){
@@ -702,7 +702,7 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  for(int i=0;i<5;++i){
   const int y=497+i*36;
   auto r=juce::Rectangle<float>(910.f,(float)y,278.f,31.f);
-  g.setColour(selectedLane==i?juce::Colour(0xff1b4251):juce::Colour(0xff0c2534));
+  g.setColour(selectedLane==i?juce::Colour(0xff1b4251):juce::Colour(0xff101a25));
   g.fillRoundedRectangle(r,5.f);
   g.setColour(lanes[i].withAlpha(selectedLane==i?1.f:.48f));
   g.drawRoundedRectangle(r,5.f,selectedLane==i?1.6f:.7f);
