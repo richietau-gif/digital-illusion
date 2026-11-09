@@ -1,6 +1,7 @@
 #pragma once
 #include <array>
 #include <cstdint>
+#include <cstddef>
 
 namespace di {
 // Pure, allocation-free event router shared by sequencer DSP and CTest.
@@ -19,7 +20,7 @@ inline CellFxRoute routeCellEffects(const std::array<bool,6>& events,
   result.reverb=result.distort=result.delay=true;
   return result;
  }
- for(size_t i=0;i<6;++i){
+ for(std::size_t i=0;i<6;++i){
   if(!events[i])continue;
   const int bits=masks[i]&31;
   result.duck[i]=(bits&8)==0;
