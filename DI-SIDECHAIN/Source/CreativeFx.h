@@ -1,5 +1,5 @@
 #pragma once
-#include <JuceHeader.h>
+#include <juce_audio_basics/juce_audio_basics.h>
 #include <array>
 #include <vector>
 #include <cmath>
@@ -57,8 +57,9 @@ public:
  void reset() noexcept {
   reverb.reset();
   reverse.reset();
-  driveSmooth=1.f;
-  wetSmooth=0.f;
+  lastModel=-1;
+  lastLength=-1.f;
+  lastDecay=-1.f;
  }
  static float distort(float input,int model,float drive) noexcept {
   const float x=std::clamp(std::isfinite(input)?input:0.f,-8.f,8.f)
@@ -97,12 +98,14 @@ public:
   const int model=std::clamp(verbModel,0,4);
   constexpr float sizes[5]={.2f,.45f,.7f,.88f,.98f};
   constexpr float damp[5]={.75f,.60f,.45f,.27f,.12f};
-  juce::Reverb::Parameters p;
-  p.roomSize=std::clamp(sizes[model]*(.55f+.45f*std::clamp(verbLength,.1f,8.f)/8.f),0.f,1.f);
-  p.damping=std::clamp(damp[model]*(1.f-.65f*std::clamp(verbDecay,0.f,1.f)),0.f,1.f);
-  p.width=1.f;p.freezeMode=0.f;p.wetLevel=1.f;p.dryLevel=0.f;
-  // Reverb parameter updates are cheap but must eventually be smoothed.
-  reverb.setParameters(p);
+  if(model!=lastModel||verbLength!=lastLength||verbDecay!=lastDecay){
+   juce::Reverb::Parameters p;
+   p.roomSize=std::clamp(sizes[model]*(.55f+.45f*std::clamp(verbLength,.1f,8.f)/8.f),0.f,1.f);
+   p.damping=std::clamp(damp[model]*(1.f-.65f*std::clamp(verbDecay,0.f,1.f)),0.f,1.f);
+   p.width=1.f;p.freezeMode=0.f;p.wetLevel=1.f;p.dryLevel=0.f;
+   reverb.setParameters(p);
+   lastModel=model;lastLength=verbLength;lastDecay=verbDecay;
+  }
   reverb.processStereo(&sendL,&sendR,1);
   const float rw=std::clamp(verbWet,0.f,1.f);
   left=originalL+rw*sendL;
@@ -114,6 +117,7 @@ private:
  double sampleRate=44100.;
  ReverseSend reverse;
  juce::Reverb reverb;
- float driveSmooth=1.f,wetSmooth=0.f;
+ int lastModel=-1;
+ float lastLength=-1.f,lastDecay=-1.f;
 };
 } // namespace di
