@@ -99,6 +99,21 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  fxTypeBox->setColour(juce::ComboBox::outlineColourId,edge);
  addAndMakeVisible(*fxTypeBox);
  fxTypeAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(p.state,"fxType",*fxTypeBox);
+ fxTypeBox->setVisible(false); // retained only for legacy state/automation compatibility
+ clipperButton=std::make_unique<juce::TextButton>("CLIP OFF");
+ clipperButton->setTooltip("Clipper: Off, Soft, Hard. Click to cycle.");
+ buttonStyle(*clipperButton);addAndMakeVisible(*clipperButton);
+ clipperButton->onClick=[this]{
+  if(auto* param=proc.state.getParameter("clipperMode")){
+   const int current=juce::jlimit(0,2,(int)proc.state.getRawParameterValue("clipperMode")->load());
+   param->beginChangeGesture();param->setValueNotifyingHost(param->convertTo0to1((float)((current+1)%3)));param->endChangeGesture();
+  }
+ };
+ saturatorDriveSlider=std::make_unique<juce::Slider>(juce::Slider::LinearHorizontal,juce::Slider::TextBoxRight);
+ saturatorDriveSlider->setRange(0.0,24.0,0.1);saturatorDriveSlider->setTextValueSuffix(" dB");
+ saturatorDriveSlider->setColour(juce::Slider::trackColourId,green);saturatorDriveSlider->setColour(juce::Slider::thumbColourId,green);
+ addAndMakeVisible(*saturatorDriveSlider);
+ saturatorDriveAttachment=std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(p.state,"saturatorDrive",*saturatorDriveSlider);
  fxToggle=std::make_unique<juce::TextButton>("OFF");
  fxToggle->setTooltip("Toggle FX processing. The separate Saturator can run at the same time.");
  addAndMakeVisible(*fxToggle);
@@ -246,6 +261,12 @@ void DISidechainEditor::refreshFilterButtons(){
 void DISidechainEditor::refreshFxButtons() {
  if(fxToggle)fxToggle->setButtonText(fxToggle->getToggleState()?"ON":"OFF");
  if(saturatorToggle)saturatorToggle->setButtonText(saturatorToggle->getToggleState()?"ON":"OFF");
+ if(clipperButton){
+  const int mode=juce::jlimit(0,2,(int)proc.state.getRawParameterValue("clipperMode")->load());
+  clipperButton->setButtonText(mode==0?"CLIP OFF":mode==1?"CLIP SOFT":"CLIP HARD");
+  clipperButton->setColour(juce::TextButton::buttonColourId,mode==0?juce::Colour(0xff25303d):green);
+  clipperButton->setColour(juce::TextButton::textColourOffId,mode==0?juce::Colours::white:DITheme::dark());
+ }
 }
 void DISidechainEditor::syncUiPreferences() {
  // Host state restore may occur while an existing editor stays open.
@@ -539,9 +560,11 @@ void DISidechainEditor::resized() {
  }
  if(sync)sync->setBounds(739,123,119,30);
  if(fxTypeBox)fxTypeBox->setBounds(866,124,124,30);
- if(fxToggle)fxToggle->setBounds(1036,123,65,31);
+ if(fxToggle){fxToggle->setVisible(false);fxToggle->setBounds(0,0,0,0);}
+ if(clipperButton)clipperButton->setBounds(1036,123,92,31);
  if(saturatorToggle)saturatorToggle->setBounds(1215,123,65,31);
- if(fxSliders[0])fxSliders[0]->setBounds(1324,123,89,30);
+ if(fxSliders[0])fxSliders[0]->setVisible(false);
+ if(saturatorDriveSlider)saturatorDriveSlider->setBounds(1280,123,140,30);
  if(fxSliders[1])fxSliders[1]->setBounds(1443,123,71,30);
  if(sequencePrev)sequencePrev->setBounds(33,533,47,34);
  if(sequenceNext)sequenceNext->setBounds(156,533,47,34);

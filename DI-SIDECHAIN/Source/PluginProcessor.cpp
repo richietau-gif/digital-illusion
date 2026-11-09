@@ -11,12 +11,13 @@
 static juce::AudioProcessorValueTreeState::ParameterLayout layoutParams(){
  std::vector<std::unique_ptr<juce::RangedAudioParameter>> p;
  auto f=[&](const char* id,const char* name,float lo,float hi,float def){p.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{id,1},name,juce::NormalisableRange<float>(lo,hi),def));};
- f("depth","Depth",0,1,1); f("mix","Mix",0,1,1);f("threshold","Trigger threshold dB",-60,0,-22);f("length","Envelope milliseconds",10,2000,250);f("smooth","Smoothing milliseconds",0.1,20,2);f("low","Low cutoff",25,1500,120);f("high","High cutoff",60,18000,400);f("retrigger","Trigger holdoff milliseconds",1,250,35);f("shapeOffset","Shape vertical offset",-1,1,0);f("panMod","Pan modulation amount",-1,1,0);f("filterMod","Filter modulation amount",0,1,0);f("fxDrive","FX drive dB",0,24,0);f("fxMix","FX wet mix",0,1,1);
+ f("depth","Depth",0,1,1); f("mix","Mix",0,1,1);f("threshold","Trigger threshold dB",-60,0,-22);f("length","Envelope milliseconds",10,2000,250);f("smooth","Smoothing milliseconds",0.1,20,2);f("low","Low cutoff",25,1500,120);f("high","High cutoff",60,18000,400);f("retrigger","Trigger holdoff milliseconds",1,250,35);f("shapeOffset","Shape vertical offset",-1,1,0);f("panMod","Pan modulation amount",-1,1,0);f("filterMod","Filter modulation amount",0,1,0);f("fxDrive","Legacy FX drive dB",0,24,0);f("saturatorDrive","Saturator drive dB",0,24,0);f("fxMix","FX wet mix",0,1,1);
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"mode",1},"Frequency mode",juce::StringArray{"Full","Low","High","Band"},0));
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"trigger",1},"Trigger mode",juce::StringArray{"Audio + MIDI","Audio only","MIDI only"},0));
  p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"sequenceEnabled",1},"Shape sequencer enabled",false));
  p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"fxEnabled",1},"FX enabled",false));
  p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"saturatorEnabled",1},"Independent saturator enabled",false));
+ p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"clipperMode",1},"Clipper mode",juce::StringArray{"Off","Soft","Hard"},0));
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"fxType",1},"FX type",juce::StringArray{"Saturator","Soft Clipper"},0));
  p.push_back(std::make_unique<juce::AudioParameterInt>(juce::ParameterID{"sequenceSteps",1},"Sequence steps",1,16,16));
  p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"sync",1},"Tempo sync",true));
@@ -74,10 +75,14 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  const bool fxEnabled=get("fxEnabled")>0.5f;
  const bool saturatorEnabled=get("saturatorEnabled")>0.5f;
  const int fxType=(int)bounded("fxType",0.f,1.f,0.f);
+ int clipperMode=(int)bounded("clipperMode",0.f,2.f,0.f);
+ if(clipperMode==0 && fxEnabled) clipperMode=fxType>0?1:2;
  // Guard automation and restored host state before values enter persistent smoothers.
  const float drive=juce::Decibels::decibelsToGain(std::isfinite(fxDrive)?juce::jlimit(0.f,24.f,fxDrive):0.f);
+ const float saturatorDriveDb=bounded("saturatorDrive",0.f,24.f,fxDrive);
+ const float saturatorDrive=juce::Decibels::decibelsToGain(saturatorDriveDb);
  const float fxWet=std::isfinite(fxMix)?juce::jlimit(0.f,1.f,fxMix):0.f;
- const float fxTarget=fxEnabled?1.f:0.f;
+ const float fxTarget=clipperMode>0?1.f:0.f;
  const float saturatorTarget=saturatorEnabled?1.f:0.f;
  const float fxSmoothing=std::exp(-1.f/(float)(0.01*sr));
  const float fxParameterSmoothing=std::exp(-1.f/(float)(0.005*sr));
@@ -179,7 +184,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  // Saturator is a separate, independently bypassable stage. Both oversampled
  // processors always run and both dry paths are latency-aligned to avoid clicks.
  const float satDry=saturatorDryDelay[ch].process(out);
- const float satProcessed=saturatorFx[ch].process(out,smoothedFxDrive,0.f);
+ const float satProcessed=saturatorFx[ch].process(out,saturatorDrive,0.f);
  out=di::mixAlignedFx(satDry,satProcessed,smoothedFxWet*saturatorBlend);
  if(!std::isfinite(out))out=0.f;main.setSample(ch,i,out);peak=juce::jmax(peak,std::abs(out));}
  }

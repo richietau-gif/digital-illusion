@@ -79,6 +79,9 @@ private:
  std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>> ca;
  std::unique_ptr<juce::ComboBox> fxTypeBox;
  std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> fxTypeAttachment;
+ std::unique_ptr<juce::TextButton> clipperButton;
+ std::unique_ptr<juce::Slider> saturatorDriveSlider;
+ std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> saturatorDriveAttachment;
  std::unique_ptr<juce::TextButton> fxToggle, saturatorToggle;
  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> saturatorAttachment;
  std::unique_ptr<juce::TextButton> presetButton, shapePresetButton, sequencePrev, sequenceNext, setupButton;
