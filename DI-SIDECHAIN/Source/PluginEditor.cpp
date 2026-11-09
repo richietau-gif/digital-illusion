@@ -855,6 +855,51 @@ void DISidechainEditor::mouseUp(const juce::MouseEvent&) {
 }
 
 void DISidechainEditor::applyFactoryPreset(int index) {
+ // SIDEFX factory programs drive the independent trigger grid, not the
+ // legacy single-envelope bank inherited during development.
+ index=juce::jlimit(0,5,index);
+ const char* names[]={"Classic Duck","Deep Pump","Sidechain 4/4",
+                      "Breakbeat Pump","Pump Rise","Wobble"};
+ for(int track=0;track<8;++track)
+  for(int step=0;step<16;++step)proc.setGridCell(track,step,false);
+ constexpr float classic[8]={0.f,.05f,.22f,.55f,.83f,1.f,1.f,1.f};
+ constexpr float deep[8]={0.f,0.f,.05f,.12f,.35f,.65f,.9f,1.f};
+ constexpr float rise[8]={1.f,.9f,.7f,.5f,.3f,.12f,.02f,0.f};
+ constexpr float wobble[8]={0.f,1.f,.1f,.9f,.2f,.8f,.15f,1.f};
+ for(int track=0;track<6;++track){
+  proc.setDuckTrackDepth(track,track==0?1.f:.55f);
+  proc.setDuckTrackLength(track,1.f);
+  for(int node=0;node<8;++node)
+   proc.setDuckCurvePoint(track,node,index==1?deep[node]:index==4?rise[node]:index==5?wobble[node]:classic[node]);
+ }
+ for(int step=0;step<16;++step){
+  bool kick=false,snare=false,ghost=false,extra=false;
+  switch(index){
+   case 0: kick=step%4==0;break;
+   case 1: kick=step%2==0;break;
+   case 2: kick=step%4==0;snare=step%8==4;break;
+   case 3: kick=step%4==0;snare=step%8==4;ghost=step%8==3||step%8==7;extra=step==10||step==14;break;
+   case 4: kick=step%4==0;break;
+   default: kick=step%2==0;ghost=step%4==3;break;
+  }
+  proc.setGridCell(0,step,kick);
+  proc.setGridCell(1,step,snare);
+  proc.setGridCell(2,step,ghost);
+  proc.setGridCell(3,step,extra);
+ }
+ presetName=names[index];
+ proc.state.state.setProperty("presetName",presetName,nullptr);
+ if(presetButton)presetButton->setButtonText("PRESETS  -  "+presetName);
+ if(auto* p=proc.state.getParameter("sequenceEnabled")){
+  p->beginChangeGesture();p->setValueNotifyingHost(1.f);p->endChangeGesture();
+ }
+ if(auto* p=proc.state.getParameter("creativeGridEnabled")){
+  p->beginChangeGesture();p->setValueNotifyingHost(1.f);p->endChangeGesture();
+ }
+ selectedTrack=0;selectedStep=0;
+ refreshDuckControls();refreshCreativePage();repaint();
+ return;
+
  const di::ShapeSequencer::Shape shapes[]={
   {1.f,.85f,.4f,.02f,.12f,.55f,.88f,1.f}, // Classic Duck
   {1.f,.2f,.02f,.02f,.08f,.32f,.75f,1.f}, // Deep Pump
