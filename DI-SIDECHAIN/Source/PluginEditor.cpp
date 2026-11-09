@@ -85,15 +85,15 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  shapeOffset->setColour(juce::Slider::textBoxOutlineColourId,juce::Colours::transparentBlack);
  addAndMakeVisible(*shapeOffset);
  shapeOffsetAttachment=std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(p.state,"shapeOffset",*shapeOffset);
- const char* laneNames[]={"VOLUME","FILTER","PAN","REVERB","DISTORT"};
- for(int i=0;i<5;++i){
+ const char* laneNames[]={"VOLUME","FILTER","PAN","REVERB","DISTORT","DELAY"};
+ for(int i=0;i<6;++i){
   laneTabs[i]=std::make_unique<juce::TextButton>(laneNames[i]);
   buttonStyle(*laneTabs[i]);
   laneTabs[i]->onClick=[this,i]{
    if(i>0&&!sequenceToggle->getToggleState())sequenceToggle->setToggleState(true,juce::sendNotificationSync);
    selectedLane=i;
    if(shapeOffset)shapeOffset->setEnabled(selectedLane==0);
-   for(int j=0;j<5;++j)laneTabs[j]->setToggleState(j==selectedLane,juce::dontSendNotification);
+   for(int j=0;j<6;++j)laneTabs[j]->setToggleState(j==selectedLane,juce::dontSendNotification);
    refreshCreativePage();repaint();
   };
   addAndMakeVisible(*laneTabs[i]);
@@ -101,32 +101,33 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  // Per-cell routing: duck volume, reverb send, distortion send, pre-reverb
  // reverse, and an absolute bypass. Unlike global rack switches, these flags
  // belong to one selected track/step in one scene.
- const char* cellLabels[]={"DUCK","RVB","DST","REV <","BYP"};
- for(int i=0;i<5;++i){
+ const char* cellLabels[]={"DUCK","RVB","DST","DLY","REV","BYP"};
+ constexpr juce::uint32 cellColours[]={0xffa2ed38,0xff579dff,0xffff9b4a,0xffef67c9,0xff579dff,0xff87939f};
+ for(int i=0;i<6;++i){
   cellControls[i]=std::make_unique<juce::TextButton>(cellLabels[i]);
   buttonStyle(*cellControls[i]);
   cellControls[i]->setClickingTogglesState(true);
+  cellControls[i]->setColour(juce::TextButton::buttonOnColourId,juce::Colour(cellColours[i]));
+  cellControls[i]->setColour(juce::TextButton::textColourOnId,juce::Colour(0xff08121b));
   addAndMakeVisible(*cellControls[i]);
   cellControls[i]->onClick=[this,i]{
-   if(i==0)proc.setGridCell(selectedTrack,selectedStep,!proc.getGridCell(selectedTrack,selectedStep));
-   else proc.setCellFxFlag(selectedTrack,selectedStep,i==4?3:i-1,
-                           !proc.getCellFxFlag(selectedTrack,selectedStep,i==4?3:i-1));
-   // FX selection turns the step on automatically. Reverse also selects
-   // the reverb send so a whoosh isn't silently configured but inaudible.
-   if(i==3&&proc.getCellFxFlag(selectedTrack,selectedStep,2))
-    proc.setCellFxFlag(selectedTrack,selectedStep,0,true);
-   if(i>=1&&i<=3&&proc.getCellFxFlag(selectedTrack,selectedStep,i==3?2:i-1))
-    proc.setGridCell(selectedTrack,selectedStep,true);
-   if(i==1&&proc.getCellFxFlag(selectedTrack,selectedStep,0)&&reverbOnButton&&!reverbOnButton->getToggleState())
-    reverbOnButton->setToggleState(true,juce::sendNotificationSync);
-   if(i==2&&proc.getCellFxFlag(selectedTrack,selectedStep,1)&&distortOnButton&&!distortOnButton->getToggleState())
-    distortOnButton->setToggleState(true,juce::sendNotificationSync);
-   if(i==3&&proc.getCellFxFlag(selectedTrack,selectedStep,2)&&reverbOnButton&&!reverbOnButton->getToggleState())
-    reverbOnButton->setToggleState(true,juce::sendNotificationSync);
+   constexpr int flags[6]={-1,0,1,4,2,3};
+   const int flag=flags[i];
+   if(flag<0)proc.setGridCell(selectedTrack,selectedStep,!proc.getGridCell(selectedTrack,selectedStep));
+   else proc.setCellFxFlag(selectedTrack,selectedStep,flag,
+        !proc.getCellFxFlag(selectedTrack,selectedStep,flag));
+   const bool on=flag>=0&&proc.getCellFxFlag(selectedTrack,selectedStep,flag);
+   if(on&&i==4)proc.setCellFxFlag(selectedTrack,selectedStep,0,true);
+   if(on&&i>=1&&i<=4)proc.setGridCell(selectedTrack,selectedStep,true);
+   const auto enable=[this](juce::TextButton* button){
+    if(button&&!button->getToggleState())button->setToggleState(true,juce::sendNotificationSync);
+   };
+   if(on&&(i==1||i==4))enable(reverbOnButton.get());
+   if(on&&i==2)enable(distortOnButton.get());
+   if(on&&i==3)enable(delayOnButton.get());
    refreshCellControls();repaint();
   };
  }
-
  const char* laneIds[]={"filterMod","panMod"};
  for(int i=0;i<2;++i){
   laneSliders[i]=std::make_unique<juce::Slider>(juce::Slider::LinearHorizontal,juce::Slider::TextBoxRight);
@@ -838,10 +839,11 @@ void DISidechainEditor::paint(juce::Graphics& g) {
 }
 void DISidechainEditor::refreshCellControls(){
  const bool seq=sequenceToggle&&sequenceToggle->getToggleState();
- for(int i=0;i<5;++i)if(cellControls[i]){
+ constexpr int flags[6]={-1,0,1,4,2,3};
+ for(int i=0;i<6;++i)if(cellControls[i]){
   cellControls[i]->setVisible(seq&&selectedTrack<6);
   const bool active=i==0?proc.getGridCell(selectedTrack,selectedStep):
-    proc.getCellFxFlag(selectedTrack,selectedStep,i==4?3:i-1);
+    proc.getCellFxFlag(selectedTrack,selectedStep,flags[i]);
   cellControls[i]->setToggleState(active,juce::dontSendNotification);
  }
 }
