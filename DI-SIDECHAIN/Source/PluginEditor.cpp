@@ -894,7 +894,8 @@ void DISidechainEditor::refreshCreativePage(){
   sceneButtons[j]->setToggleState(proc.getGridScene()==j,juce::dontSendNotification);
  }
  const bool active=sequenceToggle&&sequenceToggle->getToggleState();
- const bool fxPage=active&&selectedLane>=3;
+ const bool fxPage=active&&selectedLane>=3&&selectedLane<=4;
+ const bool delayPage=active&&selectedLane==5;
  const bool duckPage=active&&selectedTrack<6;
  if(duckDepthSlider)duckDepthSlider->setVisible(duckPage);
  if(duckLengthSlider)duckLengthSlider->setVisible(duckPage);
@@ -904,13 +905,32 @@ void DISidechainEditor::refreshCreativePage(){
  if(reverseButton)reverseButton->setVisible(fxPage&&verb);
  for(int i=0;i<2;++i)if(creativeModelBoxes[i])creativeModelBoxes[i]->setVisible(fxPage&&i==(verb?0:1));
  for(int i=0;i<7;++i)if(creativeSliders[i])creativeSliders[i]->setVisible(fxPage&&(verb?(i<3||i==5):(i==3||i==4||i==6)));
+ for(auto& item:delaySliders)if(item)item->setVisible(delayPage);
+ if(delayOnButton)delayOnButton->setVisible(delayPage);
+ if(delaySyncButton)delaySyncButton->setVisible(delayPage);
+ if(delayPingpongButton)delayPingpongButton->setVisible(delayPage);
+ if(delayDivisionBox)delayDivisionBox->setVisible(delayPage);
+ if(delaySliders[2])delaySliders[2]->setEnabled(!delaySyncButton||!delaySyncButton->getToggleState());
+ if(delayDivisionBox)delayDivisionBox->setEnabled(delaySyncButton&&delaySyncButton->getToggleState());
  // Legacy step shape controls are hidden only while editing an FX track.
  for(auto* b:{copyStep.get(),pasteStep.get(),resetStep.get(),undoButton.get(),redoButton.get(),
               snapButton.get(),shapePresetButton.get(),sequencePrev.get(),sequenceNext.get()})
-  if(b)b->setVisible(!fxPage);
+  if(b)b->setVisible(!fxPage&&!delayPage);
  if(shapeOffset)shapeOffset->setVisible(!active);
  for(auto& slider:laneSliders)if(slider)slider->setVisible(!active);
- for(auto& b:laneTabs)if(b)b->setVisible(true);
+ const juce::Colour laneColours[]={juce::Colour(0xffa4ed38),juce::Colour(0xff2ad3da),
+  juce::Colour(0xffa57dff),juce::Colour(0xff5b9eff),juce::Colour(0xffffa454),
+  juce::Colour(0xffed6acd)};
+ for(int i=0;i<6;++i)if(laneTabs[i]){
+  auto& button=*laneTabs[i];
+  button.setVisible(active);
+  button.setClickingTogglesState(true);
+  button.setToggleState(i==selectedLane,juce::dontSendNotification);
+  button.setColour(juce::TextButton::buttonOnColourId,laneColours[i]);
+  button.setColour(juce::TextButton::textColourOnId,juce::Colour(0xff071018));
+  button.setColour(juce::TextButton::buttonColourId,juce::Colour(0xff152331));
+  button.setColour(juce::TextButton::textColourOffId,laneColours[i]);
+ }
 }
 void DISidechainEditor::resized() {
  // All child component bounds use design pixels. The parent editor, graph
@@ -930,9 +950,16 @@ void DISidechainEditor::resized() {
  if(gridModeButton)gridModeButton->setBounds(917,124,124,30);
  for(int i=0;i<4;++i)if(sceneButtons[i])sceneButtons[i]->setBounds(873+i*62,179,57,22);
  if(copySceneButton)copySceneButton->setBounds(1124,179,113,22);
- if(duckDepthSlider)duckDepthSlider->setBounds(1224,586,284,30);
- if(duckLengthSlider)duckLengthSlider->setBounds(1224,638,284,30);
+ if(duckDepthSlider)duckDepthSlider->setBounds(1144,584,358,30);
+ if(duckLengthSlider)duckLengthSlider->setBounds(1144,635,358,30);
  if(reverbOnButton)reverbOnButton->setBounds(32,505,125,31);
+ if(delayOnButton)delayOnButton->setBounds(35,507,121,29);
+ if(delaySyncButton)delaySyncButton->setBounds(163,507,100,29);
+ if(delayPingpongButton)delayPingpongButton->setBounds(270,507,131,29);
+ if(delayDivisionBox)delayDivisionBox->setBounds(433,507,156,29);
+ if(delaySliders[0])delaySliders[0]->setBounds(36,576,253,33);
+ if(delaySliders[1])delaySliders[1]->setBounds(319,576,253,33);
+ if(delaySliders[2])delaySliders[2]->setBounds(602,576,253,33);
  if(distortOnButton)distortOnButton->setBounds(32,505,125,31);
  if(reverseButton)reverseButton->setBounds(163,505,132,31);
  if(creativeModelBoxes[0])creativeModelBoxes[0]->setBounds(324,505,220,31);
@@ -942,7 +969,7 @@ void DISidechainEditor::resized() {
   const int yy=i>=5?630:576;
   creativeSliders[i]->setBounds(36+col*283,yy,253,33);
  }
- for(int i=0;i<5;++i)if(cellControls[i])cellControls[i]->setBounds(1223+i*58,522,55,31);
+ for(int i=0;i<6;++i)if(cellControls[i])cellControls[i]->setBounds(1139+i*62,524,58,32);
  refreshCreativePage();
  if(sequenceToggle)sequenceToggle->setBounds(360,124,137,32);
  if(sequenceCount)sequenceCount->setBounds(501,124,118,30);
@@ -971,8 +998,8 @@ void DISidechainEditor::resized() {
  if(shapeOffset){shapeOffset->setBounds(1320,543,184,31);shapeOffset->setEnabled(selectedLane==0);}
  if(laneSliders[0])laneSliders[0]->setBounds(1320,593,184,31);
  if(laneSliders[1])laneSliders[1]->setBounds(1320,640,184,31);
- for(int i=0;i<5;++i)if(laneTabs[i]){
-  laneTabs[i]->setBounds(920,500+i*36,99,27);
+ for(int i=0;i<6;++i)if(laneTabs[i]){
+  laneTabs[i]->setBounds(908,498+i*31,200,27);
   laneTabs[i]->setToggleState(i==selectedLane,juce::dontSendNotification);
  }
  for(int i=0;i<4;++i)if(filterButtons[i])filterButtons[i]->setBounds(31+i*78,768,73,30);
