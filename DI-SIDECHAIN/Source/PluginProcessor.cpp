@@ -31,7 +31,7 @@ static juce::AudioProcessorValueTreeState::ParameterLayout layoutParams(){
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"reverbModel",1},"Reverb model",juce::StringArray{"Room","Plate","Hall","Ambient","Space"},0));
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"distortModel",1},"Distortion model",juce::StringArray{"Warm","Acid","Clip","Fold","Modern"},0));
  f("reverbWet","Reverb wet",0,1,.3f); f("reverbLength","Reverb length",.1f,8.f,3.f);
- f("reverbDecay","Reverb decay",0,1,.6f);
+ f("reverbDecay","Reverb decay time (approx seconds)",.2f,12.f,3.f);
  f("distortWet","Distortion wet",0,1,.4f); f("distortDrive","Distortion drive dB",0,24,8);
  f("reverbPreDelay","Reverb predelay ms",0,250,35);
  f("distortTone","Distortion tone",0,1,.7f);
@@ -227,7 +227,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  const int distortModel=(int)bounded("distortModel",0.f,4.f,0.f);
  const float reverbWet=bounded("reverbWet",0.f,1.f,.3f);
  const float reverbLength=bounded("reverbLength",.1f,8.f,3.f);
- const float reverbDecay=bounded("reverbDecay",0.f,1.f,.6f);
+ const float reverbDecay=bounded("reverbDecay",.2f,12.f,3.f);
  const float distortWet=bounded("distortWet",0.f,1.f,.4f);
  const float distortDrive=bounded("distortDrive",0.f,24.f,8.f);
  const float reverbPreDelay=bounded("reverbPreDelay",0.f,250.f,35.f);
