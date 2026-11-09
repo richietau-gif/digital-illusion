@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(DI_SIDEFX VERSION 5.2.0)
+project(DI_SIDEFX VERSION 5.3.0)
 set(CMAKE_CXX_STANDARD 17)
 include(FetchContent)
 FetchContent_Declare(juce GIT_REPOSITORY https://github.com/juce-framework/JUCE.git GIT_TAG 8.0.10 GIT_SHALLOW TRUE)
