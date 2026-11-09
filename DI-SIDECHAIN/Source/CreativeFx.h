@@ -54,6 +54,7 @@ public:
  void prepare(double sr) {
   sampleRate=std::isfinite(sr)?std::clamp(sr,8000.,192000.):44100.;
   reverse.prepare(sampleRate);
+  fadeCoeff=1.f-std::exp(-1.f/(float)(sampleRate*0.005));
   reverb.setSampleRate(sampleRate);
   reset();
  }
@@ -63,6 +64,7 @@ public:
   lastModel=-1;
   lastLength=-1.f;
   lastDecay=-1.f;
+  distBlend=verbBlend=verbSend=0.f;
  }
  static float distort(float input,int model,float drive) noexcept {
   const float x=std::clamp(std::isfinite(input)?input:0.f,-8.f,8.f)
@@ -87,17 +89,20 @@ public:
   if(!std::isfinite(right))right=0.f;
   const float dryL=left,dryR=right;
   const float dw=std::clamp(distWet,0.f,1.f);
-  if(distActive&&dw>0.f) {
+  distBlend+=fadeCoeff*((distActive?dw:0.f)-distBlend);
+  verbSend+=fadeCoeff*((verbActive?1.f:0.f)-verbSend);
+  verbBlend+=fadeCoeff*(std::clamp(verbWet,0.f,1.f)-verbBlend);
+  if(distBlend>0.000001f) {
    const float gain=std::clamp(std::pow(10.f,distDrive/20.f),1.f,32.f);
-   left=dryL+dw*(distort(dryL,distModel,gain)-dryL);
-   right=dryR+dw*(distort(dryR,distModel,gain)-dryR);
+   left=dryL+distBlend*(distort(dryL,distModel,gain)-dryL);
+   right=dryR+distBlend*(distort(dryR,distModel,gain)-dryR);
   }
   const float originalL=left,originalR=right;
   float sendL=left,sendR=right;
   reverse.process(sendL,sendR,reversed);
   // Do not reset the reverb on inactive steps: the tail must ring out.
   // Reverb processes continuously, but receives no new input on inactive steps.
-  if(!verbActive){sendL=0.f;sendR=0.f;}
+  sendL*=verbSend;sendR*=verbSend;
   const int model=std::clamp(verbModel,0,4);
   constexpr float sizes[5]={.2f,.45f,.7f,.88f,.98f};
   constexpr float damp[5]={.75f,.60f,.45f,.27f,.12f};
@@ -110,7 +115,7 @@ public:
    lastModel=model;lastLength=verbLength;lastDecay=verbDecay;
   }
   reverb.processStereo(&sendL,&sendR,1);
-  const float rw=std::clamp(verbWet,0.f,1.f);
+  const float rw=verbBlend;
   left=originalL*(1.f-rw)+rw*sendL;
   right=originalR*(1.f-rw)+rw*sendR;
   if(!std::isfinite(left))left=0.f;
@@ -122,5 +127,6 @@ private:
  juce::Reverb reverb;
  int lastModel=-1;
  float lastLength=-1.f,lastDecay=-1.f;
+ float distBlend=0.f,verbBlend=0.f,verbSend=0.f,fadeCoeff=.001f;
 };
 } // namespace di
