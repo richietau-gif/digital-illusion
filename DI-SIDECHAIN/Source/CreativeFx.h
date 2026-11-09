@@ -85,20 +85,6 @@ public:
   lastDistDriveDb=-1.f;distGain=1.f;
   distBlend=verbBlend=verbSend=0.f;
  }
- static float distort(float input,int model,float drive) noexcept {
-  const float x=std::clamp(std::isfinite(input)?input:0.f,-8.f,8.f)
-              *std::clamp(std::isfinite(drive)?drive:1.f,1.f,32.f);
-  constexpr float pi=3.14159265358979323846f;
-  float y=0.f;
-  switch(std::clamp(model,0,4)) {
-   case 0: y=std::tanh(x);break;                        // warm
-   case 1: y=2.f/pi*std::atan(2.f*x);break;             // soft acid
-   case 2: y=std::clamp(x,-.8f,.8f)/.8f;break;          // clip
-   case 3: y=std::sin(x*1.7f);break;                    // fold
-   default: y=std::tanh(x+0.35f*std::sin(x*4.f));break; // aggressive
-  }
-  return std::isfinite(y)?std::clamp(y,-1.f,1.f):0.f;
- }
  // Stage order: distort (optional) -> reverse send (optional) -> reverb.
  // Both effects have independent sends and never remove the original dry signal.
  void process(float& left,float& right,bool distActive,bool verbActive,
