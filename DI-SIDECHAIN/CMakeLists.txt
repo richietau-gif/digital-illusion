@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(DI_SIDEFX VERSION 5.3.0)
+project(DI_SIDEFX VERSION 5.4.0)
 set(CMAKE_CXX_STANDARD 17)
 include(FetchContent)
 FetchContent_Declare(juce GIT_REPOSITORY https://github.com/juce-framework/JUCE.git GIT_TAG 8.0.10 GIT_SHALLOW TRUE)
@@ -49,6 +49,15 @@ if(BUILD_TESTING)
  add_executable(di_curve_selection_smoke Tests/CurveSelectionSmoke.cpp)
  target_compile_features(di_curve_selection_smoke PRIVATE cxx_std_17)
  add_test(NAME di_curve_selection_smoke COMMAND di_curve_selection_smoke)
+ add_executable(di_dynamic_curve_smoke Tests/DynamicCurveSmoke.cpp)
+ target_compile_features(di_dynamic_curve_smoke PRIVATE cxx_std_17)
+ add_test(NAME di_dynamic_curve_smoke COMMAND di_dynamic_curve_smoke)
+ add_executable(di_creative_delay_smoke Tests/CreativeDelaySmoke.cpp)
+ target_compile_features(di_creative_delay_smoke PRIVATE cxx_std_17)
+ add_test(NAME di_creative_delay_smoke COMMAND di_creative_delay_smoke)
+ add_executable(di_analog_ladder_smoke Tests/AnalogLadderSmoke.cpp)
+ target_compile_features(di_analog_ladder_smoke PRIVATE cxx_std_17)
+ add_test(NAME di_analog_ladder_smoke COMMAND di_analog_ladder_smoke)
  # Treat warnings as errors for all standalone DSP regression executables,
  # matching the standalone Tests/CMakeLists.txt configuration.
  foreach(smoke_target IN ITEMS
@@ -63,7 +72,10 @@ if(BUILD_TESTING)
    di_creative_fx_smoke
    di_duck_voice_smoke
    di_creative_distort_2x_smoke
-   di_curve_selection_smoke)
+   di_curve_selection_smoke
+   di_dynamic_curve_smoke
+   di_creative_delay_smoke
+   di_analog_ladder_smoke)
   if(MSVC)
    target_compile_options(${smoke_target} PRIVATE /W4 /WX)
   else()
