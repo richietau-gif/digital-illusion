@@ -1,18 +1,20 @@
 name: Build DI SIDECHAIN VST3
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 jobs:
   windows-vst3:
-    runs-on: windows-2025
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
       - uses: lukka/get-cmake@latest
       - name: Configure
-        run: cmake -S DI-SIDECHAIN -B build -G "Visual Studio 18 2026" -A x64 -DCMAKE_BUILD_TYPE=Release
+        run: cmake -S DI-SIDECHAIN -B build -G "Visual Studio 17 2022" -A x64 -DBUILD_TESTING=ON
       - name: Build
+        id: build
         run: cmake --build build --config Release --parallel 2
+      - name: Run CTest
+        id: ctest
+        run: ctest --test-dir build -C Release --output-on-failure
       - name: Validate VST3 with pluginval
         shell: pwsh
         run: |
@@ -22,11 +24,27 @@ jobs:
           if (-not $exe) { throw "pluginval.exe not found" }
           $vst = Get-ChildItem "build/DISidechain_artefacts/Release/VST3" -Filter "*.vst3" | Select-Object -First 1 -ExpandProperty FullName
           if (-not $vst) { throw "VST3 not found" }
-          & $exe --strictness-level 5 --validate-in-process --timeout-ms 120000 --validate $vst
-          if ($LASTEXITCODE -ne 0) { throw "pluginval failed with exit code $LASTEXITCODE" }
+          # pluginval is a Windows GUI/console hybrid. Wait for its process tree to
+          # finish before inspecting the exit code, instead of trusting a potentially
+          # early $LASTEXITCODE reported by PowerShell's direct native invocation.
+          $args = @('--strictness-level', '5', '--validate-in-process', '--timeout-ms', '120000', '--validate', ('"' + $vst + '"'))
+          $validation = Start-Process -FilePath $exe -ArgumentList $args -Wait -PassThru -NoNewWindow -RedirectStandardOutput pluginval-stdout.log -RedirectStandardError pluginval-stderr.log
+          if (Test-Path pluginval-stdout.log) { Get-Content pluginval-stdout.log }
+          if (Test-Path pluginval-stderr.log) { Get-Content pluginval-stderr.log }
+          if ($validation.ExitCode -ne 0) { throw "pluginval returned nonzero exit code $($validation.ExitCode); see validation logs." }
+          Write-Host "pluginval exited successfully."
+      - name: Package release candidate
+        id: package
+        if: ${{ always() && steps.build.outcome == 'success' && steps.ctest.outcome == 'success' }}
+        shell: pwsh
+        run: |
+          $vst = Get-ChildItem "build/DISidechain_artefacts/Release/VST3" -Filter "*.vst3" | Select-Object -First 1
+          if (-not $vst) { throw "VST3 not found for packaging" }
+          Compress-Archive -Path $vst.FullName -DestinationPath "DI-SIDECHAIN-5.0-RC-Windows-x64.zip" -Force
       - name: Upload VST3
+        if: ${{ always() && steps.package.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
           name: DI-SIDECHAIN-Windows-VST3
-          path: build/DISidechain_artefacts/Release/VST3/*.vst3/
+          path: DI-SIDECHAIN-5.0-RC-Windows-x64.zip
           if-no-files-found: error
