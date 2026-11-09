@@ -48,6 +48,10 @@ public:
  void copyGridScene(int source,int destination) noexcept;
  std::array<std::atomic<float>,6> duckDepth{},duckLength{};
  std::array<std::array<std::atomic<float>,8>,6> duckCurve{};
+ std::array<std::atomic<int>,6> duckDynamicCount{};
+ std::array<std::array<std::atomic<float>,di::DynamicCurve::capacity>,6> duckDynamicX{},duckDynamicY{};
+ di::DynamicCurve getDynamicDuckCurve(int track) const noexcept;
+ void setDynamicDuckCurve(int track,const di::DynamicCurve& curve) noexcept;
  void setDuckTrackDepth(int track,float value) noexcept;
  void setDuckTrackLength(int track,float value) noexcept;
  float getDuckTrackDepth(int track) const noexcept;
