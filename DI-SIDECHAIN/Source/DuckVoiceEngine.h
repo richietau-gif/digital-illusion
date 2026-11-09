@@ -32,18 +32,23 @@ public:
  }
  // Called once per audio sample with shared Ableton step position.
  // active[track] is a snapshot of the currently entered column's cells.
+ void triggerTrack(int track,double samplesPerStep,float velocity=1.f) noexcept {
+  if(track<0||track>=tracks)return;
+  if(!std::isfinite(samplesPerStep)||samplesPerStep<=0.)return;
+  const auto& settings=tracksData[static_cast<size_t>(track)];
+  auto& voice=voices[static_cast<size_t>(track)];
+  voice.age=0.;
+  voice.samples=std::max(1.,samplesPerStep*settings.duration);
+  voice.depth=settings.depth*safe(velocity,0.f,1.f,1.f);
+  voice.shape=settings.shape;
+  voice.active=true;
+ }
  float process(int step,const std::array<bool,tracks>& active,double samplesPerStep) noexcept {
   if(step!=lastStep){
    lastStep=step;
    for(int t=0;t<tracks;++t){
     if(!active[static_cast<size_t>(t)])continue;
-    auto& voice=voices[static_cast<size_t>(t)];
-    const auto& settings=tracksData[static_cast<size_t>(t)];
-    voice.age=0.;
-    voice.samples=std::max(1.,samplesPerStep*settings.duration);
-    voice.depth=settings.depth;
-    voice.shape=settings.shape;
-    voice.active=true;
+    triggerTrack(t,samplesPerStep,1.f);
    }
   }
   float result=1.f;
