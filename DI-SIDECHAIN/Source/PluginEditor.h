@@ -65,6 +65,8 @@ private:
  int selectedStep=0;
  int selectedLane=0;
  int selectedTrack=0;
+ std::unique_ptr<juce::Slider> duckDepthSlider,duckLengthSlider;
+ void refreshDuckControls();
  void refreshCreativePage();
  std::unique_ptr<juce::TextButton> gridModeButton, reverbOnButton, distortOnButton, reverseButton;
  std::array<std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>,4> creativeButtonAttachments;
