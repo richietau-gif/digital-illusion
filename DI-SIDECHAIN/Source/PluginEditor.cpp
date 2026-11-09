@@ -201,11 +201,11 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  shapePresetButton->onClick=[this]{showShapeMenu();};
  sequencePrev->onClick=[this]{
   const int count=juce::jlimit(1,16,(int)sequenceCount->getValue());
-  selectedStep=(selectedStep+count-1)%count;repaint();
+  selectedStep=(selectedStep+count-1)%count;refreshCellControls();repaint();
  };
  sequenceNext->onClick=[this]{
   const int count=juce::jlimit(1,16,(int)sequenceCount->getValue());
-  selectedStep=(selectedStep+1)%count;repaint();
+  selectedStep=(selectedStep+1)%count;refreshCellControls();repaint();
  };
  const char* fxIds[]={"fxDrive","fxMix"};
  for(int i=0;i<2;++i){
@@ -230,13 +230,13 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  redoButton->onClick=[this]{redoEdit();};
  copyStep->onClick=[this]{
   const bool seq=sequenceToggle->getToggleState();
-  clipboard=captureShape(seq?selectedStep+selectedLane*32:0,seq);
+  clipboard=captureShape(currentShapeKey(),seq);
   hasClipboard=true;
  };
  pasteStep->onClick=[this]{
   if(!hasClipboard)return;
   const bool seq=sequenceToggle->getToggleState();
-  const int key=seq?selectedStep+selectedLane*32:0;
+  const int key=currentShapeKey();
   const auto before=captureShape(key,seq);
   applyShape(key,seq,clipboard);
   pushEdit(key,seq,before,clipboard);repaint();
@@ -246,11 +246,14 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
   const int key=seq?selectedStep+selectedLane*32:0;
   const auto before=captureShape(key,seq);
   constexpr di::ShapeSequencer::Shape volume{1.f,.92f,.08f,.02f,.32f,.75f,.95f,1.f};
-  const di::ShapeSequencer::Shape defaults=seq&&selectedLane>0
-   ? di::ShapeSequencer::Shape{selectedLane==2?.5f:1.f,selectedLane==2?.5f:1.f,
-       selectedLane==2?.5f:1.f,selectedLane==2?.5f:1.f,selectedLane==2?.5f:1.f,
-       selectedLane==2?.5f:1.f,selectedLane==2?.5f:1.f,selectedLane==2?.5f:1.f}
-   : volume;
+  const bool grid=seq&&proc.state.getRawParameterValue("creativeGridEnabled")->load()>0.5f;
+  const di::ShapeSequencer::Shape defaults=grid&&selectedLane==0
+    ? di::ShapeSequencer::Shape{0.f,.02f,.2f,.65f,.9f,1.f,1.f,1.f}
+    : seq&&selectedLane>0
+      ? di::ShapeSequencer::Shape{selectedLane==2?.5f:1.f,selectedLane==2?.5f:1.f,
+          selectedLane==2?.5f:1.f,selectedLane==2?.5f:1.f,selectedLane==2?.5f:1.f,
+          selectedLane==2?.5f:1.f,selectedLane==2?.5f:1.f,selectedLane==2?.5f:1.f}
+      : volume;
   applyShape(key,seq,defaults);
   pushEdit(key,seq,before,defaults);repaint();
  };
@@ -300,6 +303,7 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
   addAndMakeVisible(*sceneButtons[i]);
   sceneButtons[i]->onClick=[this,i]{
    proc.setGridScene(i);
+   refreshCellControls();
    for(int j=0;j<4;++j)if(sceneButtons[j])sceneButtons[j]->setToggleState(j==i,juce::dontSendNotification);
    repaint();
   };
@@ -346,6 +350,13 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  uiScale=scaleIndex==0?.5f:scaleIndex==1?.75f:1.f;
  setSize(juce::roundToInt(designWidth*uiScale),juce::roundToInt(designHeight*uiScale));
  startTimerHz(24);
+}
+int DISidechainEditor::currentShapeKey() const {
+ const bool seq=sequenceToggle&&sequenceToggle->getToggleState();
+ const bool grid=seq&&proc.state.getRawParameterValue("creativeGridEnabled")->load()>0.5f;
+ if(grid&&selectedLane==0&&selectedTrack>=0&&selectedTrack<6)
+  return 96+selectedTrack;
+ return seq?selectedStep+selectedLane*32:0;
 }
 di::ShapeSequencer::Shape DISidechainEditor::captureShape(int step,bool sequence) const {
  di::ShapeSequencer::Shape shape{};
@@ -559,9 +570,7 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  text(g,"SCENES",{784,180,83,20},12,faint,true);
  // Shape overview.
  paintPanel(g,{12,177,1512,269},"");
- text(g,"100%",{19,198,58,18},12,white);
- text(g,"50%",{25,270,52,18},12,white);
- text(g,"0%",{31,352,46,18},12,white);
+ text(g,"EVENTS",{19,203,59,18},10,faint,true);
  const bool sequenced=sequenceToggle->getToggleState();
  const int count=juce::jlimit(1,16,(int)sequenceCount->getValue());
  if(sequenced) {
@@ -937,10 +946,7 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
  if(selectedLane<3&&detailGraph.contains(pos)){
   draggingShape=true;
   dragNode=juce::jlimit(0,7,juce::roundToInt((pos.x-detailGraph.getX())*7.f/juce::jmax(1,detailGraph.getWidth())));
-  dragStep=selectedStep+(sequenceToggle->getToggleState()?selectedLane*32:0);
-  if(sequenceToggle->getToggleState()&&selectedLane==0&&selectedTrack<6&&
-     proc.state.getRawParameterValue("creativeGridEnabled")->load()>0.5f)
-   dragStep=96+selectedTrack;
+  dragStep=currentShapeKey();
   dragSequence=sequenceToggle->getToggleState();
   dragBefore=captureShape(dragStep,dragSequence);
  }
@@ -1017,9 +1023,7 @@ void DISidechainEditor::applyShapePreset(int index) {
  // A preset must edit the SAME curve that the visible editor renders.
  // Volume in GRID mode is the track's own duck envelope (96+track),
  // while Filter/Pan retain independent per-step modulation curves.
- const bool grid=seq&&proc.state.getRawParameterValue("creativeGridEnabled")->load()>0.5f;
- const int key=grid&&selectedLane==0&&selectedTrack<6?96+selectedTrack:
-               selectedStep+(seq?selectedLane*32:0);
+ const int key=currentShapeKey();
  auto before=captureShape(key,seq),after=before;
  for(int i=0;i<8;++i)after[i]=shapes[index][i];
  applyShape(key,seq,after);pushEdit(key,seq,before,after);
