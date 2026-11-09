@@ -24,6 +24,10 @@ private:
  DITheme theme;
  DISidechainProcessor& proc;
  std::array<std::unique_ptr<juce::TextButton>,4> filterButtons;
+ std::unique_ptr<juce::ComboBox> filterModelBox;
+ std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> filterModelAttachment;
+ std::unique_ptr<juce::Slider> filterResonanceSlider;
+ std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> filterResonanceAttachment;
  void refreshFilterButtons();
  void refreshFxButtons();
  void updateContextualControls();
