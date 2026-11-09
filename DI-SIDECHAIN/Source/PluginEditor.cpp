@@ -1100,7 +1100,7 @@ void DISidechainEditor::updatePoint(const juce::MouseEvent& e) {
  if(selectedLane>=3&&sequenceToggle&&sequenceToggle->getToggleState())return;
  // Continue editing the captured node beyond the graph edges; the vertical
  // value is clamped below. Starting a drag outside the graph remains ignored.
- if(!draggingShape&&!detailGraph.contains((e.position/uiScale).toInt()))return;
+ if(!draggingShape&&!detailGraph.expanded(12,12).contains((e.position/uiScale).toInt()))return;
  const auto r=detailGraph;
  const auto point=e.position/uiScale;
  const int i=draggingShape&&dragNode>=0?dragNode:juce::jlimit(0,7,juce::roundToInt((point.x-r.getX())/juce::jmax(1,r.getWidth())*7.f));
@@ -1150,12 +1150,12 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
   selectedStep=juce::jlimit(0,count-1,(pos.x-stepStrip.getX())*count/juce::jmax(1,stepStrip.getWidth()));
   refreshCellControls();repaint();return;
  }
- if(selectedLane==0&&sequenceToggle->getToggleState()&&detailGraph.contains(pos)&&
+ if(selectedLane==0&&sequenceToggle->getToggleState()&&detailGraph.expanded(13,13).contains(pos)&&
     proc.state.getRawParameterValue("creativeGridEnabled")->load()>.5f){
   auto c=proc.getDynamicDuckCurve(selectedTrack);
   const float tx=juce::jlimit(0.f,1.f,(pos.x-detailGraph.getX())/(float)juce::jmax(1,detailGraph.getWidth()));
   const float ty=juce::jlimit(0.f,1.f,(detailGraph.getBottom()-pos.y)/(float)juce::jmax(1,detailGraph.getHeight()));
-  int nearest=-1;float dist=18.f;
+  int nearest=-1;float dist=20.f;
   for(int n=0;n<c.count;++n){
    const float dx=(tx-c.x[(size_t)n])*detailGraph.getWidth();
    const float dy=(ty-c.y[(size_t)n])*detailGraph.getHeight();
@@ -1178,7 +1178,7 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
   }
   return;
  }
- if(selectedLane<3&&detailGraph.contains(pos)){
+ if(selectedLane<3&&detailGraph.expanded(10,10).contains(pos)){
   draggingShape=true;
   dragNode=juce::jlimit(0,7,juce::roundToInt((pos.x-detailGraph.getX())*7.f/juce::jmax(1,detailGraph.getWidth())));
   dragStep=currentShapeKey();
