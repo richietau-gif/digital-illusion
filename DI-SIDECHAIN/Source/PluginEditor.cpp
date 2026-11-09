@@ -550,49 +550,60 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  const bool sequenced=sequenceToggle->getToggleState();
  const int count=juce::jlimit(1,16,(int)sequenceCount->getValue());
  if(sequenced) {
-  // The rows are independent trigger tracks, NOT Volume/Filter/Pan lanes.
-  // FX rows 7/8 provide per-step reverb and distortion sends.
+  // Only six musical trigger tracks. All effects live in the modulation rack,
+  // with routing flags belonging to every individual track/step cell.
   const int active=proc.activeSequenceStep.load(std::memory_order_relaxed);
   constexpr int labelWidth=116;
-  const int gridLeft=graph.getX()+labelWidth, gridWidth=graph.getRight()-gridLeft;
-  const int top=graph.getY()+23, rowHeight=(graph.getBottom()-top)/8;
-  const char* names[]={"TRACK 1","TRACK 2","TRACK 3","TRACK 4","TRACK 5","TRACK 6","REVERB","DISTORT"};
-  const juce::Colour colours[]={lime,lime,lime,lime,lime,lime,cyan,orange};
-  for(int step=0;step<count;++step) {
-   const int x0=gridLeft+step*gridWidth/count;
-   const int x1=gridLeft+(step+1)*gridWidth/count;
-   text(g,juce::String(step+1),{x0+4,graph.getY()+2,x1-x0-8,16},10,
+  const int left=graph.getX()+labelWidth;
+  const int available=graph.getRight()-left;
+  const int top=graph.getY()+23;
+  const float rowHeight=(graph.getBottom()-top)/6.f;
+  for(int step=0;step<count;++step){
+   const int x0=left+step*available/count,x1=left+(step+1)*available/count;
+   text(g,juce::String(step+1),{x0+5,graph.getY()+1,x1-x0-10,18},11,
         step==active?lime:faint,step==selectedStep);
-   if(step==active) {
-    g.setColour(lime.withAlpha(.17f));
-    g.fillRect(x0,top,juce::jmax(1,x1-x0),graph.getBottom()-top);
-   }
+   if(step==active){g.setColour(lime.withAlpha(.12f));g.fillRect(x0,top,x1-x0,graph.getBottom()-top);}
   }
-  for(int track=0;track<8;++track) {
-   const int y=top+track*rowHeight;
-   g.setColour(track==selectedTrack?juce::Colour(0xff234451):juce::Colour(0xff102432));
-   g.fillRect(graph.getX(),y,labelWidth-4,rowHeight-1);
-   text(g,names[track],{graph.getX()+5,y+1,labelWidth-9,rowHeight-2},11,
-        track==selectedTrack?colours[track]:white,track==selectedTrack);
-   for(int step=0;step<count;++step) {
-    const int x0=gridLeft+step*gridWidth/count;
-    const int x1=gridLeft+(step+1)*gridWidth/count;
-    const auto cell=juce::Rectangle<float>((float)x0+1,(float)y+1,
-       (float)juce::jmax(1,x1-x0-3),(float)rowHeight-2);
+  for(int track=0;track<6;++track){
+   const int y=top+juce::roundToInt(track*rowHeight);
+   const int nextY=top+juce::roundToInt((track+1)*rowHeight);
+   const int h=juce::jmax(1,nextY-y-1);
+   g.setColour(track==selectedTrack?juce::Colour(0xff244555):juce::Colour(0xff102637));
+   g.fillRoundedRectangle(juce::Rectangle<float>((float)graph.getX(),(float)y,(float)labelWidth-4,(float)h),3.f);
+   text(g,"TRACK "+juce::String(track+1),{graph.getX()+7,y,labelWidth-12,h},12,
+        track==selectedTrack?lime:white,track==selectedTrack);
+   for(int step=0;step<count;++step){
+    const int x0=left+step*available/count,x1=left+(step+1)*available/count;
+    const auto cell=juce::Rectangle<float>((float)x0+2,(float)y+1,
+        (float)juce::jmax(1,x1-x0-4),(float)juce::jmax(1,h-2));
     const bool on=proc.getGridCell(track,step);
-    g.setColour(on?colours[track]:juce::Colour(0xff23313b));
-    g.fillRoundedRectangle(cell,2.f);
-    if(step==selectedStep&&track==selectedTrack) {
-     g.setColour(juce::Colour(0xffffb84d));g.drawRoundedRectangle(cell,2.f,1.7f);
+    const bool bypass=proc.getCellFxFlag(track,step,3);
+    const bool rvb=proc.getCellFxFlag(track,step,0);
+    const bool dist=proc.getCellFxFlag(track,step,1);
+    const bool reverse=proc.getCellFxFlag(track,step,2);
+    g.setColour(!on?juce::Colour(0xff223442):
+        bypass?juce::Colour(0xff324350):lime);
+    g.fillRoundedRectangle(cell,3.f);
+    if(on&&bypass){
+     g.setColour(orange.withAlpha(.85f));
+     g.drawLine(cell.getX()+3,cell.getBottom()-3,cell.getRight()-3,cell.getY()+3,1.5f);
     }
-    // Tiny reverse-before-reverb switch in each REVERB cell.
-    if(track==6) {
-     const bool reversed=proc.getGridReverse(step);
-     const auto arrow=juce::Rectangle<float>(cell.getRight()-14.f,cell.getY()+1.f,12.f,cell.getHeight()-2.f);
-     g.setColour(reversed?orange:juce::Colour(0xff566874));
-     g.fillRoundedRectangle(arrow,2.f);
-     text(g,"<",arrow.toNearestInt(),10,reversed?bg:white,true);
+    if(track==selectedTrack&&step==selectedStep){
+     g.setColour(orange);g.drawRoundedRectangle(cell,3.f,1.8f);
     }
+    // Small status chips make the active modulation audible at a glance.
+    int flagX=(int)cell.getRight()-5;
+    const auto flag=[&](bool enabled,const juce::String& caption,juce::Colour colour){
+     if(!enabled)return;
+     flagX-=16;
+     g.setColour(colour);
+     g.fillRoundedRectangle(juce::Rectangle<float>((float)flagX,(float)cell.getY()+3,14.f,14.f),2.f);
+     text(g,caption,{flagX+2,(int)cell.getY()+3,12,14},9,DITheme::dark(),true);
+    };
+    flag(reverse&&rvb,"<",orange);
+    flag(dist,"D",juce::Colour(0xffff9554));
+    flag(rvb,"R",cyan);
+    if(bypass)flag(true,"X",orange);
    }
   }
  } else paintShape(g,graph,selectedStep,false);
@@ -611,12 +622,18 @@ void DISidechainEditor::paint(juce::Graphics& g) {
   text(g,juce::String(i+1),r.toNearestInt().reduced(5,3).withHeight(16),12,white,true);
   if(sequenced) {
    const bool event=proc.getGridCell(selectedTrack,i);
-   const auto colour=selectedTrack==6?cyan:selectedTrack==7?orange:lime;
+   const auto colour=lime;
    g.setColour(event?colour:juce::Colour(0xff223744));
    g.fillRoundedRectangle(juce::Rectangle<float>(r.getX()+5.f,r.getY()+22.f,
                                                   r.getWidth()-10.f,19.f),3.f);
-   if(selectedTrack==6&&proc.getGridReverse(i))
-    text(g,"<",juce::Rectangle<int>((int)r.getRight()-18,(int)r.getY()+23,14,16),12,orange,true);
+   if(event){
+    juce::String tags;
+    if(proc.getCellFxFlag(selectedTrack,i,0))tags+="R ";
+    if(proc.getCellFxFlag(selectedTrack,i,1))tags+="D ";
+    if(proc.getCellFxFlag(selectedTrack,i,2))tags+="< ";
+    if(proc.getCellFxFlag(selectedTrack,i,3))tags+="OFF";
+    if(tags.isNotEmpty())text(g,tags,r.toNearestInt().reduced(6,3).withTrimmedTop(20),10,DITheme::dark(),true);
+   }
   } else {
    juce::Path miniature;
    for(int node=0;node<8;++node) {
