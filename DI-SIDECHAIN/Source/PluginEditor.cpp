@@ -978,6 +978,22 @@ void DISidechainEditor::resized() {
  }
 }
 void DISidechainEditor::updatePoint(const juce::MouseEvent& e) {
+ const bool gridShape=sequenceToggle->getToggleState()&&selectedLane==0&&selectedTrack<6&&
+  proc.state.getRawParameterValue("creativeGridEnabled")->load()>.5f;
+ if(gridShape){
+  if(!draggingShape||dragNode<0)return;
+  const auto point=e.position/uiScale;
+  auto c=proc.getDynamicDuckCurve(selectedTrack);
+  c.move(dragNode,(point.x-detailGraph.getX())/juce::jmax(1,detailGraph.getWidth()),
+   (detailGraph.getBottom()-point.y)/(float)juce::jmax(1,detailGraph.getHeight()));
+  if(snapButton&&snapButton->getToggleState()){
+   const int k=dragNode;
+   if(k>0&&k<c.count-1)c.x[(size_t)k]=std::round(c.x[(size_t)k]*16.f)/16.f;
+   c.y[(size_t)k]=std::round(c.y[(size_t)k]*16.f)/16.f;
+  }
+  proc.setDynamicDuckCurve(selectedTrack,c);
+  repaint();return;
+ }
  if(selectedLane>=3&&sequenceToggle&&sequenceToggle->getToggleState())return;
  // Continue editing the captured node beyond the graph edges; the vertical
  // value is clamped below. Starting a drag outside the graph remains ignored.
@@ -1028,6 +1044,34 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
   selectedStep=juce::jlimit(0,count-1,(pos.x-stepStrip.getX())*count/juce::jmax(1,stepStrip.getWidth()));
   refreshCellControls();repaint();return;
  }
+ if(selectedLane==0&&sequenceToggle->getToggleState()&&detailGraph.contains(pos)&&
+    proc.state.getRawParameterValue("creativeGridEnabled")->load()>.5f){
+  auto c=proc.getDynamicDuckCurve(selectedTrack);
+  const float tx=juce::jlimit(0.f,1.f,(pos.x-detailGraph.getX())/(float)juce::jmax(1,detailGraph.getWidth()));
+  const float ty=juce::jlimit(0.f,1.f,(detailGraph.getBottom()-pos.y)/(float)juce::jmax(1,detailGraph.getHeight()));
+  int nearest=-1;float dist=18.f;
+  for(int n=0;n<c.count;++n){
+   const float dx=(tx-c.x[(size_t)n])*detailGraph.getWidth();
+   const float dy=(ty-c.y[(size_t)n])*detailGraph.getHeight();
+   const float d=std::sqrt(dx*dx+dy*dy);
+   if(d<dist){dist=d;nearest=n;}
+  }
+  if(e.mods.isRightButtonDown()){
+   auto before=c;
+   if(c.erase(nearest)){proc.setDynamicDuckCurve(selectedTrack,c);pushDynamicEdit(selectedTrack,before,c);repaint();}
+   return;
+  }
+  if(e.getNumberOfClicks()>=2){
+   auto before=c;
+   if(c.insert(tx,ty)){proc.setDynamicDuckCurve(selectedTrack,c);pushDynamicEdit(selectedTrack,before,c);repaint();}
+   return;
+  }
+  if(nearest>=0){
+   draggingShape=true;dragNode=nearest;dragStep=96+selectedTrack;
+   dragSequence=true;dragDynamicBefore=c;
+  }
+  return;
+ }
  if(selectedLane<3&&detailGraph.contains(pos)){
   draggingShape=true;
   dragNode=juce::jlimit(0,7,juce::roundToInt((pos.x-detailGraph.getX())*7.f/juce::jmax(1,detailGraph.getWidth())));
@@ -1042,7 +1086,10 @@ void DISidechainEditor::mouseUp(const juce::MouseEvent&) {
  if(!draggingShape)return;
  draggingShape=false;
  dragNode=-1;
- pushEdit(dragStep,dragSequence,dragBefore,captureShape(dragStep,dragSequence));
+ if(dragSequence&&dragStep>=96&&dragStep<102){
+  const auto after=proc.getDynamicDuckCurve(dragStep-96);
+  pushDynamicEdit(dragStep-96,dragDynamicBefore,after);
+ } else pushEdit(dragStep,dragSequence,dragBefore,captureShape(dragStep,dragSequence));
 }
 
 void DISidechainEditor::applyFactoryPreset(int index) {
