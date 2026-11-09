@@ -746,6 +746,7 @@ void DISidechainEditor::paint(juce::Graphics& g) {
    g.fillRoundedRectangle(juce::Rectangle<float>((float)graph.getX(),(float)y,(float)labelWidth-4,(float)h),3.f);
    text(g,"TRACK "+juce::String(track+1),{graph.getX()+7,y,labelWidth-12,h},12,
         track==selectedTrack?lime:white,track==selectedTrack);
+   const auto trackCurve=proc.getDynamicDuckCurve(track);
    for(int step=0;step<count;++step){
     const int x0=left+step*available/count,x1=left+(step+1)*available/count;
     const auto cell=juce::Rectangle<float>((float)x0+2,(float)y+1,
@@ -755,6 +756,7 @@ void DISidechainEditor::paint(juce::Graphics& g) {
     const bool rvb=proc.getCellFxFlag(track,step,0);
     const bool dist=proc.getCellFxFlag(track,step,1);
     const bool reverse=proc.getCellFxFlag(track,step,2);
+    const bool delayOn=proc.getCellFxFlag(track,step,4);
     g.setColour(!on?juce::Colour(0xff26303b):
         bypass?juce::Colour(0xff324350):lime);
     g.fillRoundedRectangle(cell,3.f);
@@ -765,7 +767,7 @@ void DISidechainEditor::paint(juce::Graphics& g) {
     if(on&&!bypass){
      juce::Path miniature;
      for(int node=0;node<8;++node){
-      const float v=proc.getDuckCurvePoint(track,node);
+      const float v=trackCurve.evaluate(node/7.f);
       const float px=cell.getX()+5.f+(cell.getWidth()-10.f)*node/7.f;
       const float py=cell.getBottom()-2.f-v*(cell.getHeight()*.32f);
       if(node==0)miniature.startNewSubPath(px,py);
@@ -786,10 +788,11 @@ void DISidechainEditor::paint(juce::Graphics& g) {
      g.fillRoundedRectangle(juce::Rectangle<float>((float)flagX,(float)cell.getY()+3,14.f,14.f),2.f);
      text(g,caption,{flagX+2,(int)cell.getY()+3,12,14},9,DITheme::dark(),true);
     };
-    flag(reverse&&rvb,"<",orange);
-    flag(dist,"D",juce::Colour(0xffff9554));
-    flag(rvb,"R",cyan);
-    if(bypass)flag(true,"X",orange);
+    flag(reverse&&rvb,"<",juce::Colour(0xff579dff));
+    flag(dist,"D",juce::Colour(0xffffa454));
+    flag(delayOn,"L",juce::Colour(0xffed6acd));
+    flag(rvb,"R",juce::Colour(0xff579dff));
+    if(bypass)flag(true,"X",juce::Colour(0xff87939f));
    }
   }
   // The transport is row seven of exactly the SAME column geometry.
@@ -812,8 +815,6 @@ void DISidechainEditor::paint(juce::Graphics& g) {
    if(step==selectedStep){g.setColour(orange);g.drawRoundedRectangle(cell,3.f,1.7f);}
   }
  } else paintShape(g,graph,selectedStep,false);
- const auto laneColour=selectedLane==0?orange:selectedLane==1?cyan:juce::Colour(0xffd36afb);
- const int playing=proc.activeSequenceStep.load(std::memory_order_relaxed);
  // The SEQUENCE row is now part of EVENTS, sharing exact track columns.
  // No duplicate step thumbnails are drawn below the six musical tracks.
  // STEP EDIT (left), six concise modulation selectors, wide CELL / TRACK.
