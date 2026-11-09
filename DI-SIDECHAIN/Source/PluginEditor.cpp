@@ -270,7 +270,7 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  copySceneButton->onClick=[this]{
   juce::PopupMenu menu;
   const int source=proc.getGridScene();
-  for(int i=0;i<4;++i)if(i!=source)menu.addItem(i+1,"Copy to Scene "+juce::String::charToString((juce::juce_wchar)('A'+i)));
+  for(int i=0;i<4;++i)if(i!=source)menu.addItem(i+1,"Copy to Scene "+juce::String("ABCD").substring(i,i+1));
   juce::Component::SafePointer<DISidechainEditor> safe(this);
   menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(copySceneButton.get()),[safe,source](int selected){
    if(safe&&selected>=1&&selected<=4){safe->proc.copyGridScene(source,selected-1);safe->repaint();}
