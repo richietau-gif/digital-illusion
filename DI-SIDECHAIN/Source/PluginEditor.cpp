@@ -388,6 +388,13 @@ void DISidechainEditor::applyShape(int step,bool sequence,const di::ShapeSequenc
  const int lane=step/32, actualStep=step%32;
  for(int i=0;i<8;++i){if(sequence){if(lane==0)proc.setSequencePoint(actualStep,i,shape[i]);else proc.setModulationPoint(lane-1,actualStep,i,shape[i]);}else if(std::isfinite(shape[i]))proc.points[i].store(juce::jlimit(0.f,1.f,shape[i]),std::memory_order_relaxed);}
 }
+void DISidechainEditor::pushDynamicEdit(int track,const di::DynamicCurve& before,const di::DynamicCurve& after) {
+ if(track<0||track>=6)return;
+ if(undoStack.size()>=64)undoStack.erase(undoStack.begin());
+ ShapeEdit e{};e.step=96+track;e.sequence=true;e.dynamic=true;
+ e.beforeDynamic=before;e.afterDynamic=after;
+ undoStack.push_back(e);redoStack.clear();
+}
 void DISidechainEditor::pushEdit(int step,bool sequence,const di::ShapeSequencer::Shape& before,const di::ShapeSequencer::Shape& after) {
  if(before==after)return;
  if(undoStack.size()>=64)undoStack.erase(undoStack.begin());
@@ -397,13 +404,15 @@ void DISidechainEditor::pushEdit(int step,bool sequence,const di::ShapeSequencer
 void DISidechainEditor::undoEdit(){
  if(undoStack.empty())return;
  const auto edit=undoStack.back();undoStack.pop_back();
- applyShape(edit.step,edit.sequence,edit.before);
+ if(edit.dynamic)proc.setDynamicDuckCurve(edit.step-96,edit.beforeDynamic);
+ else applyShape(edit.step,edit.sequence,edit.before);
  redoStack.push_back(edit);repaint();
 }
 void DISidechainEditor::redoEdit(){
  if(redoStack.empty())return;
  const auto edit=redoStack.back();redoStack.pop_back();
- applyShape(edit.step,edit.sequence,edit.after);
+ if(edit.dynamic)proc.setDynamicDuckCurve(edit.step-96,edit.afterDynamic);
+ else applyShape(edit.step,edit.sequence,edit.after);
  undoStack.push_back(edit);repaint();
 }
 void DISidechainEditor::selectFilter(int index) {
