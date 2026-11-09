@@ -1054,8 +1054,8 @@ void DISidechainEditor::showSetupMenu() {
   });
 }
 void DISidechainEditor::saveUserPreset() {
- const auto destination=juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("DI-Sidechain.dipreset");
- presetChooser=std::make_unique<juce::FileChooser>("Save DI SIDECHAIN preset",destination,"*.dipreset");
+ const auto destination=juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("DI-Sidefx.disidefx");
+ presetChooser=std::make_unique<juce::FileChooser>("Save DI SIDEFX preset",destination,"*.disidefx");
  juce::Component::SafePointer<DISidechainEditor> safe(this);
  presetChooser->launchAsync(juce::FileBrowserComponent::saveMode|juce::FileBrowserComponent::canSelectFiles,
   [safe](const juce::FileChooser& chooser){
@@ -1072,13 +1072,13 @@ void DISidechainEditor::saveUserPreset() {
    } else {
     safe->proc.state.state.setProperty("presetName",oldName,nullptr);
     juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon,
-      "DI SIDECHAIN", "Could not save the preset file. Check folder permissions.");
+      "DI SIDEFX", "Could not save the preset file. Check folder permissions.");
    }
   });
 }
 void DISidechainEditor::loadUserPreset() {
  const auto folder=juce::File::getSpecialLocation(juce::File::userDocumentsDirectory);
- presetChooser=std::make_unique<juce::FileChooser>("Load DI SIDECHAIN preset",folder,"*.dipreset");
+ presetChooser=std::make_unique<juce::FileChooser>("Load DI SIDEFX preset",folder,"*.disidefx");
  juce::Component::SafePointer<DISidechainEditor> safe(this);
  presetChooser->launchAsync(juce::FileBrowserComponent::openMode|juce::FileBrowserComponent::canSelectFiles,
   [safe](const juce::FileChooser& chooser){
@@ -1105,7 +1105,7 @@ void DISidechainEditor::loadUserPreset() {
     safe->repaint();
    } else {
     juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon,
-      "DI SIDECHAIN", "Could not read this preset file.");
+      "DI SIDEFX", "Could not read this preset file.");
    }
   });
 }
