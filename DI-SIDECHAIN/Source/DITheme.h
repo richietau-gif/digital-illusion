@@ -27,15 +27,17 @@ public:
   const float angle=start+juce::jlimit(0.f,1.f,pos)*(end-start);
   juce::Colour accent=slider.findColour(juce::Slider::rotarySliderFillColourId);
   if(accent.isTransparent())accent=cyan();
+  const bool enabled=slider.isEnabled();
+  if(!enabled)accent=juce::Colour(0xff3d4b54);
   g.setColour(juce::Colours::black.withAlpha(.3f));
   g.fillEllipse(c.x-radius+1.2f,c.y-radius+2.4f,2.f*radius,2.f*radius);
   g.setColour(juce::Colour(0xff101e29));
   g.fillEllipse(c.x-radius,c.y-radius,2.f*radius,2.f*radius);
-  g.setColour(juce::Colour(0xff4b6779));
+  g.setColour(enabled?juce::Colour(0xff4b6779):juce::Colour(0xff26323c));
   g.drawEllipse(c.x-radius,c.y-radius,2.f*radius,2.f*radius,1.f);
   juce::Path track;
   track.addCentredArc(c.x,c.y,radius+4.f,radius+4.f,0.f,start,end,true);
-  g.setColour(juce::Colour(0xff304454));
+  g.setColour(enabled?juce::Colour(0xff304454):juce::Colour(0xff1e2a34));
   g.strokePath(track,juce::PathStrokeType(2.7f,juce::PathStrokeType::curved,juce::PathStrokeType::rounded));
   juce::Path progress;
   progress.addCentredArc(c.x,c.y,radius+4.f,radius+4.f,0.f,start,angle,true);
@@ -44,7 +46,7 @@ public:
   const float length=radius*.68f;
   const auto tip=c.translated(std::sin(angle)*length,-std::cos(angle)*length);
   juce::Path pointer;pointer.startNewSubPath(c);pointer.lineTo(tip);
-  g.setColour(juce::Colour(0xffe7f7ff));
+  g.setColour(enabled?juce::Colour(0xffe7f7ff):juce::Colour(0xff53616c));
   g.strokePath(pointer,juce::PathStrokeType(2.f,juce::PathStrokeType::curved,juce::PathStrokeType::rounded));
   g.setColour(accent);
   g.fillEllipse(c.x-2.f,c.y-2.f,4.f,4.f);
