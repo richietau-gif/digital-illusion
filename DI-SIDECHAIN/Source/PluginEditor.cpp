@@ -311,6 +311,39 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
   addAndMakeVisible(*creativeSliders[i]);
   creativeSliderAttachments[i]=std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(p.state,sliderIds[i],*creativeSliders[i]);
  }
+ const char* delayToggleIds[]={"delayEnabled","delaySync","delayPingpong"};
+ const char* delayToggleLabels[]={"DELAY ON","SYNC","PING-PONG"};
+ std::unique_ptr<juce::TextButton>* delayToggles[]={&delayOnButton,&delaySyncButton,&delayPingpongButton};
+ for(int i=0;i<3;++i){
+  *delayToggles[i]=std::make_unique<juce::TextButton>(delayToggleLabels[i]);
+  buttonStyle(**delayToggles[i]);
+  (*delayToggles[i])->setClickingTogglesState(true);
+  (*delayToggles[i])->setColour(juce::TextButton::buttonOnColourId,juce::Colour(0xffed6acd));
+  (*delayToggles[i])->setColour(juce::TextButton::textColourOnId,juce::Colour(0xff0b1018));
+  addAndMakeVisible(**delayToggles[i]);
+  delayButtonAttachments[i]=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+   p.state,delayToggleIds[i],**delayToggles[i]);
+ }
+ const char* delayIds[]={"delayWet","delayFeedback","delayTime"};
+ for(int i=0;i<3;++i){
+  delaySliders[i]=std::make_unique<juce::Slider>(juce::Slider::LinearHorizontal,juce::Slider::TextBoxRight);
+  delaySliders[i]->setTextBoxStyle(juce::Slider::TextBoxRight,false,78,24);
+  delaySliders[i]->textFromValueFunction=[i](double v){
+   return i<2?juce::String(juce::roundToInt(v*100.))+"%":
+              juce::String(juce::roundToInt(v))+" ms";
+  };
+  delaySliders[i]->setColour(juce::Slider::trackColourId,juce::Colour(0xffed6acd));
+  delaySliders[i]->setColour(juce::Slider::thumbColourId,juce::Colour(0xffed6acd));
+  delaySliders[i]->setColour(juce::Slider::textBoxTextColourId,juce::Colours::white);
+  addAndMakeVisible(*delaySliders[i]);
+  delaySliderAttachments[i]=std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+   p.state,delayIds[i],*delaySliders[i]);
+ }
+ delayDivisionBox=std::make_unique<juce::ComboBox>();
+ delayDivisionBox->addItemList({"1/32","1/16","1/8","1/8 dotted","1/4","1/4 dotted","1/2","1 bar"},1);
+ addAndMakeVisible(*delayDivisionBox);
+ delayDivisionAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+  p.state,"delayDivision",*delayDivisionBox);
  for(int i=0;i<4;++i){
   sceneButtons[i]=std::make_unique<juce::TextButton>(juce::String("ABCD").substring(i,i+1));
   buttonStyle(*sceneButtons[i]);
