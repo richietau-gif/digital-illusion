@@ -46,6 +46,9 @@ if(BUILD_TESTING)
  add_executable(di_creative_distort_2x_smoke Tests/CreativeDistort2xSmoke.cpp)
  target_compile_features(di_creative_distort_2x_smoke PRIVATE cxx_std_17)
  add_test(NAME di_creative_distort_2x_smoke COMMAND di_creative_distort_2x_smoke)
+ add_executable(di_curve_selection_smoke Tests/CurveSelectionSmoke.cpp)
+ target_compile_features(di_curve_selection_smoke PRIVATE cxx_std_17)
+ add_test(NAME di_curve_selection_smoke COMMAND di_curve_selection_smoke)
  # Treat warnings as errors for all standalone DSP regression executables,
  # matching the standalone Tests/CMakeLists.txt configuration.
  foreach(smoke_target IN ITEMS
@@ -59,7 +62,8 @@ if(BUILD_TESTING)
    di_duck_track_grid_smoke
    di_creative_fx_smoke
    di_duck_voice_smoke
-   di_creative_distort_2x_smoke)
+   di_creative_distort_2x_smoke
+   di_curve_selection_smoke)
   if(MSVC)
    target_compile_options(${smoke_target} PRIVATE /W4 /WX)
   else()
