@@ -58,6 +58,9 @@ if(BUILD_TESTING)
  add_executable(di_analog_ladder_smoke Tests/AnalogLadderSmoke.cpp)
  target_compile_features(di_analog_ladder_smoke PRIVATE cxx_std_17)
  add_test(NAME di_analog_ladder_smoke COMMAND di_analog_ladder_smoke)
+ add_executable(di_seqfx_layout_smoke Tests/SeqfxLayoutSmoke.cpp)
+ target_compile_features(di_seqfx_layout_smoke PRIVATE cxx_std_17)
+ add_test(NAME di_seqfx_layout_smoke COMMAND di_seqfx_layout_smoke)
  # Treat warnings as errors for all standalone DSP regression executables,
  # matching the standalone Tests/CMakeLists.txt configuration.
  foreach(smoke_target IN ITEMS
@@ -75,7 +78,8 @@ if(BUILD_TESTING)
    di_curve_selection_smoke
    di_dynamic_curve_smoke
    di_creative_delay_smoke
-   di_analog_ladder_smoke)
+   di_analog_ladder_smoke
+   di_seqfx_layout_smoke)
   if(MSVC)
    target_compile_options(${smoke_target} PRIVATE /W4 /WX)
   else()
