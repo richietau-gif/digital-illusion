@@ -75,12 +75,40 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  shapeOffset->setColour(juce::Slider::textBoxOutlineColourId,juce::Colours::transparentBlack);
  addAndMakeVisible(*shapeOffset);
  shapeOffsetAttachment=std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(p.state,"shapeOffset",*shapeOffset);
- const char* laneNames[]={"VOLUME","FILTER","PAN"};
- for(int i=0;i<3;++i){
+ const char* laneNames[]={"VOLUME","FILTER","PAN","REVERB","DISTORT"};
+ for(int i=0;i<5;++i){
   laneTabs[i]=std::make_unique<juce::TextButton>(laneNames[i]);
-  laneTabs[i]->onClick=[this,i]{if(i>0&&!sequenceToggle->getToggleState())sequenceToggle->setToggleState(true,juce::sendNotificationSync);selectedLane=i;if(shapeOffset)shapeOffset->setEnabled(selectedLane==0);for(int j=0;j<3;++j)laneTabs[j]->setToggleState(j==selectedLane,juce::dontSendNotification);repaint();};
+  buttonStyle(*laneTabs[i]);
+  laneTabs[i]->onClick=[this,i]{
+   if(i>0&&!sequenceToggle->getToggleState())sequenceToggle->setToggleState(true,juce::sendNotificationSync);
+   selectedLane=i;
+   if(shapeOffset)shapeOffset->setEnabled(selectedLane==0);
+   for(int j=0;j<5;++j)laneTabs[j]->setToggleState(j==selectedLane,juce::dontSendNotification);
+   refreshCreativePage();repaint();
+  };
   addAndMakeVisible(*laneTabs[i]);
  }
+ // Per-cell routing: duck volume, reverb send, distortion send, pre-reverb
+ // reverse, and an absolute bypass. Unlike global rack switches, these flags
+ // belong to one selected track/step in one scene.
+ const char* cellLabels[]={"DUCK","RVB","DST","REV <","BYP"};
+ for(int i=0;i<5;++i){
+  cellControls[i]=std::make_unique<juce::TextButton>(cellLabels[i]);
+  buttonStyle(*cellControls[i]);
+  cellControls[i]->setClickingTogglesState(true);
+  addAndMakeVisible(*cellControls[i]);
+  cellControls[i]->onClick=[this,i]{
+   if(i==0)proc.setGridCell(selectedTrack,selectedStep,!proc.getGridCell(selectedTrack,selectedStep));
+   else proc.setCellFxFlag(selectedTrack,selectedStep,i==4?3:i-1,
+                           !proc.getCellFxFlag(selectedTrack,selectedStep,i==4?3:i-1));
+   if(i==1&&proc.getCellFxFlag(selectedTrack,selectedStep,0)&&reverbOnButton&&!reverbOnButton->getToggleState())
+    reverbOnButton->setToggleState(true,juce::sendNotificationSync);
+   if(i==2&&proc.getCellFxFlag(selectedTrack,selectedStep,1)&&distortOnButton&&!distortOnButton->getToggleState())
+    distortOnButton->setToggleState(true,juce::sendNotificationSync);
+   refreshCellControls();repaint();
+  };
+ }
+
  const char* laneIds[]={"filterMod","panMod"};
  for(int i=0;i<2;++i){
   laneSliders[i]=std::make_unique<juce::Slider>(juce::Slider::LinearHorizontal,juce::Slider::TextBoxRight);
@@ -699,12 +727,22 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  const juce::StringArray db{"0","-6","-12","-18","-24","-36"};
  for(int i=0;i<db.size();++i)text(g,db[i],{1496,781+i*20,39,16},10,faint);
 }
+void DISidechainEditor::refreshCellControls(){
+ const bool seq=sequenceToggle&&sequenceToggle->getToggleState();
+ for(int i=0;i<5;++i)if(cellControls[i]){
+  cellControls[i]->setVisible(seq&&selectedTrack<6);
+  const bool active=i==0?proc.getGridCell(selectedTrack,selectedStep):
+    proc.getCellFxFlag(selectedTrack,selectedStep,i==4?3:i-1);
+  cellControls[i]->setToggleState(active,juce::dontSendNotification);
+ }
+}
 void DISidechainEditor::refreshDuckControls(){
  if(selectedTrack>=6)return;
  if(duckDepthSlider)duckDepthSlider->setValue(proc.getDuckTrackDepth(selectedTrack),juce::dontSendNotification);
  if(duckLengthSlider)duckLengthSlider->setValue(proc.getDuckTrackLength(selectedTrack),juce::dontSendNotification);
 }
 void DISidechainEditor::refreshCreativePage(){
+ refreshCellControls();
  const bool sceneActive=sequenceToggle&&sequenceToggle->getToggleState();
  if(copySceneButton)copySceneButton->setVisible(sceneActive);
  for(int j=0;j<4;++j)if(sceneButtons[j]){
