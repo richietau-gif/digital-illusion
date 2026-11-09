@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#include "DynamicCurve.h"
 
 // Six independent, allocation-free duck voices. Events are triggered only on
 // step ENTER, not repeatedly while a step is held. The strongest attenuation
@@ -17,6 +18,8 @@ public:
   float depth=1.f;          // 0 = no duck, 1 = full programmed shape
   float duration=1.f;       // multiple of one host step, 0.05 .. 4
   Shape shape{{0.f,.02f,.2f,.65f,.9f,1.f,1.f,1.f}};
+  DynamicCurve dynamicCurve{};
+  bool useDynamic=false;
  };
  void reset() noexcept {
   lastGeneration=std::numeric_limits<std::uint64_t>::max();
@@ -43,6 +46,8 @@ public:
   voice.samples=std::max(1.,samplesPerStep*settings.duration);
   voice.depth=settings.depth*safe(velocity,0.f,1.f,1.f);
   voice.shape=settings.shape;
+  voice.dynamicCurve=settings.dynamicCurve;
+  voice.useDynamic=settings.useDynamic;
   voice.active=true;
  }
  // Deterministic convenience entry point for standalone tests.
@@ -62,7 +67,8 @@ public:
   for(auto& v:voices){
    if(!v.active)continue;
    const double pos=std::clamp(v.age/v.samples,0.,1.);
-   const float curve=interpolate(v.shape,static_cast<float>(pos));
+   const float curve=v.useDynamic?v.dynamicCurve.evaluate(static_cast<float>(pos)):
+       interpolate(v.shape,static_cast<float>(pos));
    const float gain=1.f-v.depth*(1.f-curve);
    result=std::min(result,std::clamp(gain,0.f,1.f));
    v.age+=1.;
@@ -80,6 +86,8 @@ public:
 private:
  struct Voice {
   Shape shape{};
+  DynamicCurve dynamicCurve{};
+  bool useDynamic=false;
   double age=0.,samples=1.;
   float depth=0.f;
   bool active=false;
