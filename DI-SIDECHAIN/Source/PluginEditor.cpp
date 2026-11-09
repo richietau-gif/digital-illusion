@@ -28,7 +28,12 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  for(int i=0;i<8;++i) {
   auto s=std::make_unique<juce::Slider>();
   s->setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-  s->setTextBoxStyle(juce::Slider::TextBoxBelow,false,100,20);
+  s->setTextBoxStyle(juce::Slider::TextBoxBelow,false,78,18);
+  s->textFromValueFunction=[i](double value){
+   if(i==0||i==1)return juce::String(value,2);
+   if(i==4||i==6)return juce::String(value,0);
+   return juce::String(value,1);
+  };
   s->setColour(juce::Slider::rotarySliderFillColourId,i<2?green:juce::Colour(0xff24def0));
   s->setColour(juce::Slider::rotarySliderOutlineColourId,edge);
   s->setColour(juce::Slider::thumbColourId,juce::Colours::white);
@@ -69,6 +74,8 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  sequenceCountAttachment=std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(p.state,"sequenceSteps",*sequenceCount);
  shapeOffset=std::make_unique<juce::Slider>(juce::Slider::LinearHorizontal,juce::Slider::TextBoxRight);
  shapeOffset->setRange(-1.0,1.0,0.01);
+ shapeOffset->setTextBoxStyle(juce::Slider::TextBoxRight,false,68,20);
+ shapeOffset->textFromValueFunction=[](double v){return juce::String(v,2);};
  shapeOffset->setColour(juce::Slider::trackColourId,orange);
  shapeOffset->setColour(juce::Slider::thumbColourId,orange);
  shapeOffset->setColour(juce::Slider::textBoxTextColourId,juce::Colours::white);
@@ -112,6 +119,8 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  const char* laneIds[]={"filterMod","panMod"};
  for(int i=0;i<2;++i){
   laneSliders[i]=std::make_unique<juce::Slider>(juce::Slider::LinearHorizontal,juce::Slider::TextBoxRight);
+  laneSliders[i]->setTextBoxStyle(juce::Slider::TextBoxRight,false,63,20);
+  laneSliders[i]->textFromValueFunction=[](double v){return juce::String(v,2);};
   laneSliders[i]->setColour(juce::Slider::trackColourId,i==0?juce::Colour(0xff44bbff):juce::Colour(0xffc55bff));
   laneSliders[i]->setColour(juce::Slider::thumbColourId,i==0?juce::Colour(0xff44bbff):juce::Colour(0xffc55bff));
   laneSliders[i]->setColour(juce::Slider::textBoxTextColourId,juce::Colours::white);
@@ -138,7 +147,9 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
   }
  };
  saturatorDriveSlider=std::make_unique<juce::Slider>(juce::Slider::LinearHorizontal,juce::Slider::TextBoxRight);
- saturatorDriveSlider->setRange(0.0,24.0,0.1);saturatorDriveSlider->setTextValueSuffix(" dB");
+ saturatorDriveSlider->setRange(0.0,24.0,0.1);
+ saturatorDriveSlider->setTextBoxStyle(juce::Slider::TextBoxRight,false,59,20);
+ saturatorDriveSlider->textFromValueFunction=[](double v){return juce::String(v,1);};saturatorDriveSlider->setTextValueSuffix(" dB");
  saturatorDriveSlider->setColour(juce::Slider::trackColourId,green);saturatorDriveSlider->setColour(juce::Slider::thumbColourId,green);
  addAndMakeVisible(*saturatorDriveSlider);
  saturatorDriveAttachment=std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(p.state,"saturatorDrive",*saturatorDriveSlider);
@@ -273,6 +284,8 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  const char* sliderIds[]={"reverbWet","reverbLength","reverbDecay","distortWet","distortDrive"};
  for(int i=0;i<5;++i){
   creativeSliders[i]=std::make_unique<juce::Slider>(juce::Slider::LinearHorizontal,juce::Slider::TextBoxRight);
+  creativeSliders[i]->setTextBoxStyle(juce::Slider::TextBoxRight,false,63,22);
+  creativeSliders[i]->textFromValueFunction=[i](double v){return juce::String(v,i==4?1:2);};
   creativeSliders[i]->setColour(juce::Slider::trackColourId,i<3?juce::Colour(0xff24def0):orange);
   creativeSliders[i]->setColour(juce::Slider::thumbColourId,i<3?juce::Colour(0xff24def0):orange);
   creativeSliders[i]->setColour(juce::Slider::textBoxTextColourId,juce::Colours::white);
@@ -306,6 +319,8 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  };
  duckDepthSlider=std::make_unique<juce::Slider>(juce::Slider::LinearHorizontal,juce::Slider::TextBoxRight);
  duckDepthSlider->setRange(0.,1.,.01);
+ duckDepthSlider->setTextBoxStyle(juce::Slider::TextBoxRight,false,60,20);
+ duckDepthSlider->textFromValueFunction=[](double v){return juce::String(v,2);};
  duckDepthSlider->setValue(proc.getDuckTrackDepth(0),juce::dontSendNotification);
  duckDepthSlider->setColour(juce::Slider::trackColourId,green);
  duckDepthSlider->setColour(juce::Slider::thumbColourId,green);
@@ -316,6 +331,8 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  addAndMakeVisible(*duckDepthSlider);
  duckLengthSlider=std::make_unique<juce::Slider>(juce::Slider::LinearHorizontal,juce::Slider::TextBoxRight);
  duckLengthSlider->setRange(.05,4.,.05);
+ duckLengthSlider->setTextBoxStyle(juce::Slider::TextBoxRight,false,60,20);
+ duckLengthSlider->textFromValueFunction=[](double v){return juce::String(v,2);};
  duckLengthSlider->setValue(proc.getDuckTrackLength(0),juce::dontSendNotification);
  duckLengthSlider->setColour(juce::Slider::trackColourId,orange);
  duckLengthSlider->setColour(juce::Slider::thumbColourId,orange);
@@ -380,7 +397,7 @@ void DISidechainEditor::refreshFilterButtons(){
 }
 void DISidechainEditor::refreshFxButtons() {
  if(fxToggle)fxToggle->setButtonText(fxToggle->getToggleState()?"ON":"OFF");
- if(saturatorToggle)saturatorToggle->setButtonText(saturatorToggle->getToggleState()?"ON":"OFF");
+ if(saturatorToggle)saturatorToggle->setButtonText(saturatorToggle->getToggleState()?"SAT ON":"SAT OFF");
  if(clipperButton){
   const int mode=juce::jlimit(0,2,(int)proc.state.getRawParameterValue("clipperMode")->load());
   clipperButton->setButtonText(mode==0?"CLIP OFF":mode==1?"CLIP SOFT":"CLIP HARD");
@@ -536,9 +553,7 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  if(enabled){g.setColour(lime.withAlpha(.25f));g.drawRoundedRectangle(juce::Rectangle<float>(184,118,153,41),8.f,3.f);}
  text(g,"SEQUENCER",{199,122,137,30},16,enabled?DITheme::dark():white,true);
  text(g,"STEPS",{503,110,70,14},11,faint);
- text(g,"LENGTH / RATE",{600,110,135,14},11,faint);
- text(g,"FX",{998,123,37,31},15,white,true);
- text(g,"SATURATOR",{1105,123,105,31},15,white,true);
+ text(g,"LENGTH / RATE",{630,110,135,14},11,faint);
  text(g,"DRIVE",{1283,110,72,14},11,faint);
  text(g,"WET",{1415,110,60,14},11,faint);
  text(g,"SCENES",{784,180,83,20},12,faint,true);
@@ -799,7 +814,7 @@ void DISidechainEditor::resized() {
  if(abCopyButtons[0])abCopyButtons[0]->setBounds(1020,36,52,32);
  if(abCopyButtons[1])abCopyButtons[1]->setBounds(1076,36,52,32);
  if(setupButton)setupButton->setBounds(setupBounds);
- if(gridModeButton)gridModeButton->setBounds(865,124,147,30);
+ if(gridModeButton)gridModeButton->setBounds(917,124,124,30);
  for(int i=0;i<4;++i)if(sceneButtons[i])sceneButtons[i]->setBounds(873+i*62,179,57,22);
  if(copySceneButton)copySceneButton->setBounds(1124,179,113,22);
  if(duckDepthSlider)duckDepthSlider->setBounds(1224,586,284,30);
@@ -816,20 +831,20 @@ void DISidechainEditor::resized() {
  for(int i=0;i<5;++i)if(cellControls[i])cellControls[i]->setBounds(1223+i*58,522,55,31);
  refreshCreativePage();
  if(sequenceToggle)sequenceToggle->setBounds(360,124,137,32);
- if(sequenceCount)sequenceCount->setBounds(506,124,87,30);
+ if(sequenceCount)sequenceCount->setBounds(501,124,118,30);
  if(combos.size()==3){
   combos[0]->setBounds(0,0,0,0); // filter mode uses premium segment buttons
   combos[1]->setBounds(376,769,204,30);
-  combos[2]->setBounds(603,124,120,29);
+  combos[2]->setBounds(639,124,109,29);
  }
- if(sync)sync->setBounds(739,123,119,30);
+ if(sync)sync->setBounds(772,123,130,30);
  if(fxTypeBox)fxTypeBox->setBounds(866,124,124,30);
  if(fxToggle){fxToggle->setVisible(false);fxToggle->setBounds(0,0,0,0);}
- if(clipperButton)clipperButton->setBounds(1036,123,92,31);
- if(saturatorToggle)saturatorToggle->setBounds(1215,123,65,31);
+ if(clipperButton)clipperButton->setBounds(1049,123,126,31);
+ if(saturatorToggle)saturatorToggle->setBounds(1187,123,91,31);
  if(fxSliders[0])fxSliders[0]->setVisible(false);
- if(saturatorDriveSlider)saturatorDriveSlider->setBounds(1280,123,140,30);
- if(fxSliders[1])fxSliders[1]->setBounds(1443,123,71,30);
+ if(saturatorDriveSlider)saturatorDriveSlider->setBounds(1284,123,120,30);
+ if(fxSliders[1])fxSliders[1]->setBounds(1412,123,105,30);
  if(sequencePrev)sequencePrev->setBounds(33,533,47,34);
  if(sequenceNext)sequenceNext->setBounds(156,533,47,34);
  if(copyStep)copyStep->setBounds(230,499,75,32);
