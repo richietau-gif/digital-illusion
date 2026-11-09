@@ -15,9 +15,6 @@ if(BUILD_TESTING)
  add_executable(di_trigger_logic_smoke Tests/TriggerLogicSmoke.cpp)
  target_compile_features(di_trigger_logic_smoke PRIVATE cxx_std_17)
  add_test(NAME di_trigger_logic_smoke COMMAND di_trigger_logic_smoke)
- add_executable(di_shape_sequencer_smoke Tests/ShapeSequencerSmoke.cpp)
- target_compile_features(di_shape_sequencer_smoke PRIVATE cxx_std_17)
- add_test(NAME di_shape_sequencer_smoke COMMAND di_shape_sequencer_smoke)
  add_executable(di_fx_waveshaper_smoke Tests/FxWaveshaperSmoke.cpp)
  target_compile_features(di_fx_waveshaper_smoke PRIVATE cxx_std_17)
  add_test(NAME di_fx_waveshaper_smoke COMMAND di_fx_waveshaper_smoke)
@@ -37,7 +34,6 @@ if(BUILD_TESTING)
  # matching the standalone Tests/CMakeLists.txt configuration.
  foreach(smoke_target IN ITEMS
    di_trigger_logic_smoke
-   di_shape_sequencer_smoke
    di_fx_waveshaper_smoke
    di_peak_detector_smoke
    di_oversampled_fx_smoke

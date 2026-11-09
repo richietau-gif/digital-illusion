@@ -13,6 +13,11 @@ jobs:
         run: cmake --build build --config Release --target PrecisionSidechain
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure
+      - name: Pluginval strictness 5
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri https://github.com/Tracktion/pluginval/releases/latest/download/pluginval_Windows.exe -OutFile pluginval.exe
+          .\pluginval.exe --strictness 5 --validate "build/DI-SIDECHAIN_artefacts/Release/VST3/PRECISION SIDECHAIN.vst3"
       - name: Package
         shell: pwsh
         run: Compress-Archive -Path "build/DI-SIDECHAIN_artefacts/Release/VST3/PRECISION SIDECHAIN.vst3" -DestinationPath "PRECISION-SIDECHAIN-1.0-Windows-x64.zip"
