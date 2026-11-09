@@ -478,8 +478,8 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  paintShape(g,detailGraph,selectedStep,true);
  text(g,"Drag nodes to edit. Toggle SNAP for 1/16 increments.",{232,667,496,19},11,faint);
  // Six interactive shape palette buttons (mouseDown hits corresponding rectangles).
- for(int i=0;i<6;++i){
-  const int x=734+(i%3)*48,y=552+(i/3)*48;
+ for(int i=0;i<9;++i){
+  const int x=734+(i%3)*48,y=552+(i/3)*42;
   auto rr=juce::Rectangle<float>((float)x,(float)y,42.f,40.f);
   g.setColour(juce::Colour(0xff122c3b));g.fillRoundedRectangle(rr,6.f);
   g.setColour(juce::Colour(0xff35667b));g.drawRoundedRectangle(rr,6.f,1.f);
@@ -622,7 +622,7 @@ void DISidechainEditor::updateDetailPoint(const juce::MouseEvent& e){updatePoint
 void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
  const auto pos=(e.position/uiScale).toInt();
  // Six shape palette shortcuts mirror the dedicated shape preset browser.
- for(int i=0;i<6;++i)if(juce::Rectangle<int>(734+(i%3)*48,552+(i/3)*48,42,40).contains(pos)){
+ for(int i=0;i<9;++i)if(juce::Rectangle<int>(734+(i%3)*48,552+(i/3)*42,42,36).contains(pos)){
   applyShapePreset(i);return;
  }
  if(juce::Rectangle<int>(24,117,153,43).contains(pos)){sequenceToggle->setToggleState(false,juce::sendNotificationSync);selectedLane=0;repaint();return;}
@@ -699,9 +699,12 @@ void DISidechainEditor::applyShapePreset(int index) {
   {1.f,1.f,.98f,.9f,.7f,.42f,.15f,0.f},
   {0.f,0.f,0.f,0.f,1.f,1.f,1.f,1.f},
   {1.f,.8f,.4f,.1f,.1f,.4f,.8f,1.f},
-  {0.f,.14f,.28f,.43f,.57f,.72f,.86f,1.f}
+  {0.f,.14f,.28f,.43f,.57f,.72f,.86f,1.f},
+  {1.f,.75f,.25f,.05f,.05f,.25f,.75f,1.f},
+  {1.f,.2f,.8f,.15f,.85f,.2f,.8f,1.f},
+  {0.f,.1f,.35f,.7f,.9f,.9f,.98f,1.f}
  };
- index=juce::jlimit(0,5,index);
+ index=juce::jlimit(0,8,index);
  const bool seq=sequenceToggle->getToggleState();
  const int key=selectedStep+(seq?selectedLane*32:0);
  auto before=captureShape(key,seq),after=before;
@@ -722,7 +725,7 @@ void DISidechainEditor::showPresetMenu() {
  });
 }
 void DISidechainEditor::showShapeMenu() {
- juce::PopupMenu menu;const juce::StringArray names{"Classic Duck","Pump Rise","Pump Fall","Gate","Wave","Linear Rise"};
+ juce::PopupMenu menu;const juce::StringArray names{"Smooth Rise","Linear Rise","Exponential Rise","Hard Gate","Reverse Ramp","Smooth Wobble","Sharp Duck","Double Pump","S-Curve"};
  for(int i=0;i<names.size();++i)menu.addItem(i+1,names[i]);
  juce::Component::SafePointer<DISidechainEditor> safe(this);
  menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(shapePresetButton.get()),[safe](int choice){if(safe&&choice>0)safe->applyShapePreset(choice-1);});
