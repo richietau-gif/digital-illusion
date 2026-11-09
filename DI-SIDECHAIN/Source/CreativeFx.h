@@ -169,8 +169,12 @@ public:
   constexpr float damp[5]={.75f,.60f,.45f,.27f,.12f};
   if(model!=lastModel||verbLength!=lastLength||verbDecay!=lastDecay){
    juce::Reverb::Parameters p;
-   p.roomSize=std::clamp(sizes[model]*(.55f+.45f*std::clamp(verbLength,.1f,8.f)/8.f)*(1.f-.5f*std::clamp(verbDecay,0.f,1.f)),0.f,1.f);
-   p.damping=std::clamp(damp[model]*(1.f-.65f*std::clamp(verbDecay,0.f,1.f)),0.f,1.f);
+   const float seconds=std::clamp(verbDecay,.2f,12.f);
+   const float normalized=(seconds-.2f)/11.8f;
+   p.roomSize=std::clamp((.2f+.7f*(1.f-std::exp(-seconds/3.f)))*
+                        (.68f+.32f*std::clamp(verbLength,.1f,8.f)/8.f)
+                        +.08f*(sizes[model]-.5f),.02f,.98f);
+   p.damping=std::clamp(damp[model]*(.85f-.2f*normalized),0.f,1.f);
    p.width=1.f;p.freezeMode=0.f;p.wetLevel=.33f;p.dryLevel=0.f;
    reverb.setParameters(p);
    lastModel=model;lastLength=verbLength;lastDecay=verbDecay;
