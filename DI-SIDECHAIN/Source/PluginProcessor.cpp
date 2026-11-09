@@ -24,6 +24,8 @@ static juce::AudioProcessorValueTreeState::ParameterLayout layoutParams(){
  f("reverbWet","Reverb wet",0,1,.3f); f("reverbLength","Reverb length",.1f,8.f,3.f);
  f("reverbDecay","Reverb decay",0,1,.6f);
  f("distortWet","Distortion wet",0,1,.4f); f("distortDrive","Distortion drive dB",0,24,8);
+ f("reverbPreDelay","Reverb predelay ms",0,250,35);
+ f("distortTone","Distortion tone",0,1,.7f);
 
  p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"fxEnabled",1},"FX enabled",false));
  p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"saturatorEnabled",1},"Independent saturator enabled",false));
@@ -180,6 +182,8 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  const float reverbDecay=bounded("reverbDecay",0.f,1.f,.6f);
  const float distortWet=bounded("distortWet",0.f,1.f,.4f);
  const float distortDrive=bounded("distortDrive",0.f,24.f,8.f);
+ const float reverbPreDelay=bounded("reverbPreDelay",0.f,250.f,35.f);
+ const float distortTone=bounded("distortTone",0.f,1.f,.7f);
 
  const int fxType=(int)bounded("fxType",0.f,1.f,0.f);
  int clipperMode=(int)bounded("clipperMode",0.f,2.f,0.f);
@@ -344,7 +348,8 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  float left=main.getSample(0,i),right=main.getSample(1,i);
  creativeFx.process(left,right,distortEnabled&&distCell,reverbEnabled&&verbCell,
                     distortModel,distortDrive,distortWet,
-                    reverbModel,reverbEnabled?reverbWet:0.f,reverbLength,reverbDecay,(reverseReverb||reverseCell)&&verbCell);
+                    reverbModel,reverbEnabled?reverbWet:0.f,reverbLength,reverbDecay,(reverseReverb||reverseCell)&&verbCell,
+                    reverbPreDelay,distortTone);
  main.setSample(0,i,left);main.setSample(1,i,right);
  peak=juce::jmax(peak,juce::jmax(std::abs(left),std::abs(right)));
  }
