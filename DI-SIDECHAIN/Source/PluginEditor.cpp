@@ -1400,7 +1400,7 @@ void DISidechainEditor::showSetupMenu() {
   });
 }
 void DISidechainEditor::saveUserPreset() {
- const auto destination=juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("DI-Sidefx.diseqfx");
+ const auto destination=juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("DI-Seqfx.diseqfx");
  presetChooser=std::make_unique<juce::FileChooser>("Save DI SEQFX preset",destination,"*.diseqfx");
  juce::Component::SafePointer<DISidechainEditor> safe(this);
  presetChooser->launchAsync(juce::FileBrowserComponent::saveMode|juce::FileBrowserComponent::canSelectFiles,
