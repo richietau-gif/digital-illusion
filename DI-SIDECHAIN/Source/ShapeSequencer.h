@@ -2,6 +2,8 @@
 #include <array>
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <limits>
 
 // Realtime-safe envelope sequencer core. No allocations, locks or I/O in render().
 namespace di {
@@ -19,6 +21,7 @@ public:
  void setSteps(int count) noexcept { steps = std::clamp(count, 1, maxSteps); currentStep %= steps; }
  int getSteps() const noexcept { return steps; }
  int getCurrentStep() const noexcept { return currentStep; }
+ std::uint64_t getStepGeneration() const noexcept { return stepGeneration; }
  void setShape(int step, const Shape& shape) noexcept {
    if (step < 0 || step >= maxSteps) return;
    for (int i = 0; i < nodesPerStep; ++i)
@@ -27,14 +30,15 @@ public:
  Shape getShape(int step) const noexcept {
    return shapes[std::clamp(step, 0, maxSteps - 1)];
  }
- void reset() noexcept { currentStep = 0; phase = 0.; }
- void trigger() noexcept { currentStep = 0; phase = 0.; }
- void advanceStep() noexcept { currentStep = (currentStep + 1) % steps; phase = 0.; }
+ void reset() noexcept { currentStep = 0; phase = 0.; stepGeneration = 0; }
+ void trigger() noexcept { currentStep = 0; phase = 0.; ++stepGeneration; }
+ void advanceStep() noexcept { currentStep = (currentStep + 1) % steps; phase = 0.; ++stepGeneration; }
  void seekToStepPosition(double stepPosition) noexcept {
    if (!std::isfinite(stepPosition)) return;
    const double wrapped = std::fmod(std::fmod(stepPosition, static_cast<double>(steps)) + steps, static_cast<double>(steps));
    currentStep = std::clamp(static_cast<int>(wrapped), 0, steps - 1);
    phase = wrapped - static_cast<double>(currentStep);
+   stepGeneration = static_cast<std::uint64_t>(std::clamp(std::floor(stepPosition),0.,static_cast<double>(std::numeric_limits<std::uint64_t>::max()/2)));
  }
 
  // samplesPerStep may be derived from BPM and musical division in the processor.
@@ -42,7 +46,7 @@ public:
    if (!std::isfinite(samplesPerStep) || samplesPerStep < 1.) samplesPerStep = 1.;
    const float result = evaluate(shapes[currentStep], phase);
    phase += 1. / samplesPerStep;
-   while (phase >= 1.) { phase -= 1.; currentStep = (currentStep + 1) % steps; }
+   while (phase >= 1.) { phase -= 1.; currentStep = (currentStep + 1) % steps; ++stepGeneration; }
    return result;
  }
  static float evaluate(const Shape& shape, double position) noexcept {
@@ -56,6 +60,7 @@ public:
 private:
  std::array<Shape, maxSteps> shapes{};
  int steps = 16, currentStep = 0;
+ std::uint64_t stepGeneration = 0;
  double phase = 0.;
 };
 } // namespace di
