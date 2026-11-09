@@ -534,7 +534,31 @@ void DISidechainEditor::paintShape(juce::Graphics& g,juce::Rectangle<int> r,int 
  for(int i=1;i<8;++i){const int x=r.getX()+r.getWidth()*i/8;g.drawVerticalLine(x,(float)r.getY(),(float)r.getBottom());}
  for(int i=1;i<4;++i){const int y=r.getY()+r.getHeight()*i/4;g.drawHorizontalLine(y,(float)r.getX(),(float)r.getRight());}
  const bool seq=sequenceToggle->getToggleState();
- const auto laneColour=selectedLane==0?orange:selectedLane==1?juce::Colour(0xff44bbff):juce::Colour(0xffc55bff);
+ if(seq&&selectedLane==0&&selectedTrack>=0&&selectedTrack<6&&
+    proc.state.getRawParameterValue("creativeGridEnabled")->load()>.5f){
+  const auto dc=proc.getDynamicDuckCurve(selectedTrack);
+  const auto colour=DITheme::lime();
+  juce::Path curve;
+  const int n=renderQuality==2?360:renderQuality==0?65:170;
+  for(int j=0;j<=n;++j){
+   const float t=(float)j/n;
+   const float px=r.getX()+r.getWidth()*t;
+   const float py=r.getBottom()-dc.evaluate(t)*r.getHeight();
+   if(j==0)curve.startNewSubPath(px,py);else curve.lineTo(px,py);
+  }
+  juce::Path fill=curve;fill.lineTo((float)r.getRight(),(float)r.getBottom());
+  fill.lineTo((float)r.getX(),(float)r.getBottom());fill.closeSubPath();
+  g.setColour(colour.withAlpha(.15f));g.fillPath(fill);
+  g.setColour(colour);g.strokePath(curve,juce::PathStrokeType(drawNodes?2.5f:1.5f));
+  if(drawNodes)for(int i=0;i<dc.count;++i){
+   const float x=r.getX()+r.getWidth()*dc.x[(size_t)i];
+   const float y=r.getBottom()-r.getHeight()*dc.y[(size_t)i];
+   g.setColour(juce::Colour(0xff0b151a));g.fillEllipse(x-7.f,y-7.f,14.f,14.f);
+   g.setColour(colour);g.drawEllipse(x-6.f,y-6.f,12.f,12.f,2.f);
+  }
+  return;
+ }
+ const auto laneColour=selectedLane==0?DITheme::lime():selectedLane==1?juce::Colour(0xff44bbff):juce::Colour(0xffc55bff);
  const float offset=seq&&selectedLane==0&&shapeOffset? (float)shapeOffset->getValue():0.f;
  auto value=[&](int i){
   if(seq&&selectedLane==0&&selectedTrack<6&&proc.state.getRawParameterValue("creativeGridEnabled")->load()>0.5f)
