@@ -15,10 +15,16 @@ class ReverseSend {
 public:
  void prepare(double sampleRate) {
   const double safe=std::isfinite(sampleRate)?std::clamp(sampleRate,8000.,192000.):44100.;
+  maxWindow=std::max(64,static_cast<int>(std::round(safe*2.0)));
   window=std::max(64,static_cast<int>(std::round(safe*0.125)));
-  for(auto& channel:record)channel.assign(static_cast<size_t>(window),0.f);
-  for(auto& channel:play)channel.assign(static_cast<size_t>(window),0.f);
+  nextWindow=window;
+  for(auto& channel:record)channel.assign(static_cast<size_t>(maxWindow),0.f);
+  for(auto& channel:play)channel.assign(static_cast<size_t>(maxWindow),0.f);
   reset();
+ }
+ void setWindowSamples(int requested) noexcept {
+  // Window changes apply at a capture boundary to avoid partial-buffer reads.
+  nextWindow=std::clamp(requested,64,std::max(64,maxWindow));
  }
  void reset() noexcept {
   phase=0;filled=false;
@@ -41,13 +47,14 @@ public:
   if(++phase==window) {
    phase=0;
    record.swap(play);
-   filled=true;
+   filled=nextWindow==window;
+   if(nextWindow!=window){window=nextWindow;filled=false;}
   }
  }
  int windowSamples() const noexcept{return window;}
 private:
  std::array<std::vector<float>,2> record,play;
- int window=0,phase=0;
+ int maxWindow=0,window=0,nextWindow=0,phase=0;
  bool filled=false;
 };
 
@@ -61,6 +68,11 @@ public:
   for(auto& d:distortion)d.reset();
   for(auto& d:distortionDry)d.reset();
   reset();
+ }
+ void setReverseWindowSeconds(double seconds) noexcept {
+  if(!std::isfinite(seconds))return;
+  reverse.setWindowSamples(static_cast<int>(std::round(
+   std::clamp(seconds,.03,2.0)*sampleRate)));
  }
  void reset() noexcept {
   reverb.reset();
