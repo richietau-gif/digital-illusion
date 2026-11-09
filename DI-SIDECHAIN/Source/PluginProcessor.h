@@ -32,6 +32,9 @@ public:
  std::atomic<int> activeSequenceStep {0};
  static constexpr int gridTracks=8, gridSteps=16;
  std::array<std::array<std::atomic<bool>,gridSteps>,gridTracks> gridCells{};
+ std::array<std::atomic<bool>,gridSteps> gridReverseCells{};
+ void setGridReverse(int step,bool enabled) noexcept;
+ bool getGridReverse(int step) const noexcept;
  void setGridCell(int track,int step,bool enabled) noexcept;
  bool getGridCell(int track,int step) const noexcept;
 
