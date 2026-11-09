@@ -423,7 +423,7 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  }
  g.setColour(cyan.withAlpha(.23f));g.strokePath(logo,juce::PathStrokeType(6.f));
  g.setColour(cyan);g.strokePath(logo,juce::PathStrokeType(2.5f));
- text(g,"DI SIDECHAIN", {117,30,280,39},32,white,true);
+ text(g,"DI SIDEFX", {117,30,280,39},32,white,true);
  text(g,"5.2B",{365,30,100,39},27,orange,true);
  text(g,"D I G I T A L   I L L U S I O N",{120,72,310,16},12,faint);
  g.setColour(juce::Colour(0xff2d5668));g.drawVerticalLine(435,30.f,80.f);
