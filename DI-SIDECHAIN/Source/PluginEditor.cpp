@@ -285,13 +285,13 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
   addAndMakeVisible(*creativeModelBoxes[i]);
   creativeModelAttachments[i]=std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(p.state,modelIds[i],*creativeModelBoxes[i]);
  }
- const char* sliderIds[]={"reverbWet","reverbLength","reverbDecay","distortWet","distortDrive"};
- for(int i=0;i<5;++i){
+ const char* sliderIds[]={"reverbWet","reverbLength","reverbDecay","distortWet","distortDrive","reverbPreDelay","distortTone"};
+ for(int i=0;i<7;++i){
   creativeSliders[i]=std::make_unique<juce::Slider>(juce::Slider::LinearHorizontal,juce::Slider::TextBoxRight);
   creativeSliders[i]->setTextBoxStyle(juce::Slider::TextBoxRight,false,68,22);
-  creativeSliders[i]->textFromValueFunction=[i](double v){return juce::String(v,i==4?1:2);};
-  creativeSliders[i]->setColour(juce::Slider::trackColourId,i<3?juce::Colour(0xff24def0):orange);
-  creativeSliders[i]->setColour(juce::Slider::thumbColourId,i<3?juce::Colour(0xff24def0):orange);
+  creativeSliders[i]->textFromValueFunction=[i](double v){return juce::String(v,(i==4||i==5)?1:2);};
+  creativeSliders[i]->setColour(juce::Slider::trackColourId,(i<3||i==5)?juce::Colour(0xff24def0):orange);
+  creativeSliders[i]->setColour(juce::Slider::thumbColourId,(i<3||i==5)?juce::Colour(0xff24def0):orange);
   creativeSliders[i]->setColour(juce::Slider::textBoxTextColourId,juce::Colours::white);
   creativeSliders[i]->setColour(juce::Slider::textBoxOutlineColourId,juce::Colours::transparentBlack);
   addAndMakeVisible(*creativeSliders[i]);
@@ -754,11 +754,13 @@ void DISidechainEditor::paint(juce::Graphics& g) {
    text(g,"DRY / WET",{39,549,210,18},12,cyan,true);
    text(g,"LENGTH",{324,549,210,18},12,cyan,true);
    text(g,"DECAY",{610,549,190,18},12,cyan,true);
+   text(g,"PREDELAY ms",{39,610,225,17},11,cyan,true);
    text(g,"The selected cell can reverse its captured input before reverb.",
         {39,648,800,18},11,faint);
   }else{
    text(g,"DRY / WET",{39,549,210,18},12,orange,true);
    text(g,"DRIVE dB",{327,549,210,18},12,orange,true);
+   text(g,"TONE",{39,610,210,17},11,orange,true);
    text(g,"5 drive types: Warm / Acid / Clip / Fold / Modern",
         {39,648,780,18},11,faint);
   }
@@ -824,7 +826,7 @@ void DISidechainEditor::refreshCreativePage(){
  if(distortOnButton)distortOnButton->setVisible(fxPage&&selectedLane==4);
  if(reverseButton)reverseButton->setVisible(fxPage&&verb);
  for(int i=0;i<2;++i)if(creativeModelBoxes[i])creativeModelBoxes[i]->setVisible(fxPage&&i==(verb?0:1));
- for(int i=0;i<5;++i)if(creativeSliders[i])creativeSliders[i]->setVisible(fxPage&&(verb?i<3:i>=3));
+ for(int i=0;i<7;++i)if(creativeSliders[i])creativeSliders[i]->setVisible(fxPage&&(verb?(i<3||i==5):(i==3||i==4||i==6)));
  // Legacy step shape controls are hidden only while editing an FX track.
  for(auto* b:{copyStep.get(),pasteStep.get(),resetStep.get(),undoButton.get(),redoButton.get(),
               snapButton.get(),shapePresetButton.get(),sequencePrev.get(),sequenceNext.get()})
@@ -858,9 +860,10 @@ void DISidechainEditor::resized() {
  if(reverseButton)reverseButton->setBounds(163,505,132,31);
  if(creativeModelBoxes[0])creativeModelBoxes[0]->setBounds(324,505,220,31);
  if(creativeModelBoxes[1])creativeModelBoxes[1]->setBounds(324,505,220,31);
- for(int i=0;i<5;++i)if(creativeSliders[i]){
-  const int col=i<3?i:i-3;
-  creativeSliders[i]->setBounds(36+col*283,576,253,33);
+ for(int i=0;i<7;++i)if(creativeSliders[i]){
+  const int col=i==5?0:i==6?0:i<3?i:i-3;
+  const int yy=i>=5?630:576;
+  creativeSliders[i]->setBounds(36+col*283,yy,253,33);
  }
  for(int i=0;i<5;++i)if(cellControls[i])cellControls[i]->setBounds(1223+i*58,522,55,31);
  refreshCreativePage();
