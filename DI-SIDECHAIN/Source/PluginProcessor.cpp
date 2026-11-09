@@ -48,6 +48,11 @@ DISidechainProcessor::DISidechainProcessor():AudioProcessor(BusesProperties().wi
   cell.store(false,std::memory_order_relaxed);
  for(auto& scene:sceneReverseCells)for(auto& cell:scene)
   cell.store(false,std::memory_order_relaxed);
+ // An empty grid appears broken on first insertion. Scene A starts as a
+ // familiar four-on-the-floor duck, while scenes B-D remain blank.
+ for(int step=0;step<gridSteps;step+=4)
+  sceneCells[0][0][(size_t)step].store(true,std::memory_order_relaxed);
+ state.state.setProperty("presetName","Classic Duck",nullptr);
  for(int t=0;t<6;++t){
   duckDepth[(size_t)t].store(1.f,std::memory_order_relaxed);
   duckLength[(size_t)t].store(1.f,std::memory_order_relaxed);
