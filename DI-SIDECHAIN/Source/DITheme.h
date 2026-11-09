@@ -20,29 +20,34 @@ public:
   setColour(juce::ComboBox::textColourId,juce::Colours::white);
  }
  void drawRotarySlider(juce::Graphics& g,int x,int y,int width,int height,float pos,float start,float end,juce::Slider& slider) override {
+  // SIDEFX matte rotary control: no oval glass reflection or bulky bevels.
   const auto area=juce::Rectangle<float>((float)x,(float)y,(float)width,(float)height);
-  const float radius=juce::jmax(8.f,juce::jmin(area.getWidth(),area.getHeight())*.38f);
-  const auto c=area.getCentre().translated(0.f,-1.f);
-  const float a=start+pos*(end-start);
+  const auto c=area.getCentre();
+  const float radius=juce::jmax(8.f,juce::jmin(area.getWidth(),area.getHeight())*.34f);
+  const float angle=start+juce::jlimit(0.f,1.f,pos)*(end-start);
   juce::Colour accent=slider.findColour(juce::Slider::rotarySliderFillColourId);
   if(accent.isTransparent())accent=cyan();
-  g.setColour(juce::Colours::black.withAlpha(.55f));
-  g.fillEllipse(c.x-radius+1.f,c.y-radius+4.f,radius*2,radius*2);
-  juce::ColourGradient face(juce::Colour(0xff344955),c.x-radius,c.y-radius,
-                            juce::Colour(0xff07111a),c.x+radius,c.y+radius,true);
-  g.setGradientFill(face);g.fillEllipse(c.x-radius,c.y-radius,radius*2,radius*2);
-  g.setColour(juce::Colour(0xff476578));g.drawEllipse(c.x-radius,c.y-radius,radius*2,radius*2,1.2f);
-  juce::Path track;track.addCentredArc(c.x,c.y,radius+3.f,radius+3.f,0.f,start,end,true);
-  g.setColour(juce::Colour(0xff28414c));g.strokePath(track,juce::PathStrokeType(5.f,juce::PathStrokeType::curved,juce::PathStrokeType::rounded));
-  juce::Path active;active.addCentredArc(c.x,c.y,radius+3.f,radius+3.f,0.f,start,a,true);
-  g.setColour(accent.withAlpha(.17f));g.strokePath(active,juce::PathStrokeType(10.f,juce::PathStrokeType::curved,juce::PathStrokeType::rounded));
-  g.setColour(accent);g.strokePath(active,juce::PathStrokeType(4.f,juce::PathStrokeType::curved,juce::PathStrokeType::rounded));
-  const float needleRadius=radius*.62f;
-  const float ix=c.x+std::sin(a)*needleRadius,iy=c.y-std::cos(a)*needleRadius;
-  juce::Path needle;needle.startNewSubPath(c);needle.lineTo(ix,iy);
-  g.setColour(juce::Colour(0xffe6f8ff));g.strokePath(needle,juce::PathStrokeType(2.7f,juce::PathStrokeType::curved,juce::PathStrokeType::rounded));
-  g.setColour(juce::Colour(0xffd9f6fd).withAlpha(.35f));
-  g.drawEllipse(c.x-radius*.73f,c.y-radius*.75f,radius*1.46f,radius*.85f,1.f);
+  g.setColour(juce::Colours::black.withAlpha(.3f));
+  g.fillEllipse(c.x-radius+1.2f,c.y-radius+2.4f,2.f*radius,2.f*radius);
+  g.setColour(juce::Colour(0xff101e29));
+  g.fillEllipse(c.x-radius,c.y-radius,2.f*radius,2.f*radius);
+  g.setColour(juce::Colour(0xff4b6779));
+  g.drawEllipse(c.x-radius,c.y-radius,2.f*radius,2.f*radius,1.f);
+  juce::Path track;
+  track.addCentredArc(c.x,c.y,radius+4.f,radius+4.f,0.f,start,end,true);
+  g.setColour(juce::Colour(0xff304454));
+  g.strokePath(track,juce::PathStrokeType(2.7f,juce::PathStrokeType::curved,juce::PathStrokeType::rounded));
+  juce::Path progress;
+  progress.addCentredArc(c.x,c.y,radius+4.f,radius+4.f,0.f,start,angle,true);
+  g.setColour(accent);
+  g.strokePath(progress,juce::PathStrokeType(3.4f,juce::PathStrokeType::curved,juce::PathStrokeType::rounded));
+  const float length=radius*.68f;
+  const auto tip=c.translated(std::sin(angle)*length,-std::cos(angle)*length);
+  juce::Path pointer;pointer.startNewSubPath(c);pointer.lineTo(tip);
+  g.setColour(juce::Colour(0xffe7f7ff));
+  g.strokePath(pointer,juce::PathStrokeType(2.f,juce::PathStrokeType::curved,juce::PathStrokeType::rounded));
+  g.setColour(accent);
+  g.fillEllipse(c.x-2.f,c.y-2.f,4.f,4.f);
  }
  void drawButtonBackground(juce::Graphics& g,juce::Button& button,const juce::Colour&,bool over,bool down) override {
   const auto r=button.getLocalBounds().toFloat().reduced(1.5f);
