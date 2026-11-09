@@ -626,11 +626,11 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  for(int i=0;i<db.size();++i)text(g,db[i],{1496,781+i*20,39,16},10,faint);
 }
 void DISidechainEditor::refreshCreativePage(){
- const bool fxPage=selectedTrack>=6;
+ const bool fxPage=selectedTrack>=6&&sequenceToggle&&sequenceToggle->getToggleState();
  const bool verb=selectedTrack==6;
- if(reverbOnButton)reverbOnButton->setVisible(verb);
- if(distortOnButton)distortOnButton->setVisible(selectedTrack==7);
- if(reverseButton)reverseButton->setVisible(verb);
+ if(reverbOnButton)reverbOnButton->setVisible(fxPage&&verb);
+ if(distortOnButton)distortOnButton->setVisible(fxPage&&selectedTrack==7);
+ if(reverseButton)reverseButton->setVisible(fxPage&&verb);
  for(int i=0;i<2;++i)if(creativeModelBoxes[i])creativeModelBoxes[i]->setVisible(fxPage&&i==(verb?0:1));
  for(int i=0;i<5;++i)if(creativeSliders[i])creativeSliders[i]->setVisible(fxPage&&(verb?i<3:i>=3));
  // Legacy step shape controls are hidden only while editing an FX track.
@@ -739,8 +739,8 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
  for(int i=0;i<9;++i)if(juce::Rectangle<int>(734+(i%3)*48,552+(i/3)*42,42,36).contains(pos)){
   applyShapePreset(i);return;
  }
- if(juce::Rectangle<int>(24,117,153,43).contains(pos)){sequenceToggle->setToggleState(false,juce::sendNotificationSync);selectedLane=0;repaint();return;}
- if(juce::Rectangle<int>(183,117,155,43).contains(pos)){sequenceToggle->setToggleState(true,juce::sendNotificationSync);repaint();return;}
+ if(juce::Rectangle<int>(24,117,153,43).contains(pos)){sequenceToggle->setToggleState(false,juce::sendNotificationSync);selectedLane=0;refreshCreativePage();repaint();return;}
+ if(juce::Rectangle<int>(183,117,155,43).contains(pos)){sequenceToggle->setToggleState(true,juce::sendNotificationSync);refreshCreativePage();repaint();return;}
  // Grid cell click toggles an event; the narrow < area on REVERB
  // independently toggles reverse for THAT step, not the whole reverb.
  if(sequenceToggle->getToggleState()&&graph.contains(pos)) {
@@ -748,7 +748,6 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
   const int left=graph.getX()+labelWidth,top=graph.getY()+23;
   if(pos.x>=left&&pos.y>=top) {
    const int count=juce::jlimit(1,16,(int)sequenceCount->getValue());
-   const int cellWidth=juce::jmax(1,(graph.getRight()-left)/count);
    selectedStep=juce::jlimit(0,count-1,(pos.x-left)*count/juce::jmax(1,graph.getRight()-left));
    selectedTrack=juce::jlimit(0,7,(pos.y-top)*8/juce::jmax(1,graph.getBottom()-top));
    const int x1=left+(selectedStep+1)*(graph.getRight()-left)/count;
