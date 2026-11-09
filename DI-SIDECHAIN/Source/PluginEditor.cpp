@@ -524,14 +524,24 @@ void DISidechainEditor::paint(juce::Graphics& g) {
   g.setColour(selected?orange: i==playing&&sequenced?lime:juce::Colour(0xff28546a));
   g.drawRoundedRectangle(r,6.f,selected?2.f:1.f);
   text(g,juce::String(i+1),r.toNearestInt().reduced(5,3).withHeight(16),12,white,true);
-  juce::Path miniature;
-  for(int node=0;node<8;++node) {
-   const float value=selectedLane==0?proc.getSequencePoint(i,node):proc.getModulationPoint(selectedLane-1,i,node);
-   const float px=r.getX()+5.f+(r.getWidth()-10.f)*node/7.f;
-   const float py=r.getBottom()-5.f-value*(r.getHeight()-25.f);
-   if(node==0)miniature.startNewSubPath(px,py);else miniature.lineTo(px,py);
+  if(sequenced) {
+   const bool event=proc.getGridCell(selectedTrack,i);
+   const auto colour=selectedTrack==6?cyan:selectedTrack==7?orange:lime;
+   g.setColour(event?colour:juce::Colour(0xff223744));
+   g.fillRoundedRectangle(juce::Rectangle<float>(r.getX()+5.f,r.getY()+22.f,
+                                                  r.getWidth()-10.f,19.f),3.f);
+   if(selectedTrack==6&&proc.getGridReverse(i))
+    text(g,"<",juce::Rectangle<int>((int)r.getRight()-18,(int)r.getY()+23,14,16),12,orange,true);
+  } else {
+   juce::Path miniature;
+   for(int node=0;node<8;++node) {
+    const float value=selectedLane==0?proc.getSequencePoint(i,node):proc.getModulationPoint(selectedLane-1,i,node);
+    const float px=r.getX()+5.f+(r.getWidth()-10.f)*node/7.f;
+    const float py=r.getBottom()-5.f-value*(r.getHeight()-25.f);
+    if(node==0)miniature.startNewSubPath(px,py);else miniature.lineTo(px,py);
+   }
+   g.setColour(laneColour);g.strokePath(miniature,juce::PathStrokeType(1.8f));
   }
-  g.setColour(laneColour);g.strokePath(miniature,juce::PathStrokeType(1.8f));
  }
  // Step editor and modulation lanes: lanes are a single-click selection.
  paintPanel(g,sequencerPanel,"STEP EDIT");
