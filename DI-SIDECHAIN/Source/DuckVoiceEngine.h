@@ -45,6 +45,10 @@ public:
   voice.shape=settings.shape;
   voice.active=true;
  }
+ // Deterministic convenience entry point for standalone tests.
+ float process(int step,const std::array<bool,tracks>& active,double samplesPerStep) noexcept {
+  return process(step,active,samplesPerStep,static_cast<std::uint64_t>(std::max(0,step)));
+ }
  float process(int step,const std::array<bool,tracks>& active,double samplesPerStep,std::uint64_t generation) noexcept {
   (void)step;
   if(generation!=lastGeneration){
