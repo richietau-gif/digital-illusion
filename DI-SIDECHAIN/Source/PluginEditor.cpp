@@ -26,7 +26,7 @@ public:
 DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEditor(&p),proc(p) {
  setLookAndFeel(&theme);
  const char* ids[]={"depth","mix","threshold","length","smooth","low","high","retrigger"};
- const char* names[]={"DEPTH","MIX","SENSITIVITY","LENGTH MS","SMOOTH MS","LOW HZ","HIGH HZ","RETRIGGER MS"};
+ const char* names[]={"DEPTH","MIX","SENSITIVITY","FREE LENGTH MS","SMOOTH MS","LOW HZ","HIGH HZ","TRIGGER HOLDOFF MS"};
  for(int i=0;i<8;++i) {
   auto s=std::make_unique<juce::Slider>();
   s->setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
@@ -589,6 +589,9 @@ void DISidechainEditor::paintFrequencyResponse(juce::Graphics& g,juce::Rectangle
  const int mode=juce::jlimit(0,3,(int)proc.state.getRawParameterValue("mode")->load());
  const float cutoff=juce::jlimit(25.f,18000.f,proc.state.getRawParameterValue("low")->load());
  const float high=juce::jlimit(60.f,18000.f,proc.state.getRawParameterValue("high")->load());
+ const bool ladder=proc.state.getRawParameterValue("filterModel")->load()>.5f;
+ const float resonance=juce::jlimit(0.f,.95f,
+  proc.state.getRawParameterValue("ladderResonance")->load());
  const auto position=[](float hz){return juce::jlimit(0.f,1.f,(std::log(hz)-std::log(20.f))/(std::log(20000.f)-std::log(20.f)));};
  juce::Path curve;
  for(int i=0;i<=170;++i){
@@ -598,17 +601,22 @@ void DISidechainEditor::paintFrequencyResponse(juce::Graphics& g,juce::Rectangle
   const float lowpass=1.f-sigmoid((std::log(f)-std::log(cutoff))*9.f);
   const float highpass=1.f-lowpass;
   const float band=highpass*(1.f-sigmoid((std::log(f)-std::log(juce::jmax(cutoff+1.f,high)))*9.f));
-  const float value=mode==0?1.f:mode==1?lowpass:mode==2?highpass:band;
+  float value=mode==0?1.f:mode==1?lowpass:mode==2?highpass:band;
+  if(mode!=0&&ladder){
+   const float logDistance=std::log(f/juce::jmax(25.f,cutoff));
+   value=juce::jlimit(0.f,1.f,value+resonance*.24f*
+    std::exp(-logDistance*logDistance/juce::jmax(.02f,.07f+.1f*resonance)));
+  }
   const float px=rect.getX()+x*rect.getWidth();
   const float py=rect.getBottom()-5.f-value*(rect.getHeight()-10.f);
   if(i==0)curve.startNewSubPath(px,py);else curve.lineTo(px,py);
  }
  juce::Path fill(curve);fill.lineTo((float)rect.getRight(),(float)rect.getBottom());fill.lineTo((float)rect.getX(),(float)rect.getBottom());fill.closeSubPath();
- g.setColour(juce::Colour(0xffff8b19).withAlpha(.15f));g.fillPath(fill);
- g.setColour(juce::Colour(0xffffa126).withAlpha(.20f));g.strokePath(curve,juce::PathStrokeType(6.f));
- g.setColour(juce::Colour(0xffff981b));g.strokePath(curve,juce::PathStrokeType(2.5f));
+ g.setColour(juce::Colour(0xff2ad3da).withAlpha(.13f));g.fillPath(fill);
+ g.setColour(juce::Colour(0xff2ad3da).withAlpha(.16f));g.strokePath(curve,juce::PathStrokeType(5.f));
+ g.setColour(juce::Colour(0xff2ad3da));g.strokePath(curve,juce::PathStrokeType(2.f));
  const float knobX=rect.getX()+position(cutoff)*rect.getWidth();
- g.setColour(juce::Colours::white);g.fillEllipse(knobX-4.f,rect.getY()+4.f,8.f,8.f);
+ if(mode!=0){g.setColour(juce::Colours::white);g.fillEllipse(knobX-3.f,rect.getY()+4.f,6.f,6.f);}
  const juce::StringArray ticks{"20","50","100","200","500","1k","2k","5k","10k","20k"};
  for(int i=0;i<ticks.size();++i)text(g,ticks[i],{rect.getX()+i*rect.getWidth()/10,rect.getBottom()+2,35,14},10,juce::Colour(0xff8bafc1));
 }
@@ -690,7 +698,7 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  g.setColour(cyan.withAlpha(.23f));g.strokePath(logo,juce::PathStrokeType(6.f));
  g.setColour(cyan);g.strokePath(logo,juce::PathStrokeType(2.5f));
  text(g,"DI SIDEFX", {117,30,280,39},32,white,true);
- text(g,"5.3",{365,30,100,39},27,orange,true);
+ text(g,"5.4",{365,30,100,39},27,orange,true);
  text(g,"D I G I T A L   I L L U S I O N",{120,72,310,16},12,faint);
  g.setColour(juce::Colour(0xff2d5668));g.drawVerticalLine(435,30.f,80.f);
  text(g,"PRESET",{450,43,80,21},12,faint,true);
@@ -889,14 +897,14 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  text(g,"ENVELOPE LENGTH (STEPS)",{1143,616,349,17},11,orange,true);
  text(g,"BYP skips volume duck; effects stay available.",{1143,670,353,16},10,faint);
  // Always visible frequency controls and output meters.
- paintPanel(g,filterPanel,"FILTER");
+ paintPanel(g,filterPanel,"DUCK / FILTER ENGINE");
  paintPanel(g,outputPanel,"OUTPUT / SIDECHAIN");
  text(g,"MODE",{30,747,70,18},11,faint);
  text(g,"TRIGGER SOURCE",{375,747,170,18},11,faint);
  text(g,"BEAT DIVISION",{594,747,150,18},11,faint);
  text(g,"FILTER MODEL",{758,745,165,18},11,faint);
  text(g,"RESONANCE",{940,745,165,18},11,faint);
- const char* knobs[]={"SENSITIVITY","LENGTH","SMOOTH","LOW HZ","HIGH HZ","RETRIGGER"};
+ const char* knobs[]={"SENSITIVITY","FREE LENGTH","SMOOTH","CUTOFF","BAND HIGH","HOLDOFF"};
  for(int i=0;i<6;++i){
   const bool enabled=sliders.size()>static_cast<size_t>(i+2)&&sliders[(size_t)(i+2)]->isEnabled();
   text(g,knobs[i],{29+i*116,805,112,19},11,enabled?faint:faint.withAlpha(.32f));
