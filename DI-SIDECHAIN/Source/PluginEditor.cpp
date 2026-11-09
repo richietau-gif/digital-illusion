@@ -274,6 +274,20 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  };
  const char* filterNames[]={"FULL","LOW","HIGH","BAND"};
  for(int i=0;i<4;++i){filterButtons[i]=std::make_unique<juce::TextButton>(filterNames[i]);filterButtons[i]->onClick=[this,i]{selectFilter(i);};addAndMakeVisible(*filterButtons[i]);}
+ filterModelBox=std::make_unique<juce::ComboBox>();
+ filterModelBox->addItemList({"CLEAN","ANALOG LADDER"},1);
+ addAndMakeVisible(*filterModelBox);
+ filterModelAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+  p.state,"filterModel",*filterModelBox);
+ filterResonanceSlider=std::make_unique<juce::Slider>(
+  juce::Slider::LinearHorizontal,juce::Slider::TextBoxRight);
+ filterResonanceSlider->setTextBoxStyle(juce::Slider::TextBoxRight,false,58,20);
+ filterResonanceSlider->textFromValueFunction=[](double v){return juce::String(juce::roundToInt(v/.95*100.))+"%";};
+ filterResonanceSlider->setColour(juce::Slider::trackColourId,juce::Colour(0xffe3a15a));
+ filterResonanceSlider->setColour(juce::Slider::thumbColourId,juce::Colour(0xffe3a15a));
+ addAndMakeVisible(*filterResonanceSlider);
+ filterResonanceAttachment=std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+  p.state,"ladderResonance",*filterResonanceSlider);
  if(combos.size()>0)combos[0]->setVisible(false);
  refreshFilterButtons();refreshFxButtons();
  // Reverb and distortion settings remain independent of legacy FX controls.
@@ -469,6 +483,9 @@ void DISidechainEditor::updateContextualControls(){
  const bool lowEnabled=mode!=0;
  const bool highEnabled=mode==3;
  const bool audioTrigger=trigger!=2;
+ const bool ladder=raw("filterModel")>.5f;
+ if(filterModelBox)filterModelBox->setEnabled(mode!=0);
+ if(filterResonanceSlider)filterResonanceSlider->setEnabled(mode!=0&&ladder);
  if(sliders.size()>=8){
   sliders[3]->setEnabled(!synced); // free-running envelope length
   sliders[5]->setEnabled(lowEnabled);
@@ -839,13 +856,14 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  text(g,"MODE",{30,747,70,18},11,faint);
  text(g,"TRIGGER SOURCE",{375,747,170,18},11,faint);
  text(g,"BEAT DIVISION",{594,747,150,18},11,faint);
- text(g,"LOW / HIGH FREQUENCY RESPONSE",{756,745,330,18},11,faint);
+ text(g,"FILTER MODEL",{758,745,165,18},11,faint);
+ text(g,"RESONANCE",{940,745,165,18},11,faint);
  const char* knobs[]={"SENSITIVITY","LENGTH","SMOOTH","LOW HZ","HIGH HZ","RETRIGGER"};
  for(int i=0;i<6;++i){
   const bool enabled=sliders.size()>static_cast<size_t>(i+2)&&sliders[(size_t)(i+2)]->isEnabled();
   text(g,knobs[i],{29+i*116,805,112,19},11,enabled?faint:faint.withAlpha(.32f));
  }
- paintFrequencyResponse(g,{755,790,348,106});
+ paintFrequencyResponse(g,{755,809,348,94});
  text(g,"DEPTH",{1170,766,110,20},13,white,true);
  text(g,"MIX",{1320,766,110,20},13,white,true);
  text(g,"OUT",{1459,752,57,21},13,white,true);
@@ -961,6 +979,8 @@ void DISidechainEditor::resized() {
  refreshCreativePage();
  if(sequenceToggle)sequenceToggle->setBounds(360,124,137,32);
  if(sequenceCount)sequenceCount->setBounds(501,124,118,30);
+ if(filterModelBox)filterModelBox->setBounds(756,767,169,28);
+ if(filterResonanceSlider)filterResonanceSlider->setBounds(938,767,171,28);
  if(combos.size()==3){
   combos[0]->setBounds(0,0,0,0); // filter mode uses premium segment buttons
   combos[1]->setBounds(376,769,204,30);
