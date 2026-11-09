@@ -51,20 +51,32 @@ public:
   g.setColour(accent);
   g.fillEllipse(c.x-2.f,c.y-2.f,4.f,4.f);
  }
- void drawButtonBackground(juce::Graphics& g,juce::Button& button,const juce::Colour&,bool over,bool down) override {
-  const auto r=button.getLocalBounds().toFloat().reduced(1.5f);
-  const bool active=button.getToggleState();
-  const auto fill=active?lime():down?juce::Colour(0xff234a5e):over?juce::Colour(0xff17394b):juce::Colour(0xff102632);
-  if(active){g.setColour(lime().withAlpha(.18f));g.fillRoundedRectangle(r.expanded(1.f),8.f);}
-  juce::ColourGradient grad(fill.brighter(active?.1f:.08f),r.getX(),r.getY(),
-                            fill.darker(.36f),r.getRight(),r.getBottom(),false);
-  g.setGradientFill(grad);g.fillRoundedRectangle(r,7.f);
-  g.setColour(active?lime():juce::Colour(0xff386277));
-  g.drawRoundedRectangle(r,7.f,1.f);
+ void drawButtonBackground(juce::Graphics& g,juce::Button& button,
+                           const juce::Colour&,bool over,bool down) override {
+  const auto bounds=button.getLocalBounds().toFloat().reduced(1.f);
+  const bool on=button.getToggleState();
+  auto accent=button.findColour(juce::TextButton::buttonOnColourId);
+  auto inactive=button.findColour(juce::TextButton::buttonColourId);
+  if(accent.isTransparent())accent=lime();
+  if(inactive.isTransparent())inactive=juce::Colour(0xff162633);
+  const auto colour=on?accent:down?inactive.brighter(.24f):over?inactive.brighter(.12f):inactive;
+  g.setColour(colour);
+  g.fillRoundedRectangle(bounds,5.f);
+  if(!on){
+   g.setColour(juce::Colour(0xff2d4959));
+   g.drawRoundedRectangle(bounds,5.f,1.f);
+  }
  }
  void drawButtonText(juce::Graphics& g,juce::TextButton& button,bool,bool) override {
-  g.setColour(button.getToggleState()?juce::Colour(0xff06131b):juce::Colours::white);
-  g.setFont(juce::FontOptions(13.f,juce::Font::bold));
-  g.drawFittedText(button.getButtonText(),button.getLocalBounds().reduced(5),juce::Justification::centred,1);
+  const bool on=button.getToggleState();
+  auto colour=button.findColour(on?juce::TextButton::textColourOnId:
+                                   juce::TextButton::textColourOffId);
+  if(colour.isTransparent())colour=on?juce::Colour(0xff071018):juce::Colours::white;
+  g.setColour(colour);
+  const float size=juce::jlimit(8.5f,13.f,button.getHeight()*.47f);
+  g.setFont(juce::FontOptions(size,juce::Font::bold));
+  g.drawFittedText(button.getButtonText(),button.getLocalBounds().reduced(3,1),
+                   juce::Justification::centred,1);
  }
+
 };
