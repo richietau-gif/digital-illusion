@@ -1,4 +1,5 @@
 #include "PluginProcessor.h"
+#include "CellFxRouting.h"
 #include "PluginEditor.h"
 #include "FxWaveshaper.h"
 #include "FxWetMix.h"
@@ -374,14 +375,20 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
   panEnv=modulationSequencers[1].render(envelopeLength*sr);
   activeSequenceStep.store(sequencer.getCurrentStep(),std::memory_order_relaxed);}
  else {env=phase>=1?1:curve(phase);phase=juce::jmin(1.0,phase+step);}
- if(sequenceOn&&creativeGrid){
-  const int gridStep=activeSequenceStep.load(std::memory_order_relaxed);
-  std::array<bool,di::DuckVoiceEngine::tracks> cells{};
-  for(int t=0;t<di::DuckVoiceEngine::tracks;++t)
-   cells[(size_t)t]=getGridCell(t,gridStep)&&!getCellFxFlag(t,gridStep,3);
-  // Every row has an independent envelope and length, with strongest-duck
-  // overlap; a row triggers once as the transport enters its active step.
-  env=duckVoices.process(gridStep,cells,envelopeLength*sr,sequencer.getStepGeneration());
+ // Read each step once. A pure router then controls duck voices, and all
+ // creative sends from the exact same event/mask snapshot.
+ const int gridStep=activeSequenceStep.load(std::memory_order_relaxed);
+ const bool gatedFx=creativeGrid&&sequenceOn;
+ std::array<bool,6> stepEvents{};
+ std::array<int,6> stepMasks{};
+ if(gatedFx)for(int track=0;track<6;++track){
+  stepEvents[(size_t)track]=getGridCell(track,gridStep);
+  stepMasks[(size_t)track]=getCellFxMask(track,gridStep);
+ }
+ const auto cellRoute=di::routeCellEffects(stepEvents,stepMasks,gatedFx);
+ if(gatedFx){
+  env=duckVoices.process(gridStep,cellRoute.duck,envelopeLength*sr,
+                         sequencer.getStepGeneration());
  }
  if(sequenceOn)env=juce::jlimit(0.f,1.f,env+shapeOffset);
  float target=1-depth*(1-env);smoothGain=coeff*smoothGain+(1-coeff)*target;
@@ -419,22 +426,12 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  const float satProcessed=saturatorFx[ch].process(out,saturatorDrive,0.f);
  out=di::mixAlignedFx(satDry,satProcessed,smoothedFxWet*saturatorBlend);
  if(!std::isfinite(out))out=0.f;main.setSample(ch,i,out);peak=juce::jmax(peak,std::abs(out));}
- // Grid effect lanes: indices 6/7 are REVERB and DISTORT respectively.
- // In legacy mode, the new effects remain opt-in and ignore step cells.
- const int currentStep=activeSequenceStep.load(std::memory_order_relaxed);
- // Cell FX routing applies only while SEQUENCER is actually active.
- // In SIDECHAIN mode, enabled effects must remain continuously usable.
- const bool gatedFx=creativeGrid&&sequenceOn;
- bool verbCell=!gatedFx,distCell=!gatedFx,reverseCell=false,delayCell=!gatedFx;
- if(gatedFx){
-  for(int track=0;track<6;++track){
-   if(!getGridCell(track,currentStep))continue; // BYP skips DUCK only, not independent FX sends
-   verbCell=verbCell||getCellFxFlag(track,currentStep,0);
-   distCell=distCell||getCellFxFlag(track,currentStep,1);
-   delayCell=delayCell||getCellFxFlag(track,currentStep,4);
-   reverseCell=reverseCell|| (getCellFxFlag(track,currentStep,0)&&getCellFxFlag(track,currentStep,2));
-  }
- }
+ // One shared step routing decision: FX tails are processed continuously,
+ // bypassing ducking never disables enabled effect sends.
+ const bool verbCell=cellRoute.reverb;
+ const bool distCell=cellRoute.distort;
+ const bool reverseCell=cellRoute.reverse;
+ const bool delayCell=cellRoute.delay;
  float left=main.getSample(0,i),right=main.getSample(1,i);
  creativeFx.process(left,right,distortEnabled&&distCell,reverbEnabled&&verbCell,
                     distortModel,distortDrive,distortWet,
