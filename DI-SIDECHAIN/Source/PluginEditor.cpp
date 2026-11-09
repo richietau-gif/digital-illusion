@@ -645,83 +645,82 @@ void DISidechainEditor::paint(juce::Graphics& g) {
    g.setColour(laneColour);g.strokePath(miniature,juce::PathStrokeType(1.8f));
   }
  }
- // Step editor and modulation lanes: lanes are a single-click selection.
- paintPanel(g,sequencerPanel,"STEP EDIT");
+ // STEP EDIT (left), five modulation lanes (middle), CELL / TRACK (right).
+ paintPanel(g,sequencerPanel,selectedLane==3?"REVERB":selectedLane==4?"DISTORTION":"STEP ENVELOPE");
  paintPanel(g,{897,456,305,240},"MODULATION LANES");
- paintPanel(g,{1212,456,312,240},"LANE SETTINGS");
- text(g,"STEP",{33,503,82,21},12,faint);
- text(g,juce::String(selectedStep+1)+" / "+juce::String(count),{90,532,105,35},25,white,true);
- text(g,"CURVE",{32,591,84,19},12,faint);
- text(g,"Drag a node to change the step shape.",{29,645,192,28},12,faint);
- const juce::String laneName=selectedLane==0?"VOLUME":selectedLane==1?"FILTER":"PAN";
- text(g,laneName+"   /   STEP "+juce::String(selectedStep+1),{231,531,265,16},12,laneColour,true);
- paintShape(g,detailGraph,selectedStep,true);
- text(g,"Drag nodes to edit. Toggle SNAP for 1/16 increments.",{232,667,496,19},11,faint);
- // Six interactive shape palette buttons (mouseDown hits corresponding rectangles).
- for(int i=0;i<9;++i){
-  const int x=734+(i%3)*48,y=552+(i/3)*42;
-  auto rr=juce::Rectangle<float>((float)x,(float)y,42.f,40.f);
-  g.setColour(juce::Colour(0xff122c3b));g.fillRoundedRectangle(rr,6.f);
-  g.setColour(juce::Colour(0xff35667b));g.drawRoundedRectangle(rr,6.f,1.f);
-  juce::Path shape;
+ paintPanel(g,{1212,456,312,240},"CELL / TRACK");
+ const juce::Colour lanes[]={lime,cyan,juce::Colour(0xffd16afb),cyan,orange};
+ for(int i=0;i<5;++i){
+  const int y=497+i*36;
+  auto r=juce::Rectangle<float>(910.f,(float)y,278.f,31.f);
+  g.setColour(selectedLane==i?juce::Colour(0xff1b4251):juce::Colour(0xff0c2534));
+  g.fillRoundedRectangle(r,5.f);
+  g.setColour(lanes[i].withAlpha(selectedLane==i?1.f:.48f));
+  g.drawRoundedRectangle(r,5.f,selectedLane==i?1.6f:.7f);
+  juce::Path wave;
   for(int j=0;j<=24;++j){
    const float t=j/24.f;
-   const float v=i==0?t*t*(3.f-2.f*t):i==1?t:i==2?std::sqrt(t):i==3?(t>.5f?1.f:0.f):i==4?1.f-t:std::abs(std::sin(t*juce::MathConstants<float>::pi));
-   if(j==0)shape.startNewSubPath(x+7.f,y+32.f-24.f*v);
-   else shape.lineTo(x+7.f+28.f*t,y+32.f-24.f*v);
+   const float modulation=i==3?std::exp(-3.f*t):
+                          i==4?std::sin(12.f*t)*std::exp(-2.f*t):
+                          std::sin(t*juce::MathConstants<float>::twoPi*(i+1));
+   const float py=y+16.f-8.f*modulation;
+   if(j==0)wave.startNewSubPath(1029.f,py);
+   else wave.lineTo(1029.f+125.f*t,py);
   }
-  g.setColour(i==0?orange:cyan);g.strokePath(shape,juce::PathStrokeType(1.9f));
+  g.setColour(lanes[i]);g.strokePath(wave,juce::PathStrokeType(1.65f));
  }
- text(g,"CURVE SHAPES",{737,654,142,17},11,faint);
- for(int i=0;i<3;++i){
-  const int y=505+i*60;
-  auto r=juce::Rectangle<float>(913.f,(float)y,272.f,50.f);
-  g.setColour(juce::Colour(0xff0b2030));g.fillRoundedRectangle(r,7.f);
-  g.setColour(juce::Colour(0xff295369));g.drawRoundedRectangle(r,7.f,1.f);
-  const auto colour=i==0?lime:i==1?cyan:juce::Colour(0xffd66bfa);
-  g.setColour(selectedLane==i?colour:colour.withAlpha(.5f));
-  g.drawRoundedRectangle(juce::Rectangle<float>(917.f,(float)y+5.f,100.f,40.f),7.f,selectedLane==i?2.f:1.f);
-  // Native JUCE button overlays the left section, preserving keyboard access.
-  juce::Path wave;
-  for(int j=0;j<=48;++j){
-   const float t=j/48.f;
-   const float px=1029.f+120.f*t;
-   const float py=y+25.f-11.f*std::sin(t*juce::MathConstants<float>::twoPi*(i+1));
-   if(j==0)wave.startNewSubPath(px,py);else wave.lineTo(px,py);
+ const bool fxPage=sequenced&&selectedLane>=3;
+ if(!fxPage){
+  const juce::String laneName=selectedLane==0?"DUCK ENVELOPE":selectedLane==1?"FILTER":"PAN";
+  text(g,juce::String("TRACK ")+juce::String(selectedTrack+1)+"  /  "+laneName,
+       {28,477,460,18},13,white,true);
+  text(g,juce::String(selectedStep+1)+" / "+juce::String(count),{32,523,150,29},21,orange,true);
+  text(g,"CURVE",{34,590,76,18},11,faint);
+  paintShape(g,detailGraph,selectedStep,true);
+  text(g,"Drag points to edit. Shape presets apply to the visible curve.",
+       {232,665,460,18},11,faint);
+  for(int i=0;i<9;++i){
+   const int x=734+(i%3)*48,y=552+(i/3)*42;
+   const auto r=juce::Rectangle<float>((float)x,(float)y,42.f,37.f);
+   g.setColour(juce::Colour(0xff122c3b));g.fillRoundedRectangle(r,5.f);
+   g.setColour(juce::Colour(0xff35667b));g.drawRoundedRectangle(r,5.f,1.f);
+   juce::Path shape;
+   for(int j=0;j<=24;++j){
+    const float t=j/24.f;
+    const float v=i==0?t*t*(3.f-2.f*t):i==1?t:i==2?std::sqrt(t):i==3?(t>.5f?1.f:0.f):
+      i==4?1.f-t:i==5?std::abs(std::sin(t*juce::MathConstants<float>::pi)):
+      i==6?1.f-t*t:i==7?(j%8<4?.9f:.1f):t*t*(3.f-2.f*t);
+    if(j==0)shape.startNewSubPath(x+7.f,y+30.f-23.f*v);
+    else shape.lineTo(x+7.f+28.f*t,y+30.f-23.f*v);
+   }
+   g.setColour(i==0?orange:cyan);
+   g.strokePath(shape,juce::PathStrokeType(1.8f));
   }
-  g.setColour(i==0?orange:i==1?cyan:juce::Colour(0xffd66bfa));g.strokePath(wave,juce::PathStrokeType(2.f));
-  text(g,"EDIT",{1150,y+13,41,24},11,faint,true);
- }
- text(g,"LANE: "+laneName,{1230,504,254,20},13,white,true);
- text(g,"VOLUME OFFSET",{1226,543,110,20},11,selectedLane==0?faint:faint.withAlpha(.55f));
- text(g,"FILTER DEPTH",{1231,592,110,20},12,cyan);
- text(g,"PAN DEPTH",{1231,640,110,20},12,juce::Colour(0xffd66bfa));
- if(selectedTrack>=6&&sequenced) {
-  paintPanel(g,{12,456,1512,240},selectedTrack==6?"REVERB TRACK":"DISTORT TRACK");
-  text(g,selectedTrack==6?"REVERB  |  PRE-FX REVERSE  <  |  TAIL CONTINUES":
-                    "DISTORT  |  PER-STEP DRIVE  |  MODERN WAVESHAPING",
-       {36,472,900,20},12,white,true);
-  text(g,"MODEL",{372,489,145,17},11,faint);
-  if(selectedTrack==6){
-   text(g,"DRY / WET",{180,551,170,16},12,cyan,true);
-   text(g,"LENGTH",{620,551,170,16},12,cyan,true);
-   text(g,"DECAY",{1060,551,170,16},12,cyan,true);
-   text(g,"The < arrow in any REVERB cell reverses its input window before the reverb.",
-        {41,660,1250,20},12,faint);
-  } else {
-   text(g,"DRY / WET",{180,551,170,16},12,orange,true);
-   text(g,"DRIVE (dB)",{620,551,170,16},12,orange,true);
-   text(g,"Five tones: Warm, Acid, Clip, Fold and Modern.",
-        {41,660,1250,20},12,faint);
+ }else{
+  const bool verb=selectedLane==3;
+  text(g,verb?"REVERB · SEND / TAIL / REVERSE":"DISTORT · 2x OVERSAMPLING",
+       {30,479,480,22},14,verb?cyan:orange,true);
+  text(g,verb?"MODEL":"WAVESHAPER MODEL",{326,499,215,18},11,faint);
+  if(verb){
+   text(g,"DRY / WET",{39,549,210,18},12,cyan,true);
+   text(g,"LENGTH",{324,549,210,18},12,cyan,true);
+   text(g,"DECAY",{610,549,190,18},12,cyan,true);
+   text(g,"The selected cell can reverse its captured input before reverb.",
+        {39,648,800,18},11,faint);
+  }else{
+   text(g,"DRY / WET",{39,549,210,18},12,orange,true);
+   text(g,"DRIVE dB",{327,549,210,18},12,orange,true);
+   text(g,"5 drive types: Warm / Acid / Clip / Fold / Modern",
+        {39,648,780,18},11,faint);
   }
  }
- if(sequenced&&selectedTrack<6){
-  text(g,"TRACK "+juce::String(selectedTrack+1)+"  /  INDEPENDENT DUCK ENVELOPE",
-       {1209,474,301,20},13,lime,true);
-  text(g,"DEPTH",{1211,519,140,18},11,faint,true);
-  text(g,"LENGTH (STEPS)",{1211,572,200,18},11,faint,true);
-  text(g,"Overlap: strongest duck wins",{1211,644,283,19},11,faint);
- }
+ text(g,"TRACK "+juce::String(selectedTrack+1)+"  ·  STEP "+juce::String(selectedStep+1),
+      {1225,480,278,21},12,white,true);
+ text(g,"CELL ROUTING  ·  ON / OFF / FX",{1226,499,279,17},10,faint);
+ text(g,"DUCK DEPTH",{1226,567,225,16},11,lime,true);
+ text(g,"ENVELOPE LENGTH (STEPS)",{1226,619,264,16},11,orange,true);
+ text(g,"BYP disables this cell; R/D badges show active FX.",
+      {1226,671,284,15},10,faint);
  // Always visible frequency controls and output meters.
  paintPanel(g,filterPanel,"FILTER");
  paintPanel(g,outputPanel,"OUTPUT / SIDECHAIN");
