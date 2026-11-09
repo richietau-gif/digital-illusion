@@ -256,14 +256,20 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
   if(!hasClipboard)return;
   const bool seq=sequenceToggle->getToggleState();
   const int key=currentShapeKey();
-  if(clipboardDynamic&&key>=96&&key<102){
+  if(key>=96&&key<102){
    const auto before=proc.getDynamicDuckCurve(selectedTrack);
-   proc.setDynamicDuckCurve(selectedTrack,dynamicClipboard);
-   pushDynamicEdit(selectedTrack,before,dynamicClipboard);
+   di::DynamicCurve after;
+   if(clipboardDynamic)after=dynamicClipboard;
+   else for(int n=0;n<8;++n)after.y[(size_t)n]=clipboard[(size_t)n];
+   proc.setDynamicDuckCurve(selectedTrack,after);
+   pushDynamicEdit(selectedTrack,before,after);
   } else {
    const auto before=captureShape(key,seq);
-   applyShape(key,seq,clipboard);
-   pushEdit(key,seq,before,clipboard);
+   auto after=clipboard;
+   if(clipboardDynamic)
+    for(int n=0;n<8;++n)after[(size_t)n]=dynamicClipboard.evaluate(n/7.f);
+   applyShape(key,seq,after);
+   pushEdit(key,seq,before,after);
   }
   repaint();
  };
