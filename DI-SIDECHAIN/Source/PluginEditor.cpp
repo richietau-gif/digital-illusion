@@ -733,42 +733,8 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  } else paintShape(g,graph,selectedStep,false);
  const auto laneColour=selectedLane==0?orange:selectedLane==1?cyan:juce::Colour(0xffd36afb);
  const int playing=proc.activeSequenceStep.load(std::memory_order_relaxed);
- // One visible row, never more than sixteen steps.
- for(int i=0;i<count;++i){
-  const float width=(float)stepStrip.getWidth()/count;
-  const auto r=juce::Rectangle<float>(stepStrip.getX()+i*width+1,stepStrip.getY(),width-3,stepStrip.getHeight());
-  const bool selected=i==selectedStep;
-  juce::ColourGradient tile(selected?juce::Colour(0xffa24d0d):juce::Colour(0xff153447),r.getX(),r.getY(),
-                            selected?juce::Colour(0xff3b230f):juce::Colour(0xff091b27),r.getX(),r.getBottom(),false);
-  g.setGradientFill(tile);g.fillRoundedRectangle(r,6.f);
-  g.setColour(selected?orange: i==playing&&sequenced?lime:juce::Colour(0xff28546a));
-  g.drawRoundedRectangle(r,6.f,selected?2.f:1.f);
-  text(g,juce::String(i+1),r.toNearestInt().reduced(5,3).withHeight(16),12,white,true);
-  if(sequenced) {
-   const bool event=proc.getGridCell(selectedTrack,i);
-   const auto colour=lime;
-   g.setColour(event?colour:juce::Colour(0xff223744));
-   g.fillRoundedRectangle(juce::Rectangle<float>(r.getX()+5.f,r.getY()+22.f,
-                                                  r.getWidth()-10.f,19.f),3.f);
-   if(event){
-    juce::String tags;
-    if(proc.getCellFxFlag(selectedTrack,i,0))tags+="R ";
-    if(proc.getCellFxFlag(selectedTrack,i,1))tags+="D ";
-    if(proc.getCellFxFlag(selectedTrack,i,2))tags+="< ";
-    if(proc.getCellFxFlag(selectedTrack,i,3))tags+="OFF";
-    if(tags.isNotEmpty())text(g,tags,r.toNearestInt().reduced(6,3).withTrimmedTop(20),10,DITheme::dark(),true);
-   }
-  } else {
-   juce::Path miniature;
-   for(int node=0;node<8;++node) {
-    const float value=selectedLane==0?proc.getSequencePoint(i,node):proc.getModulationPoint(selectedLane-1,i,node);
-    const float px=r.getX()+5.f+(r.getWidth()-10.f)*node/7.f;
-    const float py=r.getBottom()-5.f-value*(r.getHeight()-25.f);
-    if(node==0)miniature.startNewSubPath(px,py);else miniature.lineTo(px,py);
-   }
-   g.setColour(laneColour);g.strokePath(miniature,juce::PathStrokeType(1.8f));
-  }
- }
+ // The SEQUENCE row is now part of EVENTS, sharing exact track columns.
+ // No duplicate step thumbnails are drawn below the six musical tracks.
  // STEP EDIT (left), five modulation lanes (middle), CELL / TRACK (right).
  paintPanel(g,sequencerPanel,selectedLane==3?"REVERB":selectedLane==4?"DISTORTION":"STEP ENVELOPE");
  paintPanel(g,{897,456,305,240},"MODULATION LANES");
@@ -1048,8 +1014,11 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
   if(pos.x>=left&&pos.y>=top){
    const int count=juce::jlimit(1,16,(int)sequenceCount->getValue());
    selectedStep=juce::jlimit(0,count-1,(pos.x-left)*count/juce::jmax(1,graph.getRight()-left));
-   selectedTrack=juce::jlimit(0,5,(pos.y-top)*6/juce::jmax(1,graph.getBottom()-top));
-   proc.setGridCell(selectedTrack,selectedStep,!proc.getGridCell(selectedTrack,selectedStep));
+   const int playableHeight=juce::jmax(1,graph.getBottom()-top-32);
+   if(pos.y<top+playableHeight){
+    selectedTrack=juce::jlimit(0,5,(pos.y-top)*6/playableHeight);
+    proc.setGridCell(selectedTrack,selectedStep,!proc.getGridCell(selectedTrack,selectedStep));
+   } // SEQUENCE row selects a column, never toggles a musical event.
    if(gridModeButton&&!gridModeButton->getToggleState())
     gridModeButton->setToggleState(true,juce::sendNotificationSync);
    refreshDuckControls();
