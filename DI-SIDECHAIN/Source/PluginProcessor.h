@@ -4,6 +4,7 @@
 #include "ShapeSequencer.h"
 #include "OversampledFx2x.h"
 #include "FixedDelay.h"
+#include "PrecisionModules.h"
 class DISidechainProcessor : public juce::AudioProcessor {
 public:
  DISidechainProcessor();
@@ -13,7 +14,7 @@ public:
  void processBlock(juce::AudioBuffer<float>&,juce::MidiBuffer&) override;
  juce::AudioProcessorEditor* createEditor() override;
  bool hasEditor() const override {return true;}
- const juce::String getName() const override {return "DI SIDECHAIN";}
+ const juce::String getName() const override {return "PRECISION SIDECHAIN";}
  bool acceptsMidi() const override {return true;}
  bool producesMidi() const override {return false;}
  bool isMidiEffect() const override {return false;}

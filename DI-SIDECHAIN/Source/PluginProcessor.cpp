@@ -11,7 +11,9 @@
 static juce::AudioProcessorValueTreeState::ParameterLayout layoutParams(){
  std::vector<std::unique_ptr<juce::RangedAudioParameter>> p;
  auto f=[&](const char* id,const char* name,float lo,float hi,float def){p.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{id,1},name,juce::NormalisableRange<float>(lo,hi),def));};
- f("depth","Depth",0,1,1); f("mix","Mix",0,1,1);f("threshold","Trigger threshold dB",-60,0,-22);f("length","Envelope milliseconds",10,2000,250);f("smooth","Smoothing milliseconds",0.1,20,2);f("low","Low cutoff",25,1500,120);f("high","High cutoff",60,18000,400);f("retrigger","Trigger holdoff milliseconds",1,250,35);f("shapeOffset","Shape vertical offset",-1,1,0);f("panMod","Pan modulation amount",-1,1,0);f("filterMod","Filter modulation amount",0,1,0);f("fxDrive","Legacy FX drive dB",0,24,0);f("saturatorDrive","Saturator drive dB",0,24,0);f("fxMix","FX wet mix",0,1,1);
+ f("depth","Depth",0,1,1); f("mix","Mix",0,1,1);f("threshold","Trigger threshold dB",-60,0,-22);f("length","Envelope milliseconds",10,2000,250); f("timeOffset","Time Offset",-1,1,0); f("attackProtection","Attack Protection",0,1,0); f("lookahead","Lookahead milliseconds",0,200,0);f("smooth","Smoothing milliseconds",0.1,20,2);f("low","Low cutoff",25,1500,120);f("high","High cutoff",60,18000,400);f("retrigger","Trigger holdoff milliseconds",1,250,35);f("shapeOffset","Shape vertical offset",-1,1,0);f("panMod","Pan modulation amount",-1,1,0);f("filterMod","Filter modulation amount",0,1,0);f("fxDrive","Legacy FX drive dB",0,24,0);f("saturatorDrive","Saturator drive dB",0,24,0);f("fxMix","FX wet mix",0,1,1);
+ p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"filterModel",1},"Filter model",juce::StringArray{"LP12","LP24","LP48","HP12","HP24","HP48","Band Pass","Notch","Low Shelf","High Shelf","Analog Ladder","State Variable","Comb","Formant","Phaser","Aggressive Bass"},0));
+ p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"colorModel",1},"Color model",juce::StringArray{"Warm Saturation","Soft Clip","Hard Clip","Asymmetric Drive","Wavefold","Tube","Digital Crush"},0));
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"mode",1},"Frequency mode",juce::StringArray{"Full","Low","High","Band"},0));
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"trigger",1},"Trigger mode",juce::StringArray{"Audio + MIDI","Audio only","MIDI only"},0));
  p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"sequenceEnabled",1},"Shape sequencer enabled",false));
@@ -64,6 +66,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  const int trig=(int)bounded("trigger",0.f,2.f,0.f);
  const float depth=bounded("depth",0.f,1.f,1.f);
  const float mix=bounded("mix",0.f,1.f,1.f);
+ const float timeOffset=bounded("timeOffset",-1.f,1.f,0.f);
  const float shapeOffset=bounded("shapeOffset",-1.f,1.f,0.f);
  const float panMod=bounded("panMod",-1.f,1.f,0.f);
  const float filterMod=bounded("filterMod",0.f,1.f,0.f);
@@ -164,7 +167,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
   filterEnv=modulationSequencers[0].render(envelopeLength*sr);
   panEnv=modulationSequencers[1].render(envelopeLength*sr);
   activeSequenceStep.store(sequencer.getCurrentStep(),std::memory_order_relaxed);}
- else {env=phase>=1?1:curve(phase);phase=juce::jmin(1.0,phase+step);}
+ else { const double shifted=juce::jlimit(0.0,1.0,phase + (double)timeOffset * 0.5); env=phase>=1?1:curve(shifted); phase=juce::jmin(1.0,phase+step);}
  if(sequenceOn)env=juce::jlimit(0.f,1.f,env+shapeOffset);
  float target=1-depth*(1-env);smoothGain=coeff*smoothGain+(1-coeff)*target;
  // Independent, opt-in modulation lanes; neutral defaults preserve legacy patches.
