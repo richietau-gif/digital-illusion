@@ -663,7 +663,7 @@ void DISidechainEditor::resized() {
  if(creativeModelBoxes[0])creativeModelBoxes[0]->setBounds(370,510,270,33);
  if(creativeModelBoxes[1])creativeModelBoxes[1]->setBounds(370,510,270,33);
  for(int i=0;i<5;++i)if(creativeSliders[i])
-  creativeSliders[i]->setBounds(175+(i%3)*440,575+(i/3)*67,315,35);
+  creativeSliders[i]->setBounds(175+(i<3?i:i-3)*440,575,315,35);
  refreshCreativePage();
  if(sequenceToggle)sequenceToggle->setBounds(360,124,137,32);
  if(sequenceCount)sequenceCount->setBounds(506,124,87,30);
@@ -753,6 +753,7 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
    const int x1=left+(selectedStep+1)*(graph.getRight()-left)/count;
    if(selectedTrack==6&&pos.x>=x1-16) {
     proc.setGridReverse(selectedStep,!proc.getGridReverse(selectedStep));
+    proc.setGridCell(6,selectedStep,true);
    } else {
     proc.setGridCell(selectedTrack,selectedStep,!proc.getGridCell(selectedTrack,selectedStep));
    }
