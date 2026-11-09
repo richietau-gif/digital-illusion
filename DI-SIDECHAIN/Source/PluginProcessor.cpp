@@ -252,6 +252,10 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  if(di::shouldConsumeAudioPeak(audioPeak,armed,trig))armed=false;
  if(refractory>0)--refractory;
  if(fire){
+  // External audio sidechain crossings also trigger Track 1 directly.
+  // MIDI notes 36..41 remain independent and do not depend on this detector.
+  if(sequenceOn&&creativeGrid&&audioPeak&&trig!=2)
+   duckVoices.triggerTrack(0,envelopeLength*sr,1.f);
   phase=0;
   // In tempo-sync mode, incoming kicks/notes trigger the ducking envelope,
   // not the song-position sequencer. Otherwise frequent notes pin it to step 1.
