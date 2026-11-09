@@ -339,7 +339,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  bool verbCell=!creativeGrid,distCell=!creativeGrid,reverseCell=false;
  if(creativeGrid){
   for(int track=0;track<6;++track){
-   if(!getGridCell(track,currentStep)||getCellFxFlag(track,currentStep,3))continue;
+   if(!getGridCell(track,currentStep))continue; // BYP skips DUCK only, not independent FX sends
    verbCell=verbCell||getCellFxFlag(track,currentStep,0);
    distCell=distCell||getCellFxFlag(track,currentStep,1);
    reverseCell=reverseCell|| (getCellFxFlag(track,currentStep,0)&&getCellFxFlag(track,currentStep,2));
