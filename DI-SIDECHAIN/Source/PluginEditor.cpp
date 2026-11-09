@@ -765,13 +765,14 @@ void DISidechainEditor::refreshCreativePage(){
   sceneButtons[j]->setVisible(sceneActive);
   sceneButtons[j]->setToggleState(proc.getGridScene()==j,juce::dontSendNotification);
  }
- const bool fxPage=selectedTrack>=6&&sequenceToggle&&sequenceToggle->getToggleState();
- const bool duckPage=selectedTrack<6&&sequenceToggle&&sequenceToggle->getToggleState();
+ const bool active=sequenceToggle&&sequenceToggle->getToggleState();
+ const bool fxPage=active&&selectedLane>=3;
+ const bool duckPage=active&&selectedTrack<6;
  if(duckDepthSlider)duckDepthSlider->setVisible(duckPage);
  if(duckLengthSlider)duckLengthSlider->setVisible(duckPage);
- const bool verb=selectedTrack==6;
+ const bool verb=selectedLane==3;
  if(reverbOnButton)reverbOnButton->setVisible(fxPage&&verb);
- if(distortOnButton)distortOnButton->setVisible(fxPage&&selectedTrack==7);
+ if(distortOnButton)distortOnButton->setVisible(fxPage&&selectedLane==4);
  if(reverseButton)reverseButton->setVisible(fxPage&&verb);
  for(int i=0;i<2;++i)if(creativeModelBoxes[i])creativeModelBoxes[i]->setVisible(fxPage&&i==(verb?0:1));
  for(int i=0;i<5;++i)if(creativeSliders[i])creativeSliders[i]->setVisible(fxPage&&(verb?i<3:i>=3));
@@ -779,9 +780,9 @@ void DISidechainEditor::refreshCreativePage(){
  for(auto* b:{copyStep.get(),pasteStep.get(),resetStep.get(),undoButton.get(),redoButton.get(),
               snapButton.get(),shapePresetButton.get(),sequencePrev.get(),sequenceNext.get()})
   if(b)b->setVisible(!fxPage);
- if(shapeOffset)shapeOffset->setVisible(!fxPage);
- for(auto& slider:laneSliders)if(slider)slider->setVisible(!fxPage);
- for(auto& b:laneTabs)if(b)b->setVisible(!fxPage);
+ if(shapeOffset)shapeOffset->setVisible(!active);
+ for(auto& slider:laneSliders)if(slider)slider->setVisible(!active);
+ for(auto& b:laneTabs)if(b)b->setVisible(true);
 }
 void DISidechainEditor::resized() {
  // All child component bounds use design pixels. The parent editor, graph
@@ -801,15 +802,18 @@ void DISidechainEditor::resized() {
  if(gridModeButton)gridModeButton->setBounds(865,124,147,30);
  for(int i=0;i<4;++i)if(sceneButtons[i])sceneButtons[i]->setBounds(873+i*62,179,57,22);
  if(copySceneButton)copySceneButton->setBounds(1124,179,113,22);
- if(duckDepthSlider)duckDepthSlider->setBounds(1190,542,290,31);
- if(duckLengthSlider)duckLengthSlider->setBounds(1190,594,290,31);
- if(reverbOnButton)reverbOnButton->setBounds(43,510,170,33);
- if(distortOnButton)distortOnButton->setBounds(43,510,170,33);
- if(reverseButton)reverseButton->setBounds(231,510,122,33);
- if(creativeModelBoxes[0])creativeModelBoxes[0]->setBounds(370,510,270,33);
- if(creativeModelBoxes[1])creativeModelBoxes[1]->setBounds(370,510,270,33);
- for(int i=0;i<5;++i)if(creativeSliders[i])
-  creativeSliders[i]->setBounds(175+(i<3?i:i-3)*440,575,315,35);
+ if(duckDepthSlider)duckDepthSlider->setBounds(1224,586,284,30);
+ if(duckLengthSlider)duckLengthSlider->setBounds(1224,638,284,30);
+ if(reverbOnButton)reverbOnButton->setBounds(32,505,125,31);
+ if(distortOnButton)distortOnButton->setBounds(32,505,125,31);
+ if(reverseButton)reverseButton->setBounds(163,505,132,31);
+ if(creativeModelBoxes[0])creativeModelBoxes[0]->setBounds(324,505,220,31);
+ if(creativeModelBoxes[1])creativeModelBoxes[1]->setBounds(324,505,220,31);
+ for(int i=0;i<5;++i)if(creativeSliders[i]){
+  const int col=i<3?i:i-3;
+  creativeSliders[i]->setBounds(36+col*283,576,253,33);
+ }
+ for(int i=0;i<5;++i)if(cellControls[i])cellControls[i]->setBounds(1223+i*58,522,55,31);
  refreshCreativePage();
  if(sequenceToggle)sequenceToggle->setBounds(360,124,137,32);
  if(sequenceCount)sequenceCount->setBounds(506,124,87,30);
@@ -838,8 +842,8 @@ void DISidechainEditor::resized() {
  if(shapeOffset){shapeOffset->setBounds(1320,543,184,31);shapeOffset->setEnabled(selectedLane==0);}
  if(laneSliders[0])laneSliders[0]->setBounds(1320,593,184,31);
  if(laneSliders[1])laneSliders[1]->setBounds(1320,640,184,31);
- for(int i=0;i<3;++i)if(laneTabs[i]){
-  laneTabs[i]->setBounds(919,510+i*60,101,39);
+ for(int i=0;i<5;++i)if(laneTabs[i]){
+  laneTabs[i]->setBounds(920,500+i*36,99,27);
   laneTabs[i]->setToggleState(i==selectedLane,juce::dontSendNotification);
  }
  for(int i=0;i<4;++i)if(filterButtons[i])filterButtons[i]->setBounds(31+i*78,768,73,30);
@@ -865,7 +869,7 @@ void DISidechainEditor::resized() {
  }
 }
 void DISidechainEditor::updatePoint(const juce::MouseEvent& e) {
- if(selectedTrack>=6&&sequenceToggle&&sequenceToggle->getToggleState())return;
+ if(selectedLane>=3&&sequenceToggle&&sequenceToggle->getToggleState())return;
  // Continue editing the captured node beyond the graph edges; the vertical
  // value is clamped below. Starting a drag outside the graph remains ignored.
  if(!draggingShape&&!detailGraph.contains((e.position/uiScale).toInt()))return;
@@ -888,37 +892,24 @@ void DISidechainEditor::updateDetailPoint(const juce::MouseEvent& e){updatePoint
 void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
  const auto pos=(e.position/uiScale).toInt();
  // Six shape palette shortcuts mirror the dedicated shape preset browser.
- for(int i=0;i<9;++i)if(juce::Rectangle<int>(734+(i%3)*48,552+(i/3)*42,42,36).contains(pos)){
+ for(int i=0;i<9&&selectedLane<3;++i)if(juce::Rectangle<int>(734+(i%3)*48,552+(i/3)*42,42,36).contains(pos)){
   applyShapePreset(i);return;
  }
  if(juce::Rectangle<int>(24,117,153,43).contains(pos)){sequenceToggle->setToggleState(false,juce::sendNotificationSync);selectedLane=0;refreshCreativePage();repaint();return;}
  if(juce::Rectangle<int>(183,117,155,43).contains(pos)){sequenceToggle->setToggleState(true,juce::sendNotificationSync);refreshCreativePage();repaint();return;}
- // Grid cell click toggles an event; the narrow < area on REVERB
- // independently toggles reverse for THAT step, not the whole reverb.
- if(sequenceToggle->getToggleState()&&graph.contains(pos)) {
+ // Each track cell is independently routed through the five cell switches.
+ if(sequenceToggle->getToggleState()&&graph.contains(pos)){
   constexpr int labelWidth=116;
   const int left=graph.getX()+labelWidth,top=graph.getY()+23;
-  if(pos.x>=left&&pos.y>=top) {
+  if(pos.x>=left&&pos.y>=top){
    const int count=juce::jlimit(1,16,(int)sequenceCount->getValue());
    selectedStep=juce::jlimit(0,count-1,(pos.x-left)*count/juce::jmax(1,graph.getRight()-left));
-   selectedTrack=juce::jlimit(0,7,(pos.y-top)*8/juce::jmax(1,graph.getBottom()-top));
-   const int x1=left+(selectedStep+1)*(graph.getRight()-left)/count;
-   if(selectedTrack==6&&pos.x>=x1-16) {
-    proc.setGridReverse(selectedStep,!proc.getGridReverse(selectedStep));
-    proc.setGridCell(6,selectedStep,true);
-   } else {
-    proc.setGridCell(selectedTrack,selectedStep,!proc.getGridCell(selectedTrack,selectedStep));
-   }
+   selectedTrack=juce::jlimit(0,5,(pos.y-top)*6/juce::jmax(1,graph.getBottom()-top));
+   proc.setGridCell(selectedTrack,selectedStep,!proc.getGridCell(selectedTrack,selectedStep));
    if(gridModeButton&&!gridModeButton->getToggleState())
     gridModeButton->setToggleState(true,juce::sendNotificationSync);
-   // First activated FX cell also enables its effect; no silent surprise
-   // from an inactive global rack switch while programming the grid.
-   if(selectedTrack==6&&proc.getGridCell(6,selectedStep)&&reverbOnButton&&!reverbOnButton->getToggleState())
-    reverbOnButton->setToggleState(true,juce::sendNotificationSync);
-   if(selectedTrack==7&&proc.getGridCell(7,selectedStep)&&distortOnButton&&!distortOnButton->getToggleState())
-    distortOnButton->setToggleState(true,juce::sendNotificationSync);
-   refreshCreativePage();
    refreshDuckControls();
+   refreshCreativePage();
    repaint();
   }
   return;
@@ -926,9 +917,9 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
  if(stepStrip.contains(pos)){
   const int count=juce::jlimit(1,16,(int)sequenceCount->getValue());
   selectedStep=juce::jlimit(0,count-1,(pos.x-stepStrip.getX())*count/juce::jmax(1,stepStrip.getWidth()));
-  repaint();return;
+  refreshCellControls();repaint();return;
  }
- if(detailGraph.contains(pos)){
+ if(selectedLane<3&&detailGraph.contains(pos)){
   draggingShape=true;
   dragNode=juce::jlimit(0,7,juce::roundToInt((pos.x-detailGraph.getX())*7.f/juce::jmax(1,detailGraph.getWidth())));
   dragStep=selectedStep+(sequenceToggle->getToggleState()?selectedLane*32:0);
