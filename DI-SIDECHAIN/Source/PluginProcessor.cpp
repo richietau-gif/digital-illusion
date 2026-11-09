@@ -32,6 +32,14 @@ static juce::AudioProcessorValueTreeState::ParameterLayout layoutParams(){
  f("distortWet","Distortion wet",0,1,.4f); f("distortDrive","Distortion drive dB",0,24,8);
  f("reverbPreDelay","Reverb predelay ms",0,250,35);
  f("distortTone","Distortion tone",0,1,.7f);
+ p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"delayEnabled",1},"Delay enabled",false));
+ p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"delaySync",1},"Delay tempo sync",true));
+ p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"delayPingpong",1},"Delay ping pong",false));
+ p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"delayDivision",1},
+  "Delay note division",juce::StringArray{"1/32","1/16","1/8","1/8 dotted","1/4","1/4 dotted","1/2","1 bar"},2));
+ f("delayTime","Delay time ms",5.f,2000.f,375.f);
+ f("delayFeedback","Delay feedback",0.f,.95f,.35f);
+ f("delayWet","Delay wet",0.f,1.f,.3f);
 
  p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"fxEnabled",1},"FX enabled",false));
  p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"saturatorEnabled",1},"Independent saturator enabled",false));
@@ -90,18 +98,18 @@ float DISidechainProcessor::getDuckCurvePoint(int t,int j) const noexcept {
  return t>=0&&t<6&&j>=0&&j<8?duckCurve[(size_t)t][(size_t)j].load(std::memory_order_relaxed):1.f;
 }
 void DISidechainProcessor::setCellFxFlag(int track,int step,int flag,bool enabled) noexcept {
- if(track<0||track>=6||step<0||step>=gridSteps||flag<0||flag>3)return;
+ if(track<0||track>=6||step<0||step>=gridSteps||flag<0||flag>4)return;
  auto& bits=sceneCellFx[(size_t)getGridScene()][(size_t)track][(size_t)step];
  const int mask=1<<flag;
  if(enabled)bits.fetch_or(mask,std::memory_order_relaxed);
  else bits.fetch_and(~mask,std::memory_order_relaxed);
 }
 bool DISidechainProcessor::getCellFxFlag(int track,int step,int flag) const noexcept {
- return flag>=0&&flag<4&&(getCellFxMask(track,step)&(1<<flag))!=0;
+ return flag>=0&&flag<5&&(getCellFxMask(track,step)&(1<<flag))!=0;
 }
 int DISidechainProcessor::getCellFxMask(int track,int step) const noexcept {
  if(track<0||track>=6||step<0||step>=gridSteps)return 0;
- return sceneCellFx[(size_t)getGridScene()][(size_t)track][(size_t)step].load(std::memory_order_relaxed)&15;
+ return sceneCellFx[(size_t)getGridScene()][(size_t)track][(size_t)step].load(std::memory_order_relaxed)&31;
 }
 void DISidechainProcessor::setGridScene(int scene) noexcept {
  activeGridScene.store(juce::jlimit(0,gridScenes-1,scene),std::memory_order_release);
@@ -190,6 +198,13 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  const float distortDrive=bounded("distortDrive",0.f,24.f,8.f);
  const float reverbPreDelay=bounded("reverbPreDelay",0.f,250.f,35.f);
  const float distortTone=bounded("distortTone",0.f,1.f,.7f);
+ const bool delayEnabled=get("delayEnabled")>.5f;
+ const bool delaySync=get("delaySync")>.5f;
+ const bool delayPingpong=get("delayPingpong")>.5f;
+ const int delayDivision=(int)bounded("delayDivision",0.f,7.f,2.f);
+ const float delayTime=bounded("delayTime",5.f,2000.f,375.f);
+ const float delayWet=bounded("delayWet",0.f,1.f,.3f);
+ const float delayFeedback=bounded("delayFeedback",0.f,.95f,.35f);
 
  const int fxType=(int)bounded("fxType",0.f,1.f,0.f);
  int clipperMode=(int)bounded("clipperMode",0.f,2.f,0.f);
@@ -342,12 +357,13 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  // Grid effect lanes: indices 6/7 are REVERB and DISTORT respectively.
  // In legacy mode, the new effects remain opt-in and ignore step cells.
  const int currentStep=activeSequenceStep.load(std::memory_order_relaxed);
- bool verbCell=!creativeGrid,distCell=!creativeGrid,reverseCell=false;
+ bool verbCell=!creativeGrid,distCell=!creativeGrid,reverseCell=false,delayCell=!creativeGrid;
  if(creativeGrid){
   for(int track=0;track<6;++track){
    if(!getGridCell(track,currentStep))continue; // BYP skips DUCK only, not independent FX sends
    verbCell=verbCell||getCellFxFlag(track,currentStep,0);
    distCell=distCell||getCellFxFlag(track,currentStep,1);
+   delayCell=delayCell||getCellFxFlag(track,currentStep,4);
    reverseCell=reverseCell|| (getCellFxFlag(track,currentStep,0)&&getCellFxFlag(track,currentStep,2));
   }
  }
@@ -355,7 +371,12 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  creativeFx.process(left,right,distortEnabled&&distCell,reverbEnabled&&verbCell,
                     distortModel,distortDrive,distortWet,
                     reverbModel,reverbEnabled?reverbWet:0.f,reverbLength,reverbDecay,(reverseReverb||reverseCell)&&verbCell,
-                    reverbPreDelay,distortTone);
+                    reverbPreDelay,distortTone,
+                    delayEnabled&&delayCell,delayEnabled?delayWet:0.f,delayFeedback,
+                    delaySync? (60.0/bpm*([&](){
+                      constexpr double notes[8]={.125,.25,.5,.75,1.,1.5,2.,4.};
+                      return notes[delayDivision];}())):delayTime*.001,
+                    delayPingpong);
  main.setSample(0,i,left);main.setSample(1,i,right);
  peak=juce::jmax(peak,juce::jmax(std::abs(left),std::abs(right)));
  }
@@ -404,7 +425,7 @@ void DISidechainProcessor::setStateInformation(const void* data,int bytes){
    }
    for(int t=0;t<6;++t)for(int k=0;k<gridSteps;++k){
     const auto key="cellFx_"+juce::String(scene)+"_"+juce::String(t)+"_"+juce::String(k);
-    sceneCellFx[(size_t)scene][(size_t)t][(size_t)k].store(juce::jlimit(0,15,(int)tree.getProperty(key,0)),std::memory_order_relaxed);
+    sceneCellFx[(size_t)scene][(size_t)t][(size_t)k].store(juce::jlimit(0,31,(int)tree.getProperty(key,0)),std::memory_order_relaxed);
    }
    for(int k=0;k<gridSteps;++k){
     const auto key="reverse_"+juce::String(scene)+"_"+juce::String(k);
