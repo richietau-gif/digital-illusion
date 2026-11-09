@@ -58,11 +58,38 @@ private:
  bool filled=false;
 };
 
+// Preallocated stereo predelay. Delay is applied to the wet reverb send only.
+class StereoPredelay {
+public:
+ void prepare(double sr){
+  const size_t n=static_cast<size_t>(std::ceil(std::clamp(sr,8000.,192000.)*.26))+8u;
+  for(auto& channel:history)channel.assign(n,0.f);
+  reset();
+ }
+ void reset() noexcept{
+  writeIndex=0;
+  for(auto& channel:history)std::fill(channel.begin(),channel.end(),0.f);
+ }
+ void process(float& left,float& right,int delaySamples) noexcept{
+  const auto size=history[0].size();
+  if(size==0)return;
+  const auto delay=static_cast<size_t>(std::clamp(delaySamples,0,static_cast<int>(size)-2));
+  const auto readIndex=(writeIndex+size-delay)%size;
+  const float oldL=history[0][readIndex],oldR=history[1][readIndex];
+  history[0][writeIndex]=left;history[1][writeIndex]=right;
+  writeIndex=(writeIndex+1)%size;
+  if(delay!=0){left=oldL;right=oldR;}
+ }
+private:
+ std::array<std::vector<float>,2> history;
+ size_t writeIndex=0;
+};
 class CreativeFx {
 public:
  void prepare(double sr) {
   sampleRate=std::isfinite(sr)?std::clamp(sr,8000.,192000.):44100.;
   reverse.prepare(sampleRate);
+  predelay.prepare(sampleRate);
   fadeCoeff=1.f-std::exp(-1.f/(float)(sampleRate*0.005));
   reverb.setSampleRate(sampleRate);
   for(auto& d:distortion)d.reset();
@@ -77,6 +104,8 @@ public:
  void reset() noexcept {
   reverb.reset();
   reverse.reset();
+  predelay.reset();
+  toneMemory.fill(0.f);
   for(auto& d:distortion)d.reset();
   for(auto& d:distortionDry)d.reset();
   lastModel=-1;
@@ -89,7 +118,8 @@ public:
  // Both effects have independent sends and never remove the original dry signal.
  void process(float& left,float& right,bool distActive,bool verbActive,
               int distModel,float distDrive,float distWet,
-              int verbModel,float verbWet,float verbLength,float verbDecay,bool reversed) noexcept {
+              int verbModel,float verbWet,float verbLength,float verbDecay,bool reversed,
+              float verbPreDelayMs=0.f,float distortTone=1.f) noexcept {
   if(!std::isfinite(left))left=0.f;
   if(!std::isfinite(right))right=0.f;
   const float dryL=left,dryR=right;
@@ -107,14 +137,23 @@ public:
   const float alignedR=distortionDry[1].process(dryR);
   const float distortedL=distortion[0].process(dryL,distModel,distGain);
   const float distortedR=distortion[1].process(dryR,distModel,distGain);
-  left=alignedL+distBlend*(distortedL-alignedL);
-  right=alignedR+distBlend*(distortedR-alignedR);
+  // Tone: 0 = mellow lowpass, 1 = open / modern high-frequency edge.
+  const float tone=std::clamp(distortTone,0.f,1.f);
+  const float hz=180.f*std::pow(100.f,tone);
+  const float toneCoeff=std::exp(-6.28318530718f*hz/(float)sampleRate);
+  toneMemory[0]=toneCoeff*toneMemory[0]+(1.f-toneCoeff)*distortedL;
+  toneMemory[1]=toneCoeff*toneMemory[1]+(1.f-toneCoeff)*distortedR;
+  left=alignedL+distBlend*(toneMemory[0]-alignedL);
+  right=alignedR+distBlend*(toneMemory[1]-alignedR);
   const float originalL=left,originalR=right;
   float sendL=left,sendR=right;
   reverse.process(sendL,sendR,reversed);
   // Do not reset the reverb on inactive steps: the tail must ring out.
   // Reverb processes continuously, but receives no new input on inactive steps.
   sendL*=verbSend;sendR*=verbSend;
+  const int delaySamples=static_cast<int>(std::round(
+   std::clamp(verbPreDelayMs,0.f,250.f)*.001*sampleRate));
+  predelay.process(sendL,sendR,delaySamples);
   const int model=std::clamp(verbModel,0,4);
   constexpr float sizes[5]={.2f,.45f,.7f,.88f,.98f};
   constexpr float damp[5]={.75f,.60f,.45f,.27f,.12f};
@@ -136,6 +175,8 @@ public:
 private:
  double sampleRate=44100.;
  ReverseSend reverse;
+ StereoPredelay predelay;
+ std::array<float,2> toneMemory{};
  std::array<CreativeDistort2x,2> distortion;
  std::array<FixedDelay<CreativeDistort2x::latencySamples>,2> distortionDry;
  juce::Reverb reverb;
