@@ -5,6 +5,7 @@
 #include "OversampledFx2x.h"
 #include "FixedDelay.h"
 #include "CreativeFx.h"
+#include "DuckVoiceEngine.h"
 class DISidechainProcessor : public juce::AudioProcessor {
 public:
  DISidechainProcessor();
@@ -33,6 +34,14 @@ public:
  static constexpr int gridTracks=8, gridSteps=16;
  std::array<std::array<std::atomic<bool>,gridSteps>,gridTracks> gridCells{};
  std::array<std::atomic<bool>,gridSteps> gridReverseCells{};
+ std::array<std::atomic<float>,6> duckDepth{},duckLength{};
+ std::array<std::array<std::atomic<float>,8>,6> duckCurve{};
+ void setDuckTrackDepth(int track,float value) noexcept;
+ void setDuckTrackLength(int track,float value) noexcept;
+ float getDuckTrackDepth(int track) const noexcept;
+ float getDuckTrackLength(int track) const noexcept;
+ void setDuckCurvePoint(int track,int node,float value) noexcept;
+ float getDuckCurvePoint(int track,int node) const noexcept;
  void setGridReverse(int step,bool enabled) noexcept;
  bool getGridReverse(int step) const noexcept;
  void setGridCell(int track,int step,bool enabled) noexcept;
@@ -51,6 +60,7 @@ private:
  std::array<di::OversampledFx2x,2> oversampledFx, saturatorFx;
  std::array<di::FixedDelay<di::OversampledFx2x::latencySamples>,2> fxDryDelay, saturatorDryDelay;
  di::CreativeFx creativeFx;
+ di::DuckVoiceEngine duckVoices;
  di::ShapeSequencer sequencer;
  std::array<di::ShapeSequencer,2> modulationSequencers;
  double sr=44100, phase=1, envelopeLength=0.25, detector=0;
