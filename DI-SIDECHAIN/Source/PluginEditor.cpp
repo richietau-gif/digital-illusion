@@ -196,7 +196,7 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
   addAndMakeVisible(*abButtons[i]);
   abButtons[i]->onClick=[this,i]{ if(abStored[i]) recallAB(i); else captureAB(i); };
  }
- const char* copyLabels[] = {"A→B","B→A"};
+ const char* copyLabels[] = {"A > B","B > A"};
  for(int i=0;i<2;++i){
   abCopyButtons[i]=std::make_unique<juce::TextButton>(copyLabels[i]);
   buttonStyle(*abCopyButtons[i]); addAndMakeVisible(*abCopyButtons[i]);
@@ -514,6 +514,10 @@ void DISidechainEditor::updateContextualControls(){
  const bool audioTrigger=trigger!=2;
  const bool ladder=raw("filterModel")>.5f;
  if(filterModelBox)filterModelBox->setEnabled(mode!=0);
+ if(delaySliders[2])delaySliders[2]->setEnabled(
+  proc.state.getRawParameterValue("delaySync")->load()<=.5f);
+ if(delayDivisionBox)delayDivisionBox->setEnabled(
+  proc.state.getRawParameterValue("delaySync")->load()>.5f);
  if(filterResonanceSlider)filterResonanceSlider->setEnabled(mode!=0&&ladder);
  if(sliders.size()>=8){
   sliders[3]->setEnabled(!synced); // free-running envelope length
@@ -1074,7 +1078,9 @@ void DISidechainEditor::updatePoint(const juce::MouseEvent& e) {
    (detailGraph.getBottom()-point.y)/(float)juce::jmax(1,detailGraph.getHeight()));
   if(snapButton&&snapButton->getToggleState()){
    const int k=dragNode;
-   if(k>0&&k<c.count-1)c.x[(size_t)k]=std::round(c.x[(size_t)k]*16.f)/16.f;
+   if(k>0&&k<c.count-1)c.x[(size_t)k]=juce::jlimit(
+    c.x[(size_t)(k-1)]+.015f,c.x[(size_t)(k+1)]-.015f,
+    std::round(c.x[(size_t)k]*16.f)/16.f);
    c.y[(size_t)k]=std::round(c.y[(size_t)k]*16.f)/16.f;
   }
   proc.setDynamicDuckCurve(selectedTrack,c);
