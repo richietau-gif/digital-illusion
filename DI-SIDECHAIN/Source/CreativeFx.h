@@ -100,7 +100,7 @@ public:
   constexpr float damp[5]={.75f,.60f,.45f,.27f,.12f};
   if(model!=lastModel||verbLength!=lastLength||verbDecay!=lastDecay){
    juce::Reverb::Parameters p;
-   p.roomSize=std::clamp(sizes[model]*(.55f+.45f*std::clamp(verbLength,.1f,8.f)/8.f),0.f,1.f);
+   p.roomSize=std::clamp(sizes[model]*(.55f+.45f*std::clamp(verbLength,.1f,8.f)/8.f)*(1.f-.5f*std::clamp(verbDecay,0.f,1.f)),0.f,1.f);
    p.damping=std::clamp(damp[model]*(1.f-.65f*std::clamp(verbDecay,0.f,1.f)),0.f,1.f);
    p.width=1.f;p.freezeMode=0.f;p.wetLevel=1.f;p.dryLevel=0.f;
    reverb.setParameters(p);
@@ -108,8 +108,8 @@ public:
   }
   reverb.processStereo(&sendL,&sendR,1);
   const float rw=std::clamp(verbWet,0.f,1.f);
-  left=originalL+rw*sendL;
-  right=originalR+rw*sendR;
+  left=originalL*(1.f-rw)+rw*sendL;
+  right=originalR*(1.f-rw)+rw*sendR;
   if(!std::isfinite(left))left=0.f;
   if(!std::isfinite(right))right=0.f;
  }
