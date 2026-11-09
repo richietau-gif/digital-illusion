@@ -899,48 +899,6 @@ void DISidechainEditor::applyFactoryPreset(int index) {
  selectedTrack=0;selectedStep=0;
  refreshDuckControls();refreshCreativePage();repaint();
  return;
-
- const di::ShapeSequencer::Shape shapes[]={
-  {1.f,.85f,.4f,.02f,.12f,.55f,.88f,1.f}, // Classic Duck
-  {1.f,.2f,.02f,.02f,.08f,.32f,.75f,1.f}, // Deep Pump
-  {1.f,.9f,.15f,.03f,.35f,.8f,.95f,1.f}, // 4/4
-  {1.f,.75f,.05f,.35f,.08f,.7f,.9f,1.f}, // Breakbeat
-  {0.f,0.f,.25f,.6f,.95f,1.f,1.f,1.f},  // Pump Rise
-  {.5f,.2f,.85f,.3f,.9f,.25f,.8f,.5f}   // Wobble
- };
- const char* names[]={"Classic Duck","Deep Pump","Sidechain 4/4",
-                      "Breakbeat Pump","Pump Rise","Wobble"};
- index=juce::jlimit(0,5,index);
- presetName=names[index];
- proc.state.state.setProperty("presetName",presetName,nullptr);
- presetButton->setButtonText("PRESETS  -  "+presetName);
- // The legacy sidechain mode reads proc.points rather than sequencePoints.
- // Set the audible envelope as well as the bank so Classic Duck is effective.
- const auto legacyBefore=captureShape(0,false);
- applyShape(0,false,shapes[index]);
- pushEdit(0,false,legacyBefore,shapes[index]);
- for(int step=0;step<16;++step) {
-  const auto before=captureShape(step,true);
-  auto after=shapes[index];
-  if(index==3) { // Breakbeat: distinctive ghost hits and alternate accents.
-   if(step%8==2||step%8==7)after={1.f,.58f,.15f,.09f,.4f,.75f,.95f,1.f};
-   else if(step%8==5)after={1.f,.95f,.66f,.18f,.09f,.47f,.82f,1.f};
-  } else if(index==5 && (step%2)==1) {
-   after={.5f,.8f,.25f,.9f,.3f,.85f,.2f,.5f};
-  }
-  applyShape(step,true,after);
-  pushEdit(step,true,before,after);
- }
- if(auto* parameter=proc.state.getParameter("sequenceEnabled")){
-  parameter->beginChangeGesture();
-  parameter->setValueNotifyingHost(index==0?0.f:1.f);
-  parameter->endChangeGesture();
- }
- selectedLane=0;
- for(int lane=0;lane<3;++lane)if(laneTabs[lane])
-  laneTabs[lane]->setToggleState(lane==0,juce::dontSendNotification);
- if(shapeOffset)shapeOffset->setEnabled(true);
- repaint();
 }
 void DISidechainEditor::applyShapePreset(int index) {
  const float shapes[][8]={
