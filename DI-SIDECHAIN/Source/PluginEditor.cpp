@@ -697,7 +697,7 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  }
  g.setColour(cyan.withAlpha(.23f));g.strokePath(logo,juce::PathStrokeType(6.f));
  g.setColour(cyan);g.strokePath(logo,juce::PathStrokeType(2.5f));
- text(g,"DI SIDEFX", {117,30,280,39},32,white,true);
+ text(g,"DI SEQFX", {117,30,280,39},32,white,true);
  text(g,"5.4",{365,30,100,39},27,orange,true);
  text(g,"D I G I T A L   I L L U S I O N",{120,72,310,16},12,faint);
  g.setColour(juce::Colour(0xff2d5668));g.drawVerticalLine(435,30.f,80.f);
@@ -1400,8 +1400,8 @@ void DISidechainEditor::showSetupMenu() {
   });
 }
 void DISidechainEditor::saveUserPreset() {
- const auto destination=juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("DI-Sidefx.disidefx");
- presetChooser=std::make_unique<juce::FileChooser>("Save DI SIDEFX preset",destination,"*.disidefx");
+ const auto destination=juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("DI-Sidefx.diseqfx");
+ presetChooser=std::make_unique<juce::FileChooser>("Save DI SEQFX preset",destination,"*.diseqfx");
  juce::Component::SafePointer<DISidechainEditor> safe(this);
  presetChooser->launchAsync(juce::FileBrowserComponent::saveMode|juce::FileBrowserComponent::canSelectFiles,
   [safe](const juce::FileChooser& chooser){
@@ -1418,13 +1418,13 @@ void DISidechainEditor::saveUserPreset() {
    } else {
     safe->proc.state.state.setProperty("presetName",oldName,nullptr);
     juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon,
-      "DI SIDEFX", "Could not save the preset file. Check folder permissions.");
+      "DI SEQFX", "Could not save the preset file. Check folder permissions.");
    }
   });
 }
 void DISidechainEditor::loadUserPreset() {
  const auto folder=juce::File::getSpecialLocation(juce::File::userDocumentsDirectory);
- presetChooser=std::make_unique<juce::FileChooser>("Load DI SIDEFX preset",folder,"*.disidefx");
+ presetChooser=std::make_unique<juce::FileChooser>("Load DI SEQFX preset",folder,"*.diseqfx");
  juce::Component::SafePointer<DISidechainEditor> safe(this);
  presetChooser->launchAsync(juce::FileBrowserComponent::openMode|juce::FileBrowserComponent::canSelectFiles,
   [safe](const juce::FileChooser& chooser){
@@ -1451,7 +1451,7 @@ void DISidechainEditor::loadUserPreset() {
     safe->repaint();
    } else {
     juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon,
-      "DI SIDEFX", "Could not read this preset file.");
+      "DI SEQFX", "Could not read this preset file.");
    }
   });
 }
