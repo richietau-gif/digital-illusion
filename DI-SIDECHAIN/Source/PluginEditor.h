@@ -80,9 +80,15 @@ private:
  std::array<std::unique_ptr<juce::ComboBox>,2> creativeModelBoxes;
  std::array<std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>,2> creativeModelAttachments;
  std::array<std::unique_ptr<juce::Slider>,7> creativeSliders;
+ std::array<std::unique_ptr<juce::Slider>,3> delaySliders;
+ std::array<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>,3> delaySliderAttachments;
+ std::unique_ptr<juce::TextButton> delayOnButton, delaySyncButton, delayPingpongButton;
+ std::array<std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>,3> delayButtonAttachments;
+ std::unique_ptr<juce::ComboBox> delayDivisionBox;
+ std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> delayDivisionAttachment;
  std::array<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>,7> creativeSliderAttachments;
- std::array<std::unique_ptr<juce::TextButton>,5> laneTabs;
- std::array<std::unique_ptr<juce::TextButton>,5> cellControls; // D, RVB, DST, REV, BYPASS
+ std::array<std::unique_ptr<juce::TextButton>,6> laneTabs;
+ std::array<std::unique_ptr<juce::TextButton>,6> cellControls; // D, RVB, DST, REV, BYPASS
  void refreshCellControls();
  std::unique_ptr<juce::ToggleButton> sequenceToggle;
  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> sequenceAttachment;
