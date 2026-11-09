@@ -32,8 +32,13 @@ public:
  std::atomic<float> meter {0};
  std::atomic<int> activeSequenceStep {0};
  static constexpr int gridTracks=8, gridSteps=16;
- std::array<std::array<std::atomic<bool>,gridSteps>,gridTracks> gridCells{};
- std::array<std::atomic<bool>,gridSteps> gridReverseCells{};
+ static constexpr int gridScenes=4;
+ std::atomic<int> activeGridScene{0};
+ std::array<std::array<std::array<std::atomic<bool>,gridSteps>,gridTracks>,gridScenes> sceneCells{};
+ std::array<std::array<std::atomic<bool>,gridSteps>,gridScenes> sceneReverseCells{};
+ void setGridScene(int scene) noexcept;
+ int getGridScene() const noexcept;
+ void copyGridScene(int source,int destination) noexcept;
  std::array<std::atomic<float>,6> duckDepth{},duckLength{};
  std::array<std::array<std::atomic<float>,8>,6> duckCurve{};
  void setDuckTrackDepth(int track,float value) noexcept;
