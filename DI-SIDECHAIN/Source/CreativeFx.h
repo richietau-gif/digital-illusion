@@ -1,5 +1,7 @@
 #pragma once
 #include <juce_audio_basics/juce_audio_basics.h>
+#include "CreativeDistort2x.h"
+#include "FixedDelay.h"
 #include <array>
 #include <vector>
 #include <cmath>
@@ -56,11 +58,15 @@ public:
   reverse.prepare(sampleRate);
   fadeCoeff=1.f-std::exp(-1.f/(float)(sampleRate*0.005));
   reverb.setSampleRate(sampleRate);
+  for(auto& d:distortion)d.reset();
+  for(auto& d:distortionDry)d.reset();
   reset();
  }
  void reset() noexcept {
   reverb.reset();
   reverse.reset();
+  for(auto& d:distortion)d.reset();
+  for(auto& d:distortionDry)d.reset();
   lastModel=-1;
   lastLength=-1.f;
   lastDecay=-1.f;
@@ -92,11 +98,15 @@ public:
   distBlend+=fadeCoeff*((distActive?dw:0.f)-distBlend);
   verbSend+=fadeCoeff*((verbActive?1.f:0.f)-verbSend);
   verbBlend+=fadeCoeff*(std::clamp(verbWet,0.f,1.f)-verbBlend);
-  if(distBlend>0.000001f) {
-   const float gain=std::clamp(std::pow(10.f,distDrive/20.f),1.f,32.f);
-   left=dryL+distBlend*(distort(dryL,distModel,gain)-dryL);
-   right=dryR+distBlend*(distort(dryR,distModel,gain)-dryR);
-  }
+  // Always run both the oversampled and the seven-sample dry alignment
+  // paths. Bypass and automation therefore preserve the reported latency.
+  const float drive=std::clamp(std::pow(10.f,distDrive/20.f),1.f,32.f);
+  const float alignedL=distortionDry[0].process(dryL);
+  const float alignedR=distortionDry[1].process(dryR);
+  const float distortedL=distortion[0].process(dryL,distModel,drive);
+  const float distortedR=distortion[1].process(dryR,distModel,drive);
+  left=alignedL+distBlend*(distortedL-alignedL);
+  right=alignedR+distBlend*(distortedR-alignedR);
   const float originalL=left,originalR=right;
   float sendL=left,sendR=right;
   reverse.process(sendL,sendR,reversed);
@@ -124,6 +134,8 @@ public:
 private:
  double sampleRate=44100.;
  ReverseSend reverse;
+ std::array<CreativeDistort2x,2> distortion;
+ std::array<FixedDelay<CreativeDistort2x::latencySamples>,2> distortionDry;
  juce::Reverb reverb;
  int lastModel=-1;
  float lastLength=-1.f,lastDecay=-1.f;
