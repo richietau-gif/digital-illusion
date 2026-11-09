@@ -219,6 +219,39 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  for(int i=0;i<4;++i){filterButtons[i]=std::make_unique<juce::TextButton>(filterNames[i]);filterButtons[i]->onClick=[this,i]{selectFilter(i);};addAndMakeVisible(*filterButtons[i]);}
  if(combos.size()>0)combos[0]->setVisible(false);
  refreshFilterButtons();refreshFxButtons();
+ // Reverb and distortion settings remain independent of legacy FX controls.
+ const char* toggleIds[]={"creativeGridEnabled","reverbEnabled","distortEnabled","reverbReverse"};
+ std::unique_ptr<juce::TextButton>* toggleButtons[]={&gridModeButton,&reverbOnButton,&distortOnButton,&reverseButton};
+ const char* toggleLabels[]={"GRID ON","REVERB ON","DISTORT ON","REVERSE  <"};
+ for(int i=0;i<4;++i){
+  *toggleButtons[i]=std::make_unique<juce::TextButton>(toggleLabels[i]);
+  (*toggleButtons[i])->setClickingTogglesState(true);
+  (*toggleButtons[i])->setColour(juce::TextButton::buttonColourId,juce::Colour(0xff172d3b));
+  (*toggleButtons[i])->setColour(juce::TextButton::buttonOnColourId,green);
+  (*toggleButtons[i])->setColour(juce::TextButton::textColourOffId,juce::Colours::white);
+  (*toggleButtons[i])->setColour(juce::TextButton::textColourOnId,bg);
+  addAndMakeVisible(**toggleButtons[i]);
+  creativeButtonAttachments[i]=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(p.state,toggleIds[i],**toggleButtons[i]);
+ }
+ const char* modelIds[]={"reverbModel","distortModel"};
+ const juce::StringArray modelNames[]={{"Room","Plate","Hall","Shimmer-ish","Space"},
+                                        {"Warm","Acid","Clip","Fold","Modern"}};
+ for(int i=0;i<2;++i){
+  creativeModelBoxes[i]=std::make_unique<juce::ComboBox>();
+  creativeModelBoxes[i]->addItemList(modelNames[i],1);
+  addAndMakeVisible(*creativeModelBoxes[i]);
+  creativeModelAttachments[i]=std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(p.state,modelIds[i],*creativeModelBoxes[i]);
+ }
+ const char* sliderIds[]={"reverbWet","reverbLength","reverbDecay","distortWet","distortDrive"};
+ for(int i=0;i<5;++i){
+  creativeSliders[i]=std::make_unique<juce::Slider>(juce::Slider::LinearHorizontal,juce::Slider::TextBoxRight);
+  creativeSliders[i]->setColour(juce::Slider::trackColourId,i<3?juce::Colour(0xff24def0):orange);
+  creativeSliders[i]->setColour(juce::Slider::thumbColourId,i<3?juce::Colour(0xff24def0):orange);
+  creativeSliders[i]->setColour(juce::Slider::textBoxTextColourId,juce::Colours::white);
+  creativeSliders[i]->setColour(juce::Slider::textBoxOutlineColourId,juce::Colours::transparentBlack);
+  addAndMakeVisible(*creativeSliders[i]);
+  creativeSliderAttachments[i]=std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(p.state,sliderIds[i],*creativeSliders[i]);
+ }
  renderQuality=juce::jlimit(0,2,(int)p.state.getRawParameterValue("renderQuality")->load());
  const int scaleIndex=juce::jlimit(0,2,(int)p.state.getRawParameterValue("uiScale")->load());
  uiScale=scaleIndex==0?.5f:scaleIndex==1?.75f:1.f;
@@ -590,6 +623,22 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  const juce::StringArray db{"0","-6","-12","-18","-24","-36"};
  for(int i=0;i<db.size();++i)text(g,db[i],{1496,781+i*20,39,16},10,faint);
 }
+void DISidechainEditor::refreshCreativePage(){
+ const bool fxPage=selectedTrack>=6;
+ const bool verb=selectedTrack==6;
+ if(reverbOnButton)reverbOnButton->setVisible(verb);
+ if(distortOnButton)distortOnButton->setVisible(selectedTrack==7);
+ if(reverseButton)reverseButton->setVisible(verb);
+ for(int i=0;i<2;++i)if(creativeModelBoxes[i])creativeModelBoxes[i]->setVisible(fxPage&&i==(verb?0:1));
+ for(int i=0;i<5;++i)if(creativeSliders[i])creativeSliders[i]->setVisible(fxPage&&(verb?i<3:i>=3));
+ // Legacy step shape controls are hidden only while editing an FX track.
+ for(auto* b:{copyStep.get(),pasteStep.get(),resetStep.get(),undoButton.get(),redoButton.get(),
+              snapButton.get(),shapePresetButton.get(),sequencePrev.get(),sequenceNext.get()})
+  if(b)b->setVisible(!fxPage);
+ if(shapeOffset)shapeOffset->setVisible(!fxPage);
+ for(auto& slider:laneSliders)if(slider)slider->setVisible(!fxPage);
+ for(auto& b:laneTabs)if(b)b->setVisible(!fxPage);
+}
 void DISidechainEditor::resized() {
  // All child component bounds use design pixels. The parent editor, graph
  // renderer and pointer handling use the same scale to avoid mismatched hitboxes.
@@ -605,6 +654,15 @@ void DISidechainEditor::resized() {
  if(abCopyButtons[0])abCopyButtons[0]->setBounds(1020,36,52,32);
  if(abCopyButtons[1])abCopyButtons[1]->setBounds(1076,36,52,32);
  if(setupButton)setupButton->setBounds(setupBounds);
+ if(gridModeButton)gridModeButton->setBounds(865,124,147,30);
+ if(reverbOnButton)reverbOnButton->setBounds(43,510,170,33);
+ if(distortOnButton)distortOnButton->setBounds(43,510,170,33);
+ if(reverseButton)reverseButton->setBounds(231,510,122,33);
+ if(creativeModelBoxes[0])creativeModelBoxes[0]->setBounds(370,510,270,33);
+ if(creativeModelBoxes[1])creativeModelBoxes[1]->setBounds(370,510,270,33);
+ for(int i=0;i<5;++i)if(creativeSliders[i])
+  creativeSliders[i]->setBounds(175+(i%3)*440,575+(i/3)*67,315,35);
+ refreshCreativePage();
  if(sequenceToggle)sequenceToggle->setBounds(360,124,137,32);
  if(sequenceCount)sequenceCount->setBounds(506,124,87,30);
  if(combos.size()==3){
