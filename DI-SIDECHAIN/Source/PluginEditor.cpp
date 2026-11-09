@@ -252,6 +252,26 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
   addAndMakeVisible(*creativeSliders[i]);
   creativeSliderAttachments[i]=std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(p.state,sliderIds[i],*creativeSliders[i]);
  }
+ duckDepthSlider=std::make_unique<juce::Slider>(juce::Slider::LinearHorizontal,juce::Slider::TextBoxRight);
+ duckDepthSlider->setRange(0.,1.,.01);
+ duckDepthSlider->setValue(proc.getDuckTrackDepth(0),juce::dontSendNotification);
+ duckDepthSlider->setColour(juce::Slider::trackColourId,green);
+ duckDepthSlider->setColour(juce::Slider::thumbColourId,green);
+ duckDepthSlider->setColour(juce::Slider::textBoxTextColourId,juce::Colours::white);
+ duckDepthSlider->onValueChange=[this]{
+  if(selectedTrack<6)proc.setDuckTrackDepth(selectedTrack,(float)duckDepthSlider->getValue());
+ };
+ addAndMakeVisible(*duckDepthSlider);
+ duckLengthSlider=std::make_unique<juce::Slider>(juce::Slider::LinearHorizontal,juce::Slider::TextBoxRight);
+ duckLengthSlider->setRange(.05,4.,.05);
+ duckLengthSlider->setValue(proc.getDuckTrackLength(0),juce::dontSendNotification);
+ duckLengthSlider->setColour(juce::Slider::trackColourId,orange);
+ duckLengthSlider->setColour(juce::Slider::thumbColourId,orange);
+ duckLengthSlider->setColour(juce::Slider::textBoxTextColourId,juce::Colours::white);
+ duckLengthSlider->onValueChange=[this]{
+  if(selectedTrack<6)proc.setDuckTrackLength(selectedTrack,(float)duckLengthSlider->getValue());
+ };
+ addAndMakeVisible(*duckLengthSlider);
  renderQuality=juce::jlimit(0,2,(int)p.state.getRawParameterValue("renderQuality")->load());
  const int scaleIndex=juce::jlimit(0,2,(int)p.state.getRawParameterValue("uiScale")->load());
  uiScale=scaleIndex==0?.5f:scaleIndex==1?.75f:1.f;
@@ -260,11 +280,19 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
 }
 di::ShapeSequencer::Shape DISidechainEditor::captureShape(int step,bool sequence) const {
  di::ShapeSequencer::Shape shape{};
+ if(sequence&&step>=96){
+  for(int i=0;i<8;++i)shape[i]=proc.getDuckCurvePoint(step-96,i);
+  return shape;
+ }
  const int lane=step/32, actualStep=step%32;
  for(int i=0;i<8;++i)shape[i]=sequence?(lane==0?proc.getSequencePoint(actualStep,i):proc.getModulationPoint(lane-1,actualStep,i)):proc.points[i].load();
  return shape;
 }
 void DISidechainEditor::applyShape(int step,bool sequence,const di::ShapeSequencer::Shape& shape) {
+ if(sequence&&step>=96){
+  for(int i=0;i<8;++i)proc.setDuckCurvePoint(step-96,i,shape[i]);
+  return;
+ }
  const int lane=step/32, actualStep=step%32;
  for(int i=0;i<8;++i){if(sequence){if(lane==0)proc.setSequencePoint(actualStep,i,shape[i]);else proc.setModulationPoint(lane-1,actualStep,i,shape[i]);}else if(std::isfinite(shape[i]))proc.points[i].store(juce::jlimit(0.f,1.f,shape[i]),std::memory_order_relaxed);}
 }
@@ -383,7 +411,11 @@ void DISidechainEditor::paintShape(juce::Graphics& g,juce::Rectangle<int> r,int 
  const bool seq=sequenceToggle->getToggleState();
  const auto laneColour=selectedLane==0?orange:selectedLane==1?juce::Colour(0xff44bbff):juce::Colour(0xffc55bff);
  const float offset=seq&&selectedLane==0&&shapeOffset? (float)shapeOffset->getValue():0.f;
- auto value=[&](int i){return seq?(selectedLane==0?proc.getSequencePoint(step,i):proc.getModulationPoint(selectedLane-1,step,i)):proc.points[i].load();};
+ auto value=[&](int i){
+  if(seq&&selectedTrack<6&&proc.state.getRawParameterValue("creativeGridEnabled")->load()>0.5f)
+   return proc.getDuckCurvePoint(selectedTrack,i);
+  return seq?(selectedLane==0?proc.getSequencePoint(step,i):proc.getModulationPoint(selectedLane-1,step,i)):proc.points[i].load();
+ };
  juce::Path p;
  const int segments=renderQuality==0?42:renderQuality==2?420:140;
  for(int j=0;j<=segments;++j){
@@ -613,6 +645,13 @@ void DISidechainEditor::paint(juce::Graphics& g) {
         {41,660,1250,20},12,faint);
   }
  }
+ if(sequenced&&selectedTrack<6){
+  text(g,"TRACK "+juce::String(selectedTrack+1)+"  /  INDEPENDENT DUCK ENVELOPE",
+       {1209,474,301,20},13,lime,true);
+  text(g,"DEPTH",{1211,519,140,18},11,faint,true);
+  text(g,"LENGTH (STEPS)",{1211,572,200,18},11,faint,true);
+  text(g,"Overlap: strongest duck wins",{1211,644,283,19},11,faint);
+ }
  // Always visible frequency controls and output meters.
  paintPanel(g,filterPanel,"FILTER");
  paintPanel(g,outputPanel,"OUTPUT / SIDECHAIN");
@@ -635,8 +674,16 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  const juce::StringArray db{"0","-6","-12","-18","-24","-36"};
  for(int i=0;i<db.size();++i)text(g,db[i],{1496,781+i*20,39,16},10,faint);
 }
+void DISidechainEditor::refreshDuckControls(){
+ if(selectedTrack>=6)return;
+ if(duckDepthSlider)duckDepthSlider->setValue(proc.getDuckTrackDepth(selectedTrack),juce::dontSendNotification);
+ if(duckLengthSlider)duckLengthSlider->setValue(proc.getDuckTrackLength(selectedTrack),juce::dontSendNotification);
+}
 void DISidechainEditor::refreshCreativePage(){
  const bool fxPage=selectedTrack>=6&&sequenceToggle&&sequenceToggle->getToggleState();
+ const bool duckPage=selectedTrack<6&&sequenceToggle&&sequenceToggle->getToggleState();
+ if(duckDepthSlider)duckDepthSlider->setVisible(duckPage);
+ if(duckLengthSlider)duckLengthSlider->setVisible(duckPage);
  const bool verb=selectedTrack==6;
  if(reverbOnButton)reverbOnButton->setVisible(fxPage&&verb);
  if(distortOnButton)distortOnButton->setVisible(fxPage&&selectedTrack==7);
@@ -667,6 +714,8 @@ void DISidechainEditor::resized() {
  if(abCopyButtons[1])abCopyButtons[1]->setBounds(1076,36,52,32);
  if(setupButton)setupButton->setBounds(setupBounds);
  if(gridModeButton)gridModeButton->setBounds(865,124,147,30);
+ if(duckDepthSlider)duckDepthSlider->setBounds(1190,542,290,31);
+ if(duckLengthSlider)duckLengthSlider->setBounds(1190,594,290,31);
  if(reverbOnButton)reverbOnButton->setBounds(43,510,170,33);
  if(distortOnButton)distortOnButton->setBounds(43,510,170,33);
  if(reverseButton)reverseButton->setBounds(231,510,122,33);
@@ -740,7 +789,11 @@ void DISidechainEditor::updatePoint(const juce::MouseEvent& e) {
  if(sequenceToggle->getToggleState()&&selectedLane==0&&shapeOffset)
   v=juce::jlimit(0.f,1.f,v-(float)shapeOffset->getValue());
  if(snapButton&&snapButton->getToggleState())v=juce::jlimit(0.f,1.f,std::round(v*16.f)/16.f);
- if(sequenceToggle->getToggleState()){if(selectedLane==0)proc.setSequencePoint(selectedStep,i,v);else proc.setModulationPoint(selectedLane-1,selectedStep,i,v);}else proc.points[i]=v;
+ if(sequenceToggle->getToggleState()){
+  if(selectedTrack<6&&proc.state.getRawParameterValue("creativeGridEnabled")->load()>0.5f)proc.setDuckCurvePoint(selectedTrack,i,v);
+  else if(selectedLane==0)proc.setSequencePoint(selectedStep,i,v);
+  else proc.setModulationPoint(selectedLane-1,selectedStep,i,v);
+ }else proc.points[i]=v;
  repaint();
 }
 void DISidechainEditor::updateDetailPoint(const juce::MouseEvent& e){updatePoint(e);}
@@ -771,6 +824,7 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
    if(gridModeButton&&!gridModeButton->getToggleState())
     gridModeButton->setToggleState(true,juce::sendNotificationSync);
    refreshCreativePage();
+   refreshDuckControls();
    repaint();
   }
   return;
@@ -784,6 +838,9 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
   draggingShape=true;
   dragNode=juce::jlimit(0,7,juce::roundToInt((pos.x-detailGraph.getX())*7.f/juce::jmax(1,detailGraph.getWidth())));
   dragStep=selectedStep+(sequenceToggle->getToggleState()?selectedLane*32:0);
+  if(sequenceToggle->getToggleState()&&selectedTrack<6&&
+     proc.state.getRawParameterValue("creativeGridEnabled")->load()>0.5f)
+   dragStep=96+selectedTrack;
   dragSequence=sequenceToggle->getToggleState();
   dragBefore=captureShape(dragStep,dragSequence);
  }
