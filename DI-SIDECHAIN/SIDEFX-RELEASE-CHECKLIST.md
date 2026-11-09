@@ -65,3 +65,19 @@ core; Length and Decay are not independently calibrated RT60 controls.
 Reverse is causal, buffering the previous synchronized musical slice rather
 than predicting future audio. The current preview has not been certified by
 pluginval or auditioned in Ableton Live.
+
+## Starting the existing GitHub Actions workflow manually
+
+The repository default branch already registers `.github/workflows/build-vst3.yml`.
+The **development-branch revision** of that same workflow has now been adapted
+for DI SIDEFX, so it can be selected without merging to main.
+
+1. Open https://github.com/richietau-gif/digital-illusion/actions/workflows/build-vst3.yml
+2. Select **Run workflow**, choose branch `feature/di-sidechain-v5.2b-grid`, and run.
+3. Inspect the Windows Release, CTest and pluginval checks.
+4. If successful, download artifact `DI-SIDEFX-5.2B-Windows-x64`.
+
+If Run workflow is missing, check repository Actions permissions, billing / quota,
+and whether manual dispatch remains enabled. A workflow present only on a non-default
+branch may not appear in the Actions workflow list: the existing default-registered
+workflow path avoids this limitation.
