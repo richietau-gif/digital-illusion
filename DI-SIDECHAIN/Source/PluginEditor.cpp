@@ -234,7 +234,7 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
   creativeButtonAttachments[i]=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(p.state,toggleIds[i],**toggleButtons[i]);
  }
  const char* modelIds[]={"reverbModel","distortModel"};
- const juce::StringArray modelNames[]={{"Room","Plate","Hall","Shimmer-ish","Space"},
+ const juce::StringArray modelNames[]={{"Room","Plate","Hall","Ambient","Space"},
                                         {"Warm","Acid","Clip","Fold","Modern"}};
  for(int i=0;i<2;++i){
   creativeModelBoxes[i]=std::make_unique<juce::ComboBox>();
