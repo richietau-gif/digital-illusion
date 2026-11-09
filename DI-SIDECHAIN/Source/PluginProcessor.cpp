@@ -241,7 +241,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  float left=main.getSample(0,i),right=main.getSample(1,i);
  creativeFx.process(left,right,distortEnabled&&distCell,reverbEnabled&&verbCell,
                     distortModel,distortDrive,distortWet,
-                    reverbModel,reverbWet,reverbLength,reverbDecay,(reverseReverb||getGridReverse(currentStep))&&verbCell);
+                    reverbModel,reverbEnabled?reverbWet:0.f,reverbLength,reverbDecay,(reverseReverb||getGridReverse(currentStep))&&verbCell);
  main.setSample(0,i,left);main.setSample(1,i,right);
  peak=juce::jmax(peak,juce::jmax(std::abs(left),std::abs(right)));
  }
