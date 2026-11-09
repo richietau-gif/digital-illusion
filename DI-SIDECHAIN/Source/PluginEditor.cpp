@@ -142,6 +142,13 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
   addAndMakeVisible(*abButtons[i]);
   abButtons[i]->onClick=[this,i]{ if(abStored[i]) recallAB(i); else captureAB(i); };
  }
+ const char* copyLabels[] = {"A→B","B→A"};
+ for(int i=0;i<2;++i){
+  abCopyButtons[i]=std::make_unique<juce::TextButton>(copyLabels[i]);
+  buttonStyle(*abCopyButtons[i]); addAndMakeVisible(*abCopyButtons[i]);
+  abCopyButtons[i]->setTooltip(i==0?"Copy snapshot A to B":"Copy snapshot B to A");
+  abCopyButtons[i]->onClick=[this,i]{copyAB(i==0?0:1,i==0?1:0);};
+ }
  setupButton=std::make_unique<TransparentTextButton>();
  setupButton->setTooltip("SETUP - Plugin settings");
  setupBounds={1449,31,61,45};
@@ -550,6 +557,8 @@ void DISidechainEditor::resized() {
  if(presetButton)presetButton->setBounds(538,30,395,45);
  if(abButtons[0])abButtons[0]->setBounds(940,36,36,32);
  if(abButtons[1])abButtons[1]->setBounds(980,36,36,32);
+ if(abCopyButtons[0])abCopyButtons[0]->setBounds(1020,36,52,32);
+ if(abCopyButtons[1])abCopyButtons[1]->setBounds(1076,36,52,32);
  if(setupButton)setupButton->setBounds(setupBounds);
  if(sequenceToggle)sequenceToggle->setBounds(360,124,137,32);
  if(sequenceCount)sequenceCount->setBounds(506,124,87,30);
@@ -773,6 +782,15 @@ void DISidechainEditor::recallAB(int slot) {
     abSnapshots[(size_t)slot].getSize()>static_cast<size_t>(std::numeric_limits<int>::max())) return;
  proc.setStateInformation(abSnapshots[(size_t)slot].getData(),(int)abSnapshots[(size_t)slot].getSize());
  repaint();
+}
+void DISidechainEditor::copyAB(int from,int to) {
+ from=juce::jlimit(0,1,from);to=juce::jlimit(0,1,to);
+ if(!abStored[(size_t)from]) captureAB(from);
+ if(!abStored[(size_t)from]) return;
+ abSnapshots[(size_t)to]=abSnapshots[(size_t)from];
+ abStored[(size_t)to]=true;
+ if(abCopyButtons[(size_t)from]) abCopyButtons[(size_t)from]->setButtonText(from==0?"A→B ✓":"B→A ✓");
+ if(abButtons[(size_t)to]) abButtons[(size_t)to]->setButtonText(to==0?"A*":"B*");
 }
 void DISidechainEditor::showSetupMenu() {
  // A native popup lives on top of the plugin only while open. Nothing is

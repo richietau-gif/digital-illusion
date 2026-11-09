@@ -60,6 +60,7 @@ private:
  void selectRenderQuality(int);
  void captureAB(int slot);
  void recallAB(int slot);
+ void copyAB(int from,int to);
  void paintFrequencyResponse(juce::Graphics&,juce::Rectangle<int>);
  int selectedStep=0;
  int selectedLane=0;
@@ -86,6 +87,7 @@ private:
  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> saturatorAttachment;
  std::unique_ptr<juce::TextButton> presetButton, shapePresetButton, sequencePrev, sequenceNext, setupButton;
  std::array<std::unique_ptr<juce::TextButton>,2> abButtons;
+ std::array<std::unique_ptr<juce::TextButton>,2> abCopyButtons;
  std::array<juce::MemoryBlock,2> abSnapshots;
  std::array<bool,2> abStored{{false,false}};
  juce::String presetName {"Custom"};
