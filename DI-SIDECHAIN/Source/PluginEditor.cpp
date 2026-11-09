@@ -246,20 +246,37 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  redoButton->onClick=[this]{redoEdit();};
  copyStep->onClick=[this]{
   const bool seq=sequenceToggle->getToggleState();
-  clipboard=captureShape(currentShapeKey(),seq);
+  clipboardDynamic=seq&&selectedLane==0&&selectedTrack<6&&
+    proc.state.getRawParameterValue("creativeGridEnabled")->load()>.5f;
+  if(clipboardDynamic)dynamicClipboard=proc.getDynamicDuckCurve(selectedTrack);
+  else clipboard=captureShape(currentShapeKey(),seq);
   hasClipboard=true;
  };
  pasteStep->onClick=[this]{
   if(!hasClipboard)return;
   const bool seq=sequenceToggle->getToggleState();
   const int key=currentShapeKey();
-  const auto before=captureShape(key,seq);
-  applyShape(key,seq,clipboard);
-  pushEdit(key,seq,before,clipboard);repaint();
+  if(clipboardDynamic&&key>=96&&key<102){
+   const auto before=proc.getDynamicDuckCurve(selectedTrack);
+   proc.setDynamicDuckCurve(selectedTrack,dynamicClipboard);
+   pushDynamicEdit(selectedTrack,before,dynamicClipboard);
+  } else {
+   const auto before=captureShape(key,seq);
+   applyShape(key,seq,clipboard);
+   pushEdit(key,seq,before,clipboard);
+  }
+  repaint();
  };
  resetStep->onClick=[this]{
   const bool seq=sequenceToggle->getToggleState();
-  const int key=seq?selectedStep+selectedLane*32:0;
+  const int key=currentShapeKey();
+  if(key>=96&&key<102){
+   const auto before=proc.getDynamicDuckCurve(selectedTrack);
+   di::DynamicCurve after;
+   proc.setDynamicDuckCurve(selectedTrack,after);
+   pushDynamicEdit(selectedTrack,before,after);
+   repaint();return;
+  }
   const auto before=captureShape(key,seq);
   constexpr di::ShapeSequencer::Shape volume{1.f,.92f,.08f,.02f,.32f,.75f,.95f,1.f};
   const bool grid=seq&&proc.state.getRawParameterValue("creativeGridEnabled")->load()>0.5f;
@@ -1253,12 +1270,15 @@ void DISidechainEditor::applyShapePreset(int index) {
  const int key=currentShapeKey();
  auto before=captureShape(key,seq),after=before;
  for(int i=0;i<8;++i)after[i]=di::curvePresets[(size_t)index][(size_t)i];
- if(seq&&selectedLane==0&&selectedTrack<6) {
+ if(key>=96&&key<102){
+  const auto original=proc.getDynamicDuckCurve(selectedTrack);
   di::DynamicCurve dc;
   for(int i=0;i<8;++i)dc.y[(size_t)i]=after[(size_t)i];
   proc.setDynamicDuckCurve(selectedTrack,dc);
+  pushDynamicEdit(selectedTrack,original,dc);
+ } else {
+  applyShape(key,seq,after);pushEdit(key,seq,before,after);
  }
- applyShape(key,seq,after);pushEdit(key,seq,before,after);
  repaint();
 }
 void DISidechainEditor::showPresetMenu() {
