@@ -46,6 +46,31 @@ DISidechainProcessor::DISidechainProcessor():AudioProcessor(BusesProperties().wi
  for(int lane=0;lane<2;++lane)for(auto& shape:modulationPoints[lane])for(int i=0;i<8;++i)shape[i].store(lane==0?1.f:0.5f);
  for(auto& track:gridCells)for(auto& cell:track)cell.store(false,std::memory_order_relaxed);
  for(auto& cell:gridReverseCells)cell.store(false,std::memory_order_relaxed);
+ for(int t=0;t<6;++t){
+  duckDepth[(size_t)t].store(1.f,std::memory_order_relaxed);
+  duckLength[(size_t)t].store(1.f,std::memory_order_relaxed);
+  constexpr float defaultShape[8]={0.f,.02f,.2f,.65f,.9f,1.f,1.f,1.f};
+  for(int j=0;j<8;++j)duckCurve[(size_t)t][(size_t)j].store(defaultShape[j],std::memory_order_relaxed);
+ }
+}
+void DISidechainProcessor::setDuckTrackDepth(int t,float v) noexcept {
+ if(t>=0&&t<6&&std::isfinite(v))duckDepth[(size_t)t].store(juce::jlimit(0.f,1.f,v),std::memory_order_relaxed);
+}
+float DISidechainProcessor::getDuckTrackDepth(int t) const noexcept {
+ return t>=0&&t<6?duckDepth[(size_t)t].load(std::memory_order_relaxed):1.f;
+}
+void DISidechainProcessor::setDuckTrackLength(int t,float v) noexcept {
+ if(t>=0&&t<6&&std::isfinite(v))duckLength[(size_t)t].store(juce::jlimit(.05f,4.f,v),std::memory_order_relaxed);
+}
+float DISidechainProcessor::getDuckTrackLength(int t) const noexcept {
+ return t>=0&&t<6?duckLength[(size_t)t].load(std::memory_order_relaxed):1.f;
+}
+void DISidechainProcessor::setDuckCurvePoint(int t,int j,float v) noexcept {
+ if(t>=0&&t<6&&j>=0&&j<8&&std::isfinite(v))
+  duckCurve[(size_t)t][(size_t)j].store(juce::jlimit(0.f,1.f,v),std::memory_order_relaxed);
+}
+float DISidechainProcessor::getDuckCurvePoint(int t,int j) const noexcept {
+ return t>=0&&t<6&&j>=0&&j<8?duckCurve[(size_t)t][(size_t)j].load(std::memory_order_relaxed):1.f;
 }
 void DISidechainProcessor::setGridReverse(int step,bool enabled) noexcept {
  if(step>=0&&step<gridSteps)gridReverseCells[(size_t)step].store(enabled,std::memory_order_relaxed);
@@ -72,7 +97,7 @@ float DISidechainProcessor::getModulationPoint(int lane,int step,int node) const
   ?modulationPoints[lane][step][node].load(std::memory_order_relaxed):(lane==1?0.5f:1.f);
 }
 bool DISidechainProcessor::isBusesLayoutSupported(const BusesLayout& b) const {return b.getMainInputChannelSet()==juce::AudioChannelSet::stereo()&&b.getMainOutputChannelSet()==juce::AudioChannelSet::stereo()&&(b.inputBuses.size()<2||b.inputBuses[1].isDisabled()||b.inputBuses[1]==juce::AudioChannelSet::mono()||b.inputBuses[1]==juce::AudioChannelSet::stereo());}
-void DISidechainProcessor::prepareToPlay(double sampleRate,int maxBlock){sr=sampleRate;creativeFx.prepare(sampleRate);setLatencySamples(2*di::OversampledFx2x::latencySamples);for(auto& fx:oversampledFx)fx.reset();for(auto& fx:saturatorFx)fx.reset();for(auto& delay:fxDryDelay)delay.reset();for(auto& delay:saturatorDryDelay)delay.reset();saturatorBlend=state.getRawParameterValue("saturatorEnabled")->load()>0.5f?1.f:0.f;phase=1;sequencer.reset();for(auto& lane:modulationSequencers)lane.reset();activeSequenceStep.store(0);detector=0;armed=true;refractory=0;smoothGain=1;expectedTransportSample=-1;wasTransportPlaying=false;fxBlend=state.getRawParameterValue("fxEnabled")->load()>0.5f?1.f:0.f;const auto safeInitial=[this](const char* id,float low,float high,float fallback){const float value=state.getRawParameterValue(id)->load();return std::isfinite(value)?juce::jlimit(low,high,value):fallback;};smoothedFxDrive=juce::Decibels::decibelsToGain(safeInitial("fxDrive",0.f,24.f,0.f));smoothedFxWet=safeInitial("fxMix",0.f,1.f,1.f);smoothedFxType=safeInitial("fxType",0.f,1.f,0.f);juce::dsp::ProcessSpec spec{sampleRate,(juce::uint32)juce::jmax(1,maxBlock),1};for(auto& c:filters){c.low.prepare(spec);c.high.prepare(spec);c.low.setType(juce::dsp::LinkwitzRileyFilterType::lowpass);c.high.setType(juce::dsp::LinkwitzRileyFilterType::highpass);c.low.reset();c.high.reset();}}
+void DISidechainProcessor::prepareToPlay(double sampleRate,int maxBlock){sr=sampleRate;creativeFx.prepare(sampleRate);duckVoices.reset();setLatencySamples(2*di::OversampledFx2x::latencySamples);for(auto& fx:oversampledFx)fx.reset();for(auto& fx:saturatorFx)fx.reset();for(auto& delay:fxDryDelay)delay.reset();for(auto& delay:saturatorDryDelay)delay.reset();saturatorBlend=state.getRawParameterValue("saturatorEnabled")->load()>0.5f?1.f:0.f;phase=1;sequencer.reset();for(auto& lane:modulationSequencers)lane.reset();activeSequenceStep.store(0);detector=0;armed=true;refractory=0;smoothGain=1;expectedTransportSample=-1;wasTransportPlaying=false;fxBlend=state.getRawParameterValue("fxEnabled")->load()>0.5f?1.f:0.f;const auto safeInitial=[this](const char* id,float low,float high,float fallback){const float value=state.getRawParameterValue(id)->load();return std::isfinite(value)?juce::jlimit(low,high,value):fallback;};smoothedFxDrive=juce::Decibels::decibelsToGain(safeInitial("fxDrive",0.f,24.f,0.f));smoothedFxWet=safeInitial("fxMix",0.f,1.f,1.f);smoothedFxType=safeInitial("fxType",0.f,1.f,0.f);juce::dsp::ProcessSpec spec{sampleRate,(juce::uint32)juce::jmax(1,maxBlock),1};for(auto& c:filters){c.low.prepare(spec);c.high.prepare(spec);c.low.setType(juce::dsp::LinkwitzRileyFilterType::lowpass);c.high.setType(juce::dsp::LinkwitzRileyFilterType::highpass);c.low.reset();c.high.reset();}}
 float DISidechainProcessor::curve(double t) const {if(!std::isfinite(t))t=0.;t=juce::jlimit(0.0,1.0,t);double x=t*7;int i=juce::jmin(6,(int)x);const auto safePoint=[this](int node){const float value=points[node].load(std::memory_order_relaxed);return std::isfinite(value)?juce::jlimit(0.f,1.f,value):1.f;};float a=safePoint(i),b=safePoint(i+1);float u=(float)(x-i);u=u*u*(3-2*u);return a+(b-a)*u;}
 void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::MidiBuffer& midi){
  juce::ScopedNoDenormals noDenormals;
@@ -141,7 +166,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
      expectedTransportSample=di::nextTransportSample(*sample,n);
     }else expectedTransportSample=-1;
    }else expectedTransportSample=-1;
-   if(discontinuity){sequencer.reset();for(auto& lane:modulationSequencers)lane.reset();activeSequenceStep.store(0,std::memory_order_relaxed);phase=0;}
+   if(discontinuity){duckVoices.reset();sequencer.reset();for(auto& lane:modulationSequencers)lane.reset();activeSequenceStep.store(0,std::memory_order_relaxed);phase=0;}
    wasTransportPlaying=playing;
   }
  }
@@ -167,6 +192,15 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  if(sequenceOn)for(int k=0;k<sequenceSteps;++k){
   di::ShapeSequencer::Shape shape{};for(int j=0;j<8;++j)shape[j]=getSequencePoint(k,j);sequencer.setShape(k,shape);
   for(int lane=0;lane<2;++lane){di::ShapeSequencer::Shape mod{};for(int j=0;j<8;++j)mod[j]=getModulationPoint(lane,k,j);modulationSequencers[lane].setShape(k,mod);}
+ }
+ if(creativeGrid){
+  for(int t=0;t<6;++t){
+   di::DuckVoiceEngine::TrackSettings settings;
+   settings.depth=getDuckTrackDepth(t);
+   settings.duration=getDuckTrackLength(t);
+   for(int node=0;node<8;++node)settings.shape[(size_t)node]=getDuckCurvePoint(t,node);
+   duckVoices.setTrack(t,settings);
+  }
  }
  double step=1.0/juce::jmax(1.0,envelopeLength*sr);int holdoff=(int)(bounded("retrigger",1.f,250.f,35.f)*.001*sr);float threshold=juce::Decibels::decibelsToGain(bounded("threshold",-60.f,0.f,-22.f));float coeff=std::exp(-1.f/(float)(bounded("smooth",.1f,20.f,2.f)*.001*sr));
  const double detectorRelease=di::peakReleaseCoefficient(sr);
@@ -204,10 +238,12 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
   activeSequenceStep.store(sequencer.getCurrentStep(),std::memory_order_relaxed);}
  else {env=phase>=1?1:curve(phase);phase=juce::jmin(1.0,phase+step);}
  if(sequenceOn&&creativeGrid){
-  bool activeDuck=false;
   const int gridStep=activeSequenceStep.load(std::memory_order_relaxed);
-  for(int t=0;t<6;++t)activeDuck=activeDuck||getGridCell(t,gridStep);
-  if(!activeDuck)env=1.f; // inactive trigger rows leave the signal dry
+  std::array<bool,di::DuckVoiceEngine::tracks> cells{};
+  for(int t=0;t<di::DuckVoiceEngine::tracks;++t)cells[(size_t)t]=getGridCell(t,gridStep);
+  // Every row has an independent envelope and length, with strongest-duck
+  // overlap; a row triggers once as the transport enters its active step.
+  env=duckVoices.process(gridStep,cells,envelopeLength*sr);
  }
  if(sequenceOn)env=juce::jlimit(0.f,1.f,env+shapeOffset);
  float target=1-depth*(1-env);smoothGain=coeff*smoothGain+(1-coeff)*target;
@@ -250,6 +286,11 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
 void DISidechainProcessor::getStateInformation(juce::MemoryBlock& dest){auto tree=state.copyState();for(int i=0;i<8;++i)tree.setProperty("point"+juce::String(i),points[i].load(),nullptr);for(int k=0;k<32;++k)for(int j=0;j<8;++j)tree.setProperty("seq_"+juce::String(k)+"_"+juce::String(j),getSequencePoint(k,j),nullptr);for(int lane=0;lane<2;++lane)for(int k=0;k<32;++k)for(int j=0;j<8;++j)tree.setProperty("mod_"+juce::String(lane)+"_"+juce::String(k)+"_"+juce::String(j),getModulationPoint(lane,k,j),nullptr);for(int t=0;t<gridTracks;++t)for(int k=0;k<gridSteps;++k)
  tree.setProperty("grid_"+juce::String(t)+"_"+juce::String(k),getGridCell(t,k),nullptr);
  for(int k=0;k<gridSteps;++k)tree.setProperty("gridReverse_"+juce::String(k),getGridReverse(k),nullptr);
+ for(int t=0;t<6;++t) {
+  tree.setProperty("duckDepth_"+juce::String(t),getDuckTrackDepth(t),nullptr);
+  tree.setProperty("duckLength_"+juce::String(t),getDuckTrackLength(t),nullptr);
+  for(int j=0;j<8;++j)tree.setProperty("duckCurve_"+juce::String(t)+"_"+juce::String(j),getDuckCurvePoint(t,j),nullptr);
+ }
  if(auto xml=tree.createXml())copyXmlToBinary(*xml,dest);}
 void DISidechainProcessor::setStateInformation(const void* data,int bytes){
  if(auto xml=getXmlFromBinary(data,bytes)){
@@ -277,6 +318,13 @@ void DISidechainProcessor::setStateInformation(const void* data,int bytes){
    const auto key="gridReverse_"+juce::String(k);
    setGridReverse(k,tree.hasProperty(key)?(bool)tree.getProperty(key):false);
   }
+  for(int t=0;t<6;++t){
+   setDuckTrackDepth(t,(float)tree.getProperty("duckDepth_"+juce::String(t),1.f));
+   setDuckTrackLength(t,(float)tree.getProperty("duckLength_"+juce::String(t),1.f));
+   constexpr float shape[8]={0.f,.02f,.2f,.65f,.9f,1.f,1.f,1.f};
+   for(int j=0;j<8;++j)setDuckCurvePoint(t,j,(float)tree.getProperty("duckCurve_"+juce::String(t)+"_"+juce::String(j),shape[j]));
+  }
+  duckVoices.reset();
   state.replaceState(tree);
  }
 }
