@@ -19,7 +19,7 @@ static juce::AudioProcessorValueTreeState::ParameterLayout layoutParams(){
  p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"reverbEnabled",1},"Reverb enabled",false));
  p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"distortEnabled",1},"Distortion enabled",false));
  p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"reverbReverse",1},"Reverse before reverb",false));
- p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"reverbModel",1},"Reverb model",juce::StringArray{"Room","Plate","Hall","Shimmer-ish","Space"},0));
+ p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"reverbModel",1},"Reverb model",juce::StringArray{"Room","Plate","Hall","Ambient","Space"},0));
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"distortModel",1},"Distortion model",juce::StringArray{"Warm","Acid","Clip","Fold","Modern"},0));
  f("reverbWet","Reverb wet",0,1,.3f); f("reverbLength","Reverb length",.1f,8.f,3.f);
  f("reverbDecay","Reverb decay",0,1,.6f);
