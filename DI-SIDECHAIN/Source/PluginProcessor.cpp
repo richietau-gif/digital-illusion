@@ -48,6 +48,8 @@ DISidechainProcessor::DISidechainProcessor():AudioProcessor(BusesProperties().wi
   cell.store(false,std::memory_order_relaxed);
  for(auto& scene:sceneReverseCells)for(auto& cell:scene)
   cell.store(false,std::memory_order_relaxed);
+ for(auto& scene:sceneCellFx)for(auto& track:scene)for(auto& cell:track)
+  cell.store(0,std::memory_order_relaxed);
  // An empty grid appears broken on first insertion. Scene A starts as a
  // familiar four-on-the-floor duck, while scenes B-D remain blank.
  for(int step=0;step<gridSteps;step+=4)
@@ -79,6 +81,20 @@ void DISidechainProcessor::setDuckCurvePoint(int t,int j,float v) noexcept {
 float DISidechainProcessor::getDuckCurvePoint(int t,int j) const noexcept {
  return t>=0&&t<6&&j>=0&&j<8?duckCurve[(size_t)t][(size_t)j].load(std::memory_order_relaxed):1.f;
 }
+void DISidechainProcessor::setCellFxFlag(int track,int step,int flag,bool enabled) noexcept {
+ if(track<0||track>=6||step<0||step>=gridSteps||flag<0||flag>3)return;
+ auto& bits=sceneCellFx[(size_t)getGridScene()][(size_t)track][(size_t)step];
+ const int mask=1<<flag;
+ if(enabled)bits.fetch_or(mask,std::memory_order_relaxed);
+ else bits.fetch_and(~mask,std::memory_order_relaxed);
+}
+bool DISidechainProcessor::getCellFxFlag(int track,int step,int flag) const noexcept {
+ return flag>=0&&flag<4&&(getCellFxMask(track,step)&(1<<flag))!=0;
+}
+int DISidechainProcessor::getCellFxMask(int track,int step) const noexcept {
+ if(track<0||track>=6||step<0||step>=gridSteps)return 0;
+ return sceneCellFx[(size_t)getGridScene()][(size_t)track][(size_t)step].load(std::memory_order_relaxed)&15;
+}
 void DISidechainProcessor::setGridScene(int scene) noexcept {
  activeGridScene.store(juce::jlimit(0,gridScenes-1,scene),std::memory_order_release);
 }
@@ -90,6 +106,9 @@ void DISidechainProcessor::copyGridScene(int source,int destination) noexcept {
  for(int t=0;t<gridTracks;++t)for(int k=0;k<gridSteps;++k)
   sceneCells[(size_t)destination][(size_t)t][(size_t)k].store(
    sceneCells[(size_t)source][(size_t)t][(size_t)k].load(std::memory_order_relaxed),std::memory_order_relaxed);
+ for(int t=0;t<6;++t)for(int k=0;k<gridSteps;++k)
+  sceneCellFx[(size_t)destination][(size_t)t][(size_t)k].store(
+    sceneCellFx[(size_t)source][(size_t)t][(size_t)k].load(std::memory_order_relaxed),std::memory_order_relaxed);
  for(int k=0;k<gridSteps;++k)
   sceneReverseCells[(size_t)destination][(size_t)k].store(
    sceneReverseCells[(size_t)source][(size_t)k].load(std::memory_order_relaxed),std::memory_order_relaxed);
@@ -280,7 +299,8 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  if(sequenceOn&&creativeGrid){
   const int gridStep=activeSequenceStep.load(std::memory_order_relaxed);
   std::array<bool,di::DuckVoiceEngine::tracks> cells{};
-  for(int t=0;t<di::DuckVoiceEngine::tracks;++t)cells[(size_t)t]=getGridCell(t,gridStep);
+  for(int t=0;t<di::DuckVoiceEngine::tracks;++t)
+   cells[(size_t)t]=getGridCell(t,gridStep)&&!getCellFxFlag(t,gridStep,3);
   // Every row has an independent envelope and length, with strongest-duck
   // overlap; a row triggers once as the transport enters its active step.
   env=duckVoices.process(gridStep,cells,envelopeLength*sr,sequencer.getStepGeneration());
@@ -312,12 +332,19 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  // Grid effect lanes: indices 6/7 are REVERB and DISTORT respectively.
  // In legacy mode, the new effects remain opt-in and ignore step cells.
  const int currentStep=activeSequenceStep.load(std::memory_order_relaxed);
- const bool verbCell=!creativeGrid||getGridCell(6,currentStep);
- const bool distCell=!creativeGrid||getGridCell(7,currentStep);
+ bool verbCell=!creativeGrid,distCell=!creativeGrid,reverseCell=false;
+ if(creativeGrid){
+  for(int track=0;track<6;++track){
+   if(!getGridCell(track,currentStep)||getCellFxFlag(track,currentStep,3))continue;
+   verbCell=verbCell||getCellFxFlag(track,currentStep,0);
+   distCell=distCell||getCellFxFlag(track,currentStep,1);
+   reverseCell=reverseCell|| (getCellFxFlag(track,currentStep,0)&&getCellFxFlag(track,currentStep,2));
+  }
+ }
  float left=main.getSample(0,i),right=main.getSample(1,i);
  creativeFx.process(left,right,distortEnabled&&distCell,reverbEnabled&&verbCell,
                     distortModel,distortDrive,distortWet,
-                    reverbModel,reverbEnabled?reverbWet:0.f,reverbLength,reverbDecay,(reverseReverb||getGridReverse(currentStep))&&verbCell);
+                    reverbModel,reverbEnabled?reverbWet:0.f,reverbLength,reverbDecay,(reverseReverb||reverseCell)&&verbCell);
  main.setSample(0,i,left);main.setSample(1,i,right);
  peak=juce::jmax(peak,juce::jmax(std::abs(left),std::abs(right)));
  }
@@ -328,6 +355,9 @@ void DISidechainProcessor::getStateInformation(juce::MemoryBlock& dest){auto tre
   for(int t=0;t<gridTracks;++t)for(int k=0;k<gridSteps;++k)
    tree.setProperty("scene_"+juce::String(scene)+"_"+juce::String(t)+"_"+juce::String(k),
     sceneCells[(size_t)scene][(size_t)t][(size_t)k].load(std::memory_order_relaxed),nullptr);
+  for(int t=0;t<6;++t)for(int k=0;k<gridSteps;++k)
+   tree.setProperty("cellFx_"+juce::String(scene)+"_"+juce::String(t)+"_"+juce::String(k),
+     sceneCellFx[(size_t)scene][(size_t)t][(size_t)k].load(std::memory_order_relaxed),nullptr);
   for(int k=0;k<gridSteps;++k)
    tree.setProperty("reverse_"+juce::String(scene)+"_"+juce::String(k),
     sceneReverseCells[(size_t)scene][(size_t)k].load(std::memory_order_relaxed),nullptr);
@@ -360,6 +390,10 @@ void DISidechainProcessor::setStateInformation(const void* data,int bytes){
    for(int t=0;t<gridTracks;++t)for(int k=0;k<gridSteps;++k){
     const auto key="scene_"+juce::String(scene)+"_"+juce::String(t)+"_"+juce::String(k);
     sceneCells[(size_t)scene][(size_t)t][(size_t)k].store((bool)tree.getProperty(key,false),std::memory_order_relaxed);
+   }
+   for(int t=0;t<6;++t)for(int k=0;k<gridSteps;++k){
+    const auto key="cellFx_"+juce::String(scene)+"_"+juce::String(t)+"_"+juce::String(k);
+    sceneCellFx[(size_t)scene][(size_t)t][(size_t)k].store(juce::jlimit(0,15,(int)tree.getProperty(key,0)),std::memory_order_relaxed);
    }
    for(int k=0;k<gridSteps;++k){
     const auto key="reverse_"+juce::String(scene)+"_"+juce::String(k);
