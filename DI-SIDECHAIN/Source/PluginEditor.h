@@ -54,6 +54,8 @@ private:
  void undoEdit();
  void redoEdit();
  di::ShapeSequencer::Shape clipboard{};
+ di::DynamicCurve dynamicClipboard{};
+ bool clipboardDynamic=false;
  bool hasClipboard=false;
  void paintShape(juce::Graphics&, juce::Rectangle<int>, int, bool);
  void paintPanel(juce::Graphics&, juce::Rectangle<int>, const juce::String&);
