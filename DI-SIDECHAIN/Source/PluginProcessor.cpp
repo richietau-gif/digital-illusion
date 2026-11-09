@@ -51,7 +51,7 @@ static juce::AudioProcessorValueTreeState::ParameterLayout layoutParams(){
  p.push_back(std::make_unique<juce::AudioParameterInt>(juce::ParameterID{"sequenceSteps",1},"Sequence steps",1,16,16));
  p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"sync",1},"Tempo sync",true));
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"division",1},"Beat division",juce::StringArray{"1/32","1/16","1/8","1/4","1/2","1 bar","2 bars"},2));
- // Editor-only settings persist in the host project and user .dipreset files.
+ // Editor-only settings persist in the host project and user .diseqfx files.
  // New instances start at the compact 75% layout; restored host state still
  // overrides this default and therefore preserves existing projects.
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"uiScale",1},"UI scale",juce::StringArray{"50%","75%","100%"},1));
