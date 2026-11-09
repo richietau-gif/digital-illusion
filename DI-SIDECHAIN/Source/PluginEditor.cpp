@@ -640,6 +640,18 @@ void DISidechainEditor::paint(juce::Graphics& g) {
      g.setColour(orange.withAlpha(.85f));
      g.drawLine(cell.getX()+3,cell.getBottom()-3,cell.getRight()-3,cell.getY()+3,1.5f);
     }
+    if(on&&!bypass){
+     juce::Path miniature;
+     for(int node=0;node<8;++node){
+      const float v=proc.getDuckCurvePoint(track,node);
+      const float px=cell.getX()+5.f+(cell.getWidth()-10.f)*node/7.f;
+      const float py=cell.getBottom()-2.f-v*(cell.getHeight()*.32f);
+      if(node==0)miniature.startNewSubPath(px,py);
+      else miniature.lineTo(px,py);
+     }
+     g.setColour(juce::Colour(0xff06121b).withAlpha(.8f));
+     g.strokePath(miniature,juce::PathStrokeType(1.f));
+    }
     if(track==selectedTrack&&step==selectedStep){
      g.setColour(orange);g.drawRoundedRectangle(cell,3.f,1.8f);
     }
@@ -844,8 +856,8 @@ void DISidechainEditor::refreshCreativePage(){
 void DISidechainEditor::resized() {
  // All child component bounds use design pixels. The parent editor, graph
  // renderer and pointer handling use the same scale to avoid mismatched hitboxes.
- graph={79,203,1428,157};
- stepStrip={78,380,1430,53};
+ graph={79,201,1428,176};
+ stepStrip={78,392,1430,42};
  detailGraph={230,549,488,110};
  sequencerPanel={12,456,873,240};
  filterPanel={12,706,1110,232};
