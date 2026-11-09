@@ -423,7 +423,7 @@ void DISidechainEditor::updateContextualControls(){
   sliders[5]->setEnabled(lowEnabled);
   sliders[6]->setEnabled(highEnabled);
   sliders[2]->setEnabled(audioTrigger);
-  sliders[7]->setEnabled(audioTrigger);
+  sliders[7]->setEnabled(true); // retrigger holdoff also applies to MIDI notes
  }
  if(combos.size()>=3)combos[2]->setEnabled(synced);
  if(sync)sync->setEnabled(true);
