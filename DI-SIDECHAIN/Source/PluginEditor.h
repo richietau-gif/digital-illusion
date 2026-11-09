@@ -26,6 +26,7 @@ private:
  std::array<std::unique_ptr<juce::TextButton>,4> filterButtons;
  void refreshFilterButtons();
  void refreshFxButtons();
+ void updateContextualControls();
  void syncUiPreferences();
  void selectFilter(int);
  juce::Rectangle<int> graph, stepStrip, detailGraph, sequencerPanel, filterPanel, outputPanel, setupBounds;
