@@ -31,14 +31,14 @@ public:
  std::array<std::atomic<float>,8> points;
  std::atomic<float> meter {0};
  std::atomic<int> activeSequenceStep {0};
- static constexpr int gridTracks=8, gridSteps=16;
+ static constexpr int gridTracks=6, gridSteps=16;
  static constexpr int gridScenes=4;
  std::atomic<int> activeGridScene{0};
  std::array<std::array<std::array<std::atomic<bool>,gridSteps>,gridTracks>,gridScenes> sceneCells{};
  std::array<std::array<std::atomic<bool>,gridSteps>,gridScenes> sceneReverseCells{};
  // A cell chooses independently whether to apply ducking and which FX sends
  // are activated. Bit 0 = reverb, bit 1 = distortion, bit 2 = pre-reverb
- // reverse, bit 3 = bypass this cell (neither envelope nor FX).
+ // reverse, bit 3 = bypass duck envelope only, bit 4 = delay send.
  std::array<std::array<std::array<std::atomic<int>,gridSteps>,6>,gridScenes> sceneCellFx{};
  void setCellFxFlag(int track,int step,int flag,bool enabled) noexcept;
  bool getCellFxFlag(int track,int step,int flag) const noexcept;
