@@ -19,6 +19,14 @@ int main(){
   const float expected=(float)(count-1-i)/count*gain;
   check(std::abs(l-expected)<1e-5f&&std::abs(r+expected)<1e-5f,"reversed previous buffer");
  }
+ // Switching the reverse window must not overrun buffers or replay stale data.
+ reverse.setWindowSamples(count*2);
+ for(int i=0;i<count*4;++i){
+  float l=i%7==0?.8f:0.f,r=-l;
+  reverse.process(l,r,true);
+  check(std::isfinite(l)&&std::isfinite(r),"reverse resize stability");
+ }
+ check(reverse.windowSamples()==count*2,"reverse window adopts new size");
  di::CreativeFx fx;
  fx.prepare(44100.);
  for(int model=0;model<5;++model){
