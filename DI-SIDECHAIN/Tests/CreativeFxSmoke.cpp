@@ -29,8 +29,14 @@ int main(){
   }
  }
  fx.reset();
- float l=.1f,r=-.2f;
- fx.process(l,r,false,false,0,0.f,0.f,0,0.f,3.f,.6f,false);
- check(std::abs(l-.1f)<1e-5f&&std::abs(r+.2f)<1e-5f,"bypass dry");
+ // The 2x distortion path adds seven samples of latency to BOTH wet and dry.
+ for(int i=0;i<di::CreativeDistort2x::latencySamples+2;++i){
+  float l=i==0?.1f:0.f,r=i==0?-.2f:0.f;
+  fx.process(l,r,false,false,0,0.f,0.f,0,0.f,3.f,.6f,false);
+  if(i<di::CreativeDistort2x::latencySamples)
+   check(std::abs(l)<1e-6f&&std::abs(r)<1e-6f,"latency-compensated dry");
+  if(i==di::CreativeDistort2x::latencySamples)
+   check(std::abs(l-.1f)<1e-5f&&std::abs(r+.2f)<1e-5f,"aligned dry after seven samples");
+ }
  return 0;
 }
