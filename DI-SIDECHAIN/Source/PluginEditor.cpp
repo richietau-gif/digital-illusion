@@ -252,6 +252,30 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
   addAndMakeVisible(*creativeSliders[i]);
   creativeSliderAttachments[i]=std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(p.state,sliderIds[i],*creativeSliders[i]);
  }
+ for(int i=0;i<4;++i){
+  sceneButtons[i]=std::make_unique<juce::TextButton>(juce::String::charToString((juce::juce_wchar)('A'+i)));
+  buttonStyle(*sceneButtons[i]);
+  sceneButtons[i]->setClickingTogglesState(true);
+  addAndMakeVisible(*sceneButtons[i]);
+  sceneButtons[i]->onClick=[this,i]{
+   proc.setGridScene(i);
+   for(int j=0;j<4;++j)if(sceneButtons[j])sceneButtons[j]->setToggleState(j==i,juce::dontSendNotification);
+   repaint();
+  };
+ }
+ sceneButtons[0]->setToggleState(true,juce::dontSendNotification);
+ copySceneButton=std::make_unique<juce::TextButton>("COPY TO...");
+ buttonStyle(*copySceneButton);
+ addAndMakeVisible(*copySceneButton);
+ copySceneButton->onClick=[this]{
+  juce::PopupMenu menu;
+  const int source=proc.getGridScene();
+  for(int i=0;i<4;++i)if(i!=source)menu.addItem(i+1,"Copy to Scene "+juce::String::charToString((juce::juce_wchar)('A'+i)));
+  juce::Component::SafePointer<DISidechainEditor> safe(this);
+  menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(copySceneButton.get()),[safe,source](int selected){
+   if(safe&&selected>=1&&selected<=4){safe->proc.copyGridScene(source,selected-1);safe->repaint();}
+  });
+ };
  duckDepthSlider=std::make_unique<juce::Slider>(juce::Slider::LinearHorizontal,juce::Slider::TextBoxRight);
  duckDepthSlider->setRange(0.,1.,.01);
  duckDepthSlider->setValue(proc.getDuckTrackDepth(0),juce::dontSendNotification);
@@ -489,6 +513,13 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  text(g,"SATURATOR",{1105,123,105,31},15,white,true);
  text(g,"DRIVE",{1283,110,72,14},11,faint);
  text(g,"WET",{1415,110,60,14},11,faint);
+ const bool sceneActive=sequenceToggle&&sequenceToggle->getToggleState();
+ text(g,"SCENES",{784,180,83,20},12,faint,true);
+ if(copySceneButton)copySceneButton->setVisible(sceneActive);
+ for(int j=0;j<4;++j)if(sceneButtons[j]){
+  sceneButtons[j]->setVisible(sceneActive);
+  sceneButtons[j]->setToggleState(proc.getGridScene()==j,juce::dontSendNotification);
+ }
  // Shape overview.
  paintPanel(g,{12,177,1512,269},"");
  text(g,"100%",{19,198,58,18},12,white);
@@ -714,6 +745,8 @@ void DISidechainEditor::resized() {
  if(abCopyButtons[1])abCopyButtons[1]->setBounds(1076,36,52,32);
  if(setupButton)setupButton->setBounds(setupBounds);
  if(gridModeButton)gridModeButton->setBounds(865,124,147,30);
+ for(int i=0;i<4;++i)if(sceneButtons[i])sceneButtons[i]->setBounds(873+i*62,179,57,22);
+ if(copySceneButton)copySceneButton->setBounds(1124,179,113,22);
  if(duckDepthSlider)duckDepthSlider->setBounds(1190,542,290,31);
  if(duckLengthSlider)duckLengthSlider->setBounds(1190,594,290,31);
  if(reverbOnButton)reverbOnButton->setBounds(43,510,170,33);
