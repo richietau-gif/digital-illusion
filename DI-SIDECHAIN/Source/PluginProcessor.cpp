@@ -101,9 +101,21 @@ di::DynamicCurve DISidechainProcessor::getDynamicDuckCurve(int track) const noex
 void DISidechainProcessor::setDynamicDuckCurve(int track,const di::DynamicCurve& c) noexcept {
  if(track<0||track>=6||c.count<2||c.count>di::DynamicCurve::capacity)return;
  const auto t=(size_t)track;
+ // Host state is untrusted. A malformed stored curve must never introduce
+ // NaNs or unsorted times into the realtime envelope interpreter.
+ float previous=0.f;
  for(int i=0;i<c.count;++i){
-  duckDynamicX[t][(size_t)i].store(c.x[(size_t)i],std::memory_order_relaxed);
-  duckDynamicY[t][(size_t)i].store(c.y[(size_t)i],std::memory_order_relaxed);
+  float time=i==0?0.f:i==c.count-1?1.f:
+    (std::isfinite(c.x[(size_t)i])?c.x[(size_t)i]:
+     (float)i/(c.count-1));
+  if(i>0&&i<c.count-1)
+   time=juce::jlimit(previous+.015f,
+                    1.f-(c.count-1-i)*.015f,time);
+  previous=time;
+  const float y=std::isfinite(c.y[(size_t)i])?
+   juce::jlimit(0.f,1.f,c.y[(size_t)i]):1.f;
+  duckDynamicX[t][(size_t)i].store(time,std::memory_order_relaxed);
+  duckDynamicY[t][(size_t)i].store(y,std::memory_order_relaxed);
  }
  duckDynamicCount[t].store(c.count,std::memory_order_release);
 }
