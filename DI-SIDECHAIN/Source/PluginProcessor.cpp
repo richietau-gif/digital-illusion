@@ -274,7 +274,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
   for(int t=0;t<di::DuckVoiceEngine::tracks;++t)cells[(size_t)t]=getGridCell(t,gridStep);
   // Every row has an independent envelope and length, with strongest-duck
   // overlap; a row triggers once as the transport enters its active step.
-  env=duckVoices.process(gridStep,cells,envelopeLength*sr);
+  env=duckVoices.process(gridStep,cells,envelopeLength*sr,sequencer.getStepGeneration());
  }
  if(sequenceOn)env=juce::jlimit(0.f,1.f,env+shapeOffset);
  float target=1-depth*(1-env);smoothGain=coeff*smoothGain+(1-coeff)*target;
