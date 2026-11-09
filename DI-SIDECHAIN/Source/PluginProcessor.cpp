@@ -252,6 +252,11 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  const float delayTime=bounded("delayTime",5.f,2000.f,375.f);
  const float delayWet=bounded("delayWet",0.f,1.f,.3f);
  const float delayFeedback=bounded("delayFeedback",0.f,.95f,.35f);
+ // BPM-synced delay duration is constant for this host block. Calculate
+ // only once, not 96,000 times per second inside the audio sample loop.
+ constexpr double delayNotes[8]={.125,.25,.5,.75,1.,1.5,2.,4.};
+ const double delaySeconds=delaySync?60.0/bpm*delayNotes[delayDivision]:
+                                         (double)delayTime*.001;
 
  const int fxType=(int)bounded("fxType",0.f,1.f,0.f);
  int clipperMode=(int)bounded("clipperMode",0.f,2.f,0.f);
@@ -438,10 +443,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
                     reverbModel,reverbEnabled?reverbWet:0.f,reverbLength,reverbDecay,(reverseReverb||reverseCell)&&verbCell,
                     reverbPreDelay,distortTone,
                     delayEnabled&&delayCell,delayEnabled?delayWet:0.f,delayFeedback,
-                    delaySync? (60.0/bpm*([&](){
-                      constexpr double notes[8]={.125,.25,.5,.75,1.,1.5,2.,4.};
-                      return notes[delayDivision];}())):delayTime*.001,
-                    delayPingpong);
+                    delaySeconds,delayPingpong);
  main.setSample(0,i,left);main.setSample(1,i,right);
  peak=juce::jmax(peak,juce::jmax(std::abs(left),std::abs(right)));
  }
