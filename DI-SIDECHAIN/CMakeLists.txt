@@ -12,37 +12,7 @@ target_link_libraries(PrecisionSidechain PRIVATE juce::juce_audio_utils juce::ju
 
 include(CTest)
 if(BUILD_TESTING)
- add_executable(di_trigger_logic_smoke Tests/TriggerLogicSmoke.cpp)
- target_compile_features(di_trigger_logic_smoke PRIVATE cxx_std_17)
- add_test(NAME di_trigger_logic_smoke COMMAND di_trigger_logic_smoke)
- add_executable(di_fx_waveshaper_smoke Tests/FxWaveshaperSmoke.cpp)
- target_compile_features(di_fx_waveshaper_smoke PRIVATE cxx_std_17)
- add_test(NAME di_fx_waveshaper_smoke COMMAND di_fx_waveshaper_smoke)
- add_executable(di_peak_detector_smoke Tests/PeakDetectorSmoke.cpp)
- target_compile_features(di_peak_detector_smoke PRIVATE cxx_std_17)
- add_test(NAME di_peak_detector_smoke COMMAND di_peak_detector_smoke)
- add_executable(di_oversampled_fx_smoke Tests/OversampledFx2xSmoke.cpp)
- target_compile_features(di_oversampled_fx_smoke PRIVATE cxx_std_17)
- add_test(NAME di_oversampled_fx_smoke COMMAND di_oversampled_fx_smoke)
- add_executable(di_filter_cutoff_smoke Tests/FilterCutoffSmoke.cpp)
- target_compile_features(di_filter_cutoff_smoke PRIVATE cxx_std_17)
- add_test(NAME di_filter_cutoff_smoke COMMAND di_filter_cutoff_smoke)
- add_executable(di_fx_combination_smoke Tests/FxCombinationSmoke.cpp)
- target_compile_features(di_fx_combination_smoke PRIVATE cxx_std_17)
- add_test(NAME di_fx_combination_smoke COMMAND di_fx_combination_smoke)
- # Treat warnings as errors for all standalone DSP regression executables,
- # matching the standalone Tests/CMakeLists.txt configuration.
- foreach(smoke_target IN ITEMS
-   di_trigger_logic_smoke
-   di_fx_waveshaper_smoke
-   di_peak_detector_smoke
-   di_oversampled_fx_smoke
-   di_filter_cutoff_smoke
-   di_fx_combination_smoke)
-  if(MSVC)
-   target_compile_options(${smoke_target} PRIVATE /W4 /WX)
-  else()
-   target_compile_options(${smoke_target} PRIVATE -Wall -Wextra -Wpedantic -Werror)
-  endif()
- endforeach()
+ add_executable(precision_sidechain_smoke Tests/PrecisionSidechainSmoke.cpp)
+ target_compile_features(precision_sidechain_smoke PRIVATE cxx_std_17)
+ add_test(NAME precision_sidechain_smoke COMMAND precision_sidechain_smoke)
 endif()
