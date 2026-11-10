@@ -916,6 +916,11 @@ void DISidechainEditor::paint(juce::Graphics& g) {
   text(g,knobs[i],{29+i*116,805,112,19},11,enabled?faint:faint.withAlpha(.32f));
  }
  paintFrequencyResponse(g,{755,809,348,94});
+ const float duckGr=juce::jlimit(0.f,1.f,
+  proc.duckReduction.load(std::memory_order_relaxed));
+ const float grDb=duckGr>0.f?-20.f*std::log10(juce::jmax(.001f,1.f-duckGr)):0.f;
+ text(g,"DUCK "+juce::String(grDb,1)+" dB",
+      {1162,737,215,21},12,duckGr>.01f?lime:faint,true);
  text(g,"DEPTH",{1170,766,110,20},13,white,true);
  text(g,"MIX",{1320,766,110,20},13,white,true);
  text(g,"OUT",{1459,752,57,21},13,white,true);
