@@ -185,9 +185,12 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
   b->setColour(juce::TextButton::textColourOffId,juce::Colours::white);
   b->setColour(juce::TextButton::textColourOnId,bg);
  }
- for(auto* b:{sequenceToggle.get(),sync.get()}){
-  b->setColour(juce::ToggleButton::tickColourId,green);
-  b->setColour(juce::ToggleButton::textColourId,juce::Colours::white);
+ // Only TEMPO SYNC remains: SEQUENCER and GRID mode toggles were removed.
+ // The former loop unconditionally dereferenced a null sequenceToggle,
+ // crashing pluginval when opening the VST3 editor.
+ if(sync){
+  sync->setColour(juce::ToggleButton::tickColourId,green);
+  sync->setColour(juce::ToggleButton::textColourId,juce::Colours::white);
  }
  presetName=p.state.state.getProperty("presetName","Custom").toString();
  presetButton=std::make_unique<juce::TextButton>("PRESETS  -  "+presetName);
@@ -1172,8 +1175,6 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
      proc.setGridCell(selectedTrack,selectedStep,!proc.getGridCell(selectedTrack,selectedStep));
     selectedLane=0;
    } // SEQUENCE row selects a column, never toggles a musical event.
-   if(gridModeButton&&!gridModeButton->getToggleState())
-    gridModeButton->setToggleState(true,juce::sendNotificationSync);
    refreshDuckControls();
    refreshCreativePage();
    repaint();
