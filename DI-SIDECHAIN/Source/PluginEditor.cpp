@@ -382,7 +382,7 @@ void DISidechainEditor::resized() {
  b(nextPreset.get(),597,19,30,31);b(savePreset.get(),636,19,52,31);
  b(aButton.get(),700,19,32,31);b(bButton.get(),737,19,32,31);
  b(copyAB.get(),775,19,52,31);b(undoButton.get(),834,19,30,31);b(redoButton.get(),869,19,30,31);
- b(bypass.get(),909,22,72,27);b(settingsButton.get(),992,19,52,31);b(powerButton.get(),1049,19,36,31);
+ b(bypass.get(),902,22,85,27);b(settingsButton.get(),992,19,52,31);b(powerButton.get(),1049,19,36,31);
  combos[6]->setVisible(false);
  b(selectTool.get(),140,96,54,30);
  b(bendTool.get(),199,96,54,30);
