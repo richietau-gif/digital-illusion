@@ -1,4 +1,5 @@
 #include "PluginEditor.h"
+#include "CurvePointEditing.h"
 #include "CurveSelection.h"
 #include "CurvePresets.h"
 #include <cmath>
@@ -1281,21 +1282,23 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
   selectedStep=juce::jlimit(0,count-1,(pos.x-stepStrip.getX())*count/juce::jmax(1,stepStrip.getWidth()));
   refreshCellControls();repaint();return;
  }
- if(selectedLane==0&&true&&detailGraph.expanded(13,13).contains(pos)&&
-    true){
+ if(selectedLane==0&&detailGraph.expanded(juce::roundToInt(32.f/juce::jmax(.25f,uiScale))).contains(pos)){
   auto c=proc.getDynamicDuckCurve(selectedTrack,selectedStep);
-  const float tx=juce::jlimit(0.f,1.f,(pos.x-detailGraph.getX())/(float)juce::jmax(1,detailGraph.getWidth()));
-  const float ty=juce::jlimit(0.f,1.f,(detailGraph.getBottom()-pos.y)/(float)juce::jmax(1,detailGraph.getHeight()));
-  int nearest=-1;float dist=20.f;
-  for(int n=0;n<c.count;++n){
-   const float dx=(tx-c.x[(size_t)n])*detailGraph.getWidth();
-   const float dy=(ty-c.y[(size_t)n])*detailGraph.getHeight();
-   const float d=std::sqrt(dx*dx+dy*dy);
-   if(d<dist){dist=d;nearest=n;}
-  }
+  const float mx=e.position.x/uiScale-detailGraph.getX();
+  const float my=e.position.y/uiScale-detailGraph.getY();
+  const float tx=juce::jlimit(0.f,1.f,mx/(float)juce::jmax(1,detailGraph.getWidth()));
+  const float ty=juce::jlimit(0.f,1.f,1.f-my/(float)juce::jmax(1,detailGraph.getHeight()));
+  const int nearest=di::CurveHit::nearest(c,mx,my,(float)detailGraph.getWidth(),
+      (float)detailGraph.getHeight(),uiScale,e.mods.isRightButtonDown());
   if(e.mods.isRightButtonDown()){
+   // A single RIGHT click reliably removes a visible interior point;
+   // endpoints remain anchored. Ignore clicks not targeting a handle.
    auto before=c;
-   if(c.erase(nearest)){proc.setDynamicDuckCurve(selectedTrack,selectedStep,c);pushDynamicEdit(selectedTrack,selectedStep,before,c);repaint();}
+   if(nearest>=0&&c.erase(nearest)){
+    proc.setDynamicDuckCurve(selectedTrack,selectedStep,c);
+    pushDynamicEdit(selectedTrack,selectedStep,before,c);
+    repaint();
+   }
    return;
   }
   if(e.getNumberOfClicks()>=2){
