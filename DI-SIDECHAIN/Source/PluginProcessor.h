@@ -51,10 +51,14 @@ public:
  void copyGridScene(int source,int destination) noexcept;
  std::array<std::atomic<float>,6> duckDepth{},duckLength{};
  std::array<std::array<std::atomic<float>,8>,6> duckCurve{};
- std::array<std::atomic<int>,6> duckDynamicCount{};
- std::array<std::array<std::atomic<float>,di::DynamicCurve::capacity>,6> duckDynamicX{},duckDynamicY{};
- di::DynamicCurve getDynamicDuckCurve(int track) const noexcept;
- void setDynamicDuckCurve(int track,const di::DynamicCurve& curve) noexcept;
+ // A unique, scene-local 2-16-point envelope belongs to EVERY GRID cell:
+ // scene A-D x six musical tracks x sixteen steps. No shared track curve.
+ using StepPointArray=std::array<std::atomic<float>,di::DynamicCurve::capacity>;
+ using StepPointGrid=std::array<std::array<std::array<StepPointArray,gridSteps>,gridTracks>,gridScenes>;
+ std::array<std::array<std::array<std::atomic<int>,gridSteps>,gridTracks>,gridScenes> duckDynamicCount{};
+ StepPointGrid duckDynamicX{},duckDynamicY{};
+ di::DynamicCurve getDynamicDuckCurve(int track,int step) const noexcept;
+ void setDynamicDuckCurve(int track,int step,const di::DynamicCurve& curve) noexcept;
  void setDuckTrackDepth(int track,float value) noexcept;
  void setDuckTrackLength(int track,float value) noexcept;
  float getDuckTrackDepth(int track) const noexcept;
