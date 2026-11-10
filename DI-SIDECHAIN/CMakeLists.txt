@@ -80,6 +80,9 @@ if(BUILD_TESTING)
  add_executable(di_envelope_filter_audio_smoke Tests/EnvelopeFilterAudioSmoke.cpp)
  target_compile_features(di_envelope_filter_audio_smoke PRIVATE cxx_std_17)
  add_test(NAME di_envelope_filter_audio_smoke COMMAND di_envelope_filter_audio_smoke)
+ add_executable(di_curve_hit_frequency_smoke Tests/CurveHitAndFrequencySmoke.cpp)
+ target_compile_features(di_curve_hit_frequency_smoke PRIVATE cxx_std_17)
+ add_test(NAME di_curve_hit_frequency_smoke COMMAND di_curve_hit_frequency_smoke)
  # Treat warnings as errors for all standalone DSP regression executables,
  # matching the standalone Tests/CMakeLists.txt configuration.
  foreach(smoke_target IN ITEMS
@@ -104,7 +107,8 @@ if(BUILD_TESTING)
    di_sound_modulation_smoke
    di_creative_signal_smoke
    di_per_cell_envelope_smoke
-   di_envelope_filter_audio_smoke)
+   di_envelope_filter_audio_smoke
+   di_curve_hit_frequency_smoke)
   if(MSVC)
    target_compile_options(${smoke_target} PRIVATE /W4 /WX)
   else()
