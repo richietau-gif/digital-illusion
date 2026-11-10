@@ -90,7 +90,7 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
   laneTabs[i]=std::make_unique<juce::TextButton>(laneNames[i]);
   buttonStyle(*laneTabs[i]);
   laneTabs[i]->onClick=[this,i]{
-   if(i>0&&false)sequenceToggle->setToggleState(true,juce::sendNotificationSync);
+   
    selectedLane=i;
    if(shapeOffset)shapeOffset->setEnabled(selectedLane==0);
    for(int j=0;j<6;++j)laneTabs[j]->setToggleState(j==selectedLane,juce::dontSendNotification);
@@ -260,7 +260,7 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
   const bool seq=true;
   const int key=currentShapeKey();
   if(key>=96&&key<102){
-   const auto before=proc.getDynamicDuckCurve(selectedTrack);
+   const auto before=proc.getDynamicDuckCurve(selectedTrack,selectedStep);
    di::DynamicCurve after;
    if(clipboardDynamic)after=dynamicClipboard;
    else for(int n=0;n<8;++n)after.y[(size_t)n]=clipboard[(size_t)n];
@@ -280,10 +280,10 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
   const bool seq=true;
   const int key=currentShapeKey();
   if(key>=96&&key<102){
-   const auto before=proc.getDynamicDuckCurve(selectedTrack);
+   const auto before=proc.getDynamicDuckCurve(selectedTrack,selectedStep);
    di::DynamicCurve after;
-   proc.setDynamicDuckCurve(selectedTrack,after);
-   pushDynamicEdit(selectedTrack,before,after);
+   proc.setDynamicDuckCurve(selectedTrack,selectedStep,after);
+   pushDynamicEdit(selectedTrack,selectedStep,before,after);
    repaint();return;
   }
   const auto before=captureShape(key,seq);
@@ -1110,7 +1110,7 @@ void DISidechainEditor::updatePoint(const juce::MouseEvent& e) {
  if(gridShape){
   if(!draggingShape||dragNode<0)return;
   const auto point=e.position/uiScale;
-  auto c=proc.getDynamicDuckCurve(selectedTrack);
+  auto c=proc.getDynamicDuckCurve(selectedTrack,selectedStep);
   c.move(dragNode,(point.x-detailGraph.getX())/juce::jmax(1,detailGraph.getWidth()),
    (detailGraph.getBottom()-point.y)/(float)juce::jmax(1,detailGraph.getHeight()));
   if(snapButton&&snapButton->getToggleState()){
@@ -1177,7 +1177,7 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
  }
  if(selectedLane==0&&true&&detailGraph.expanded(13,13).contains(pos)&&
     true){
-  auto c=proc.getDynamicDuckCurve(selectedTrack);
+  auto c=proc.getDynamicDuckCurve(selectedTrack,selectedStep);
   const float tx=juce::jlimit(0.f,1.f,(pos.x-detailGraph.getX())/(float)juce::jmax(1,detailGraph.getWidth()));
   const float ty=juce::jlimit(0.f,1.f,(detailGraph.getBottom()-pos.y)/(float)juce::jmax(1,detailGraph.getHeight()));
   int nearest=-1;float dist=20.f;
@@ -1189,12 +1189,12 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
   }
   if(e.mods.isRightButtonDown()){
    auto before=c;
-   if(c.erase(nearest)){proc.setDynamicDuckCurve(selectedTrack,c);pushDynamicEdit(selectedTrack,selectedStep,before,c);repaint();}
+   if(c.erase(nearest)){proc.setDynamicDuckCurve(selectedTrack,selectedStep,c);pushDynamicEdit(selectedTrack,selectedStep,before,c);repaint();}
    return;
   }
   if(e.getNumberOfClicks()>=2){
    auto before=c;
-   if(c.insert(tx,ty)){proc.setDynamicDuckCurve(selectedTrack,c);pushDynamicEdit(selectedTrack,before,c);repaint();}
+   if(c.insert(tx,ty)){proc.setDynamicDuckCurve(selectedTrack,selectedStep,c);pushDynamicEdit(selectedTrack,selectedStep,before,c);repaint();}
    return;
   }
   if(nearest>=0){
@@ -1256,8 +1256,9 @@ void DISidechainEditor::applyFactoryPreset(int index) {
   di::DynamicCurve dc;
   for(int j=0;j<8;++j)dc.y[(size_t)j]=index==1?deep[j]:index==7?rise[j]:
                                         index==5||index==8?wobble[j]:classic[j];
-  proc.setDynamicDuckCurve(track,dc);
-  for(int j=0;j<8;++j)proc.setDuckCurvePoint(track,j,dc.y[(size_t)j]);
+  for(int scene=0;scene<4;++scene)
+   for(int step=0;step<16;++step)
+    proc.setDynamicDuckCurve(track,step,dc,scene);
  }
  const auto event=[this](int track,int step){proc.setGridCell(track,step,true);};
  for(int step=0;step<lengths[index];++step){
@@ -1315,7 +1316,7 @@ void DISidechainEditor::applyShapePreset(int index) {
  auto before=captureShape(key,seq),after=before;
  for(int i=0;i<8;++i)after[i]=di::curvePresets[(size_t)index][(size_t)i];
  if(key>=96&&key<102){
-  const auto original=proc.getDynamicDuckCurve(selectedTrack);
+  const auto original=proc.getDynamicDuckCurve(selectedTrack,selectedStep);
   di::DynamicCurve dc;
   for(int i=0;i<8;++i)dc.y[(size_t)i]=after[(size_t)i];
   proc.setDynamicDuckCurve(selectedTrack,selectedStep,dc);
