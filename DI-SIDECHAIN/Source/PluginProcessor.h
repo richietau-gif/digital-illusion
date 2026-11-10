@@ -57,8 +57,8 @@ public:
  using StepPointGrid=std::array<std::array<std::array<StepPointArray,gridSteps>,gridTracks>,gridScenes>;
  std::array<std::array<std::array<std::atomic<int>,gridSteps>,gridTracks>,gridScenes> duckDynamicCount{};
  StepPointGrid duckDynamicX{},duckDynamicY{};
- di::DynamicCurve getDynamicDuckCurve(int track,int step) const noexcept;
- void setDynamicDuckCurve(int track,int step,const di::DynamicCurve& curve) noexcept;
+ di::DynamicCurve getDynamicDuckCurve(int track,int step,int scene=-1) const noexcept;
+ void setDynamicDuckCurve(int track,int step,const di::DynamicCurve& curve,int scene=-1) noexcept;
  void setDuckTrackDepth(int track,float value) noexcept;
  void setDuckTrackLength(int track,float value) noexcept;
  float getDuckTrackDepth(int track) const noexcept;
