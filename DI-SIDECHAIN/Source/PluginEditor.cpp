@@ -21,8 +21,8 @@ constexpr std::array<Knob,18> knobSpecs{{
  {"length","Length",276,445,84,78," ms",0,false},
  {"timeOffset","Offset",365,445,84,78," %",0,true},
  {"lookahead","Lookahead",454,445,84,78," ms",1,false},
- {"attackProtection","Attack protect",552,445,79,78," %",0,true},
- {"smooth","Smoothing",637,445,79,78," ms",1,false},
+ {"attackMs","Attack",552,445,79,78," ms",1,false},
+ {"releaseMs","Release",637,445,79,78," ms",1,false},
  {"depth","Depth",723,445,79,78," %",0,true},
  {"mix","Dry / Wet",831,445,110,78," %",0,true},
  {"output","Output",953,445,110,78," dB",1,false},
@@ -121,7 +121,30 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
   comboAttachments.emplace_back(std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(proc.state,choice.id,*c));
   combos.emplace_back(std::move(c));
  }
- curveAmountSlider=std::make_unique<juce::Slider>();
+ gridPicker=std::make_unique<juce::ComboBox>();
+ gridPicker->addItemList({"Off","1/4","1/8","1/16"},1);
+ gridPicker->setTooltip("Snap envelope points to this rhythmic editing grid. Off enables free movement.");
+ addAndMakeVisible(*gridPicker);
+ gridAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(proc.state,"editGrid",*gridPicker);
+ syncLengthSlider=std::make_unique<juce::Slider>();
+ syncLengthSlider->setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+ syncLengthSlider->setName("syncLength");
+ syncLengthSlider->setTextBoxStyle(juce::Slider::TextBoxBelow,false,85,16);
+ syncLengthSlider->setColour(juce::Slider::textBoxTextColourId,pale);
+ syncLengthSlider->setColour(juce::Slider::textBoxBackgroundColourId,ink);
+ syncLengthSlider->setColour(juce::Slider::textBoxOutlineColourId,juce::Colour(0xff25384a));
+ syncLengthSlider->textFromValueFunction=[](double value) {
+  const juce::StringArray labels{"1/16","1/8T","1/8","1/4T","1/4","1/2","1 Bar"};
+  return labels[juce::jlimit(0,6,juce::roundToInt(value))];
+ };
+ syncLengthSlider->valueFromTextFunction=[](const juce::String& text){
+  const juce::StringArray labels{"1/16","1/8T","1/8","1/4T","1/4","1/2","1 Bar"};
+  const int index=labels.indexOfIgnoreCase(text.trim());
+  return (double)juce::jmax(0,index);
+ };
+ addAndMakeVisible(*syncLengthSlider);
+ syncLengthAttachment=std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(proc.state,"division",*syncLengthSlider);
+  curveAmountSlider=std::make_unique<juce::Slider>();
  curveAmountSlider->setSliderStyle(juce::Slider::LinearHorizontal);
  curveAmountSlider->setTextBoxStyle(juce::Slider::TextBoxRight,false,50,19);
  curveAmountSlider->setColour(juce::Slider::trackColourId,cyan);
@@ -189,9 +212,11 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
 
  sync=std::make_unique<juce::ToggleButton>("BPM SYNC");
  bypass=std::make_unique<juce::ToggleButton>("BYPASS");
- addAndMakeVisible(*sync);addAndMakeVisible(*bypass);
+ attackProtectToggle=std::make_unique<juce::ToggleButton>("ATTACK PROT.");
+ addAndMakeVisible(*sync);addAndMakeVisible(*bypass);addAndMakeVisible(*attackProtectToggle);
  syncAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(proc.state,"sync",*sync);
  bypassAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(proc.state,"bypass",*bypass);
+ attackProtectAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(proc.state,"attackProtection",*attackProtectToggle);
 
  curveShapeButton->onClick=[this] {
   juce::PopupMenu menu;
@@ -245,7 +270,7 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
 }
 DISidechainEditor::~DISidechainEditor() {
  stopTimer();controlsReady=false;
- filterAttachment.reset();filterEnvelopeAttachment.reset();colorAttachment.reset();curveAmountAttachment.reset();
+ filterAttachment.reset();filterEnvelopeAttachment.reset();colorAttachment.reset();curveAmountAttachment.reset();gridAttachment.reset();syncLengthAttachment.reset();attackProtectAttachment.reset();
  syncAttachment.reset();bypassAttachment.reset();sliderAttachments.clear();comboAttachments.clear();
  setLookAndFeel(nullptr);
 }
@@ -272,7 +297,10 @@ void DISidechainEditor::resized() {
  b(bendTool.get(),199,96,54,30);
  b(eraseTool.get(),258,96,62,30);
  b(clearCurve.get(),325,96,59,30);
- b(curveShapeButton.get(),43,99,77,29);b(combos[3].get(),725,91,122,32);
+ b(curveShapeButton.get(),43,99,77,29);b(gridPicker.get(),725,91,122,32);
+ b(combos[3].get(),399,515,132,24);
+ b(syncLengthSlider.get(),276,445,84,78);
+ b(attackProtectToggle.get(),550,518,129,22);
  b(curveAmountSlider.get(),858,93,135,29);
  b(combos[0].get(),33,406,118,27);b(combos[1].get(),157,406,85,27);
  b(combos[2].get(),33,519,104,20);
@@ -283,10 +311,16 @@ void DISidechainEditor::resized() {
  for(size_t i=0;i<sliders.size();++i) {
   const auto& k=knobSpecs[i];
   b(sliders[i].get(),k.x,k.y,k.w,k.h);
+  if(juce::String(k.id)=="length")sliders[i]->setVisible(proc.state.getRawParameterValue("sync")->load()<=.5f);
  }
 }
 void DISidechainEditor::timerCallback() {
  if(!controlsReady)return;
+ const bool synced=proc.state.getRawParameterValue("sync")->load()>.5f;
+ syncLengthSlider->setVisible(synced);
+ for(size_t i=0;i<knobSpecs.size();++i)
+  if(juce::String(knobSpecs[i].id)=="length")sliders[i]->setVisible(!synced);
+ combos[3]->setVisible(false);
  if(proc.envelopeRevision.load()!=knownRevision&&draggedNode<0)pullNodes();
  if(!presetBrowser->isPopupActive())presetBrowser->setSelectedId(proc.getCurrentProgram()+1,juce::dontSendNotification);
  repaint();
