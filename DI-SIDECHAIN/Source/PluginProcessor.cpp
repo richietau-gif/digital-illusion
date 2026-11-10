@@ -26,8 +26,8 @@ static juce::AudioProcessorValueTreeState::ParameterLayout layoutParams(){
   "Filter character",juce::StringArray{"Clean","Analog Ladder"},0));
  f("ladderResonance","Ladder resonance",0.f,.95f,.25f);
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"trigger",1},"Trigger mode",juce::StringArray{"Audio + MIDI","Audio only","MIDI only"},0));
- p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"sequenceEnabled",1},"Shape sequencer enabled",true));
- p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"creativeGridEnabled",1},"Creative track sequencer enabled",true));
+
+
  p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"reverbEnabled",1},"Reverb enabled",false));
  p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"distortEnabled",1},"Distortion enabled",false));
  p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"reverbReverse",1},"Reverse before reverb",false));
@@ -249,8 +249,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  const float filterRange=juce::jlimit(0.f,1.f,filterMod);
  const bool fxEnabled=get("fxEnabled")>0.5f;
  const bool saturatorEnabled=get("saturatorEnabled")>0.5f;
- // DI SEQFX is exclusively a GRID sequencer. Legacy mode automation
- // remains loadable but cannot disable the sequencer/audio processing.
+ // DI SEQFX has one mode: the six-track creative sequencer.
  const bool creativeGrid=true;
  const bool reverbEnabled=get("reverbEnabled")>0.5f;
  const bool distortEnabled=get("distortEnabled")>0.5f;
