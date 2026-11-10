@@ -9,6 +9,12 @@ on:
 permissions:
   contents: read
 
+# Keep only the newest commit building on a feature branch. Older builds are
+# automatically cancelled to reduce Actions minutes and prevent stale ZIPs.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   windows-vst3:
     runs-on: windows-2022
