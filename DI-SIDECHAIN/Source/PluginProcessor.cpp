@@ -37,7 +37,7 @@ static juce::AudioProcessorValueTreeState::ParameterLayout layoutParams(){
  {juce::NormalisableRange<float> range(60.f,18000.f);
   range.setSkewForCentre(2200.f);
   p.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"high",1},"Upper frequency edge",range,400.f));}f("retrigger","Trigger holdoff milliseconds",1,250,35);f("shapeOffset","Shape vertical offset",-1,1,0);f("panMod","Pan modulation amount",-1,1,0);f("filterMod","Filter modulation amount",0,1,0);f("fxDrive","Legacy FX drive dB",0,24,0);f("saturatorDrive","Saturator drive dB",0,24,0);f("fxMix","FX wet mix",0,1,1);
- p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"mode",1},"Frequency mode",juce::StringArray{"Full","Low","High","Band"},0));
+ p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"mode",1},"FILTER FX type",juce::StringArray{"Lowpass","Highpass","Bandpass","Notch"},0));
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"filterModel",1},
   "Filter character",juce::StringArray{"Clean","Analog Ladder"},0));
  f("ladderResonance","Ladder resonance",0.f,.95f,.25f);
