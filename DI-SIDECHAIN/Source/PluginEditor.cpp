@@ -386,8 +386,16 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e) {
  recordUndo();
  if(nearest<0&&editTool==EditTool::select&&curve.count<maxNodes) {
   const auto bounds=scaled((int)gx0,(int)gy0,(int)(gx1-gx0),(int)(gy1-gy0));
-  const float x=clamp((p.x-bounds.getX())/(float)bounds.getWidth());
+  float x=clamp((p.x-bounds.getX())/(float)bounds.getWidth());
+  const int grid=(int)proc.state.getRawParameterValue("editGrid")->load();
+  if(grid>0&&!e.mods.isAltDown()) {
+   const int divisions=4<<(grid-1);
+   x=std::round(x*(float)divisions)/(float)divisions;
+  }
   const float y=clamp(1.f-(p.y-bounds.getY())/(float)bounds.getHeight());
+  if(x<=.005f||x>=.995f)return;
+  for(int i=0;i<curve.count;++i)
+   if(std::abs(curve.nodes[(size_t)i].x-x)<.008f)return;
   int insert=1;
   while(insert<curve.count&&curve.nodes[(size_t)insert].x<x)++insert;
   for(int j=curve.count;j>insert;--j)curve.nodes[(size_t)j]=curve.nodes[(size_t)j-1];
@@ -404,6 +412,11 @@ void DISidechainEditor::mouseDrag(const juce::MouseEvent& e) {
  } else {
   const auto bounds=scaled((int)gx0,(int)gy0,(int)(gx1-gx0),(int)(gy1-gy0));
   float x=clamp((e.x-bounds.getX())/(float)bounds.getWidth());
+  const int grid=(int)proc.state.getRawParameterValue("editGrid")->load();
+  if(grid>0&&!e.mods.isAltDown()){
+   const int divisions=4<<(grid-1);
+   x=std::round(x*(float)divisions)/(float)divisions;
+  }
   if(draggedNode==0)x=0.f;
   else if(draggedNode==curve.count-1)x=1.f;
   else x=juce::jlimit(curve.nodes[(size_t)draggedNode-1].x+.01f,curve.nodes[(size_t)draggedNode+1].x-.01f,x);
