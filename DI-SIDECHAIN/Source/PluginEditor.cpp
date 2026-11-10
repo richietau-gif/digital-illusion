@@ -210,18 +210,17 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
    } else if(selection==4) {
     safe->presetLoadChooser=std::make_unique<juce::FileChooser>(
      "Load PRECISION SIDECHAIN preset",juce::File::getSpecialLocation(juce::File::userDocumentsDirectory),"*.preset");
-    juce::Component::SafePointer<DISidechainEditor> owner(safe);
     safe->presetLoadChooser->launchAsync(
      juce::FileBrowserComponent::openMode|juce::FileBrowserComponent::canSelectFiles,
-     [owner](const juce::FileChooser& chooser) {
-      if(owner==nullptr)return;
+     [safe](const juce::FileChooser& chooser) {
+      if(safe==nullptr)return;
       const auto file=chooser.getResult();
       juce::MemoryBlock data;
       if(file.existsAsFile()&&file.getSize()>0&&file.getSize()<4*1024*1024&&file.loadFileAsData(data)){
-       owner->proc.setStateInformation(data.getData(),(int)data.getSize());
-       owner->pullNodes();
-       owner->snapshots[owner->activeSnapshot]=owner->proc.state.copyState();
-       owner->snapshotCurves[owner->activeSnapshot]=owner->curve;
+       safe->proc.setStateInformation(data.getData(),(int)data.getSize());
+       safe->pullNodes();
+       safe->snapshots[safe->activeSnapshot]=safe->proc.state.copyState();
+       safe->snapshotCurves[safe->activeSnapshot]=safe->curve;
       }
      });
    }
