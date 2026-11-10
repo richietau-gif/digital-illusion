@@ -27,6 +27,7 @@ public:
 private:
  void handleAsyncUpdate() override;
  std::atomic<int> pendingLatencySamples{0};
+ std::atomic<bool> transportPlaying{false};
  int previousDelaySamples=0;
  int delayTransitionSamples=0;
  static constexpr int delayTransitionLength=128;
