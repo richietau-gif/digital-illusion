@@ -377,7 +377,7 @@ void DISidechainEditor::resized() {
  if(!controlsReady||sliders.size()!=knobSpecs.size()||combos.size()!=7||!presetBrowser)return;
  const auto b=[this](juce::Component* component,int x,int y,int w,int h){component->setBounds(scaled(x,y,w,h));};
  envelopeMouseLayer->setBounds(scaled((int)gx0,(int)gy0,(int)(gx1-gx0),(int)(gy1-gy0)));
- envelopeMouseLayer->toFront(false);
+ // The mouse layer was added last; don't reorder components from resized().
  b(prevPreset.get(),327,19,30,31);b(presetBrowser.get(),365,18,225,33);
  b(nextPreset.get(),597,19,30,31);b(savePreset.get(),636,19,52,31);
  b(aButton.get(),700,19,32,31);b(bButton.get(),737,19,32,31);
