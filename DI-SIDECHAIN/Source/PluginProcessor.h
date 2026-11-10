@@ -28,8 +28,19 @@ private:
  {
   juce::dsp::IIR::Filter<float> a,b,c,d;
   juce::dsp::StateVariableTPTFilter<float> animated,animated2,animated3,animated4;
+  static constexpr int combSize=8192;
+  std::array<float,combSize> combBuffer{};
+  int combWrite=0;
+  float processComb(float input,int delay,float feedback) noexcept {
+   delay=juce::jlimit(1,combSize-1,delay);
+   const int read=(combWrite+combSize-delay)%combSize;
+   const float previous=combBuffer[(size_t)read];
+   combBuffer[(size_t)combWrite]=std::tanh(input+juce::jlimit(0.f,.92f,feedback)*previous);
+   if(++combWrite>=combSize)combWrite=0;
+   return .5f*input+.5f*previous;
+  }
   void prepare(const juce::dsp::ProcessSpec& s) {a.prepare(s);b.prepare(s);c.prepare(s);d.prepare(s);animated.prepare(s);animated2.prepare(s);animated3.prepare(s);animated4.prepare(s);}
-  void reset() {a.reset();b.reset();c.reset();d.reset();animated.reset();animated2.reset();animated3.reset();animated4.reset();}
+  void reset() {a.reset();b.reset();c.reset();d.reset();animated.reset();animated2.reset();animated3.reset();animated4.reset();combBuffer.fill(0.f);combWrite=0;}
  };
  std::array<std::atomic<float>,maxEnvelopeNodes> envelopeXs{}, envelopeYs{}, envelopeCurves{};
  std::atomic<int> envelopeNodeCount{2};
