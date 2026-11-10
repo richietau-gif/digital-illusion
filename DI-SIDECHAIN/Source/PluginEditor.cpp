@@ -99,9 +99,10 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  // Per-cell routing: duck volume, reverb send, distortion send, pre-reverb
  // reverse, and an absolute bypass. Unlike global rack switches, these flags
  // belong to one selected track/step in one scene.
- const char* cellLabels[]={"DUCK","RVB","DST","DLY","REV","BYP"};
- constexpr juce::uint32 cellColours[]={0xffa2ed38,0xff579dff,0xffff9b4a,0xffef67c9,0xff579dff,0xff87939f};
- for(int i=0;i<6;++i){
+ const char* cellLabels[]={"DUCK","FLT","RVB","DST","DLY","REV","BYP"};
+ constexpr juce::uint32 cellColours[]={0xffa2ed38,0xff2ad3da,0xff579dff,0xffff9b4a,
+                                       0xffef67c9,0xff579dff,0xff87939f};
+ for(int i=0;i<7;++i){
   cellControls[i]=std::make_unique<juce::TextButton>(cellLabels[i]);
   buttonStyle(*cellControls[i]);
   cellControls[i]->setClickingTogglesState(true);
@@ -109,20 +110,24 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
   cellControls[i]->setColour(juce::TextButton::textColourOnId,juce::Colour(0xff08121b));
   addAndMakeVisible(*cellControls[i]);
   cellControls[i]->onClick=[this,i]{
-   constexpr int flags[6]={-1,0,1,4,2,3};
+   constexpr int flags[7]={-1,5,0,1,4,2,3};
    const int flag=flags[i];
-   if(flag<0)proc.setGridCell(selectedTrack,selectedStep,!proc.getGridCell(selectedTrack,selectedStep));
-   else proc.setCellFxFlag(selectedTrack,selectedStep,flag,
-        !proc.getCellFxFlag(selectedTrack,selectedStep,flag));
+   if(flag<0){
+    const bool enable=!proc.getGridCell(selectedTrack,selectedStep);
+    proc.setGridCell(selectedTrack,selectedStep,enable);
+    if(enable&&proc.getCellFxMask(selectedTrack,selectedStep)==0)
+     proc.setCellFxFlag(selectedTrack,selectedStep,5,true);
+   }else proc.setCellFxFlag(selectedTrack,selectedStep,flag,
+         !proc.getCellFxFlag(selectedTrack,selectedStep,flag));
    const bool on=flag>=0&&proc.getCellFxFlag(selectedTrack,selectedStep,flag);
-   if(on&&i==4)proc.setCellFxFlag(selectedTrack,selectedStep,0,true);
-   if(on&&i>=1&&i<=4)proc.setGridCell(selectedTrack,selectedStep,true);
+   if(on&&i==5)proc.setCellFxFlag(selectedTrack,selectedStep,0,true);
+   if(on&&i>=1&&i<=5)proc.setGridCell(selectedTrack,selectedStep,true);
    const auto enable=[this](juce::TextButton* button){
     if(button&&!button->getToggleState())button->setToggleState(true,juce::sendNotificationSync);
    };
-   if(on&&(i==1||i==4))enable(reverbOnButton.get());
-   if(on&&i==2)enable(distortOnButton.get());
-   if(on&&i==3)enable(delayOnButton.get());
+   if(on&&(i==2||i==5))enable(reverbOnButton.get());
+   if(on&&i==3)enable(distortOnButton.get());
+   if(on&&i==4)enable(delayOnButton.get());
    refreshCellControls();repaint();
   };
  }
@@ -858,6 +863,7 @@ void DISidechainEditor::paint(juce::Graphics& g) {
      g.fillRoundedRectangle(juce::Rectangle<float>((float)flagX,(float)cell.getY()+3,11.f,12.f),2.f);
      text(g,caption,{flagX+1,(int)cell.getY()+3,10,12},8.5f,DITheme::dark(),true);
     };
+    flag(proc.getCellFxFlag(track,step,5),"F",cyan);
     flag(reverse&&rvb,"<",juce::Colour(0xff579dff));
     flag(dist,"D",juce::Colour(0xffffa454));
     flag(delayOn,"L",juce::Colour(0xffed6acd));
@@ -998,8 +1004,8 @@ void DISidechainEditor::paint(juce::Graphics& g) {
 }
 void DISidechainEditor::refreshCellControls(){
  const bool seq=true;
- constexpr int flags[6]={-1,0,1,4,2,3};
- for(int i=0;i<6;++i)if(cellControls[i]){
+ constexpr int flags[7]={-1,5,0,1,4,2,3};
+ for(int i=0;i<7;++i)if(cellControls[i]){
   cellControls[i]->setVisible(seq&&selectedTrack<6);
   const bool active=i==0?proc.getGridCell(selectedTrack,selectedStep):
     proc.getCellFxFlag(selectedTrack,selectedStep,flags[i]);
@@ -1110,7 +1116,7 @@ void DISidechainEditor::resized() {
   const int yy=i>=5?630:576;
   creativeSliders[i]->setBounds(36+col*283,yy,253,33);
  }
- for(int i=0;i<6;++i)if(cellControls[i])cellControls[i]->setBounds(1139+i*62,524,58,32);
+ for(int i=0;i<7;++i)if(cellControls[i])cellControls[i]->setBounds(1139+i*53,524,51,31);
  refreshCreativePage();
  // Single-mode DI SEQFX: no alternate mode controls are instantiated.
  if(sequenceToggle){sequenceToggle->setVisible(false);sequenceToggle->setBounds(0,0,0,0);}
