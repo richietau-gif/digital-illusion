@@ -83,44 +83,45 @@ DISidechainProcessor::DISidechainProcessor():AudioProcessor(BusesProperties().wi
   constexpr float defaultShape[8]={0.f,.02f,.2f,.65f,.9f,1.f,1.f,1.f};
   for(int j=0;j<8;++j)duckCurve[(size_t)t][(size_t)j].store(defaultShape[j],std::memory_order_relaxed);
   di::DynamicCurve dynamic;
-  duckDynamicCount[(size_t)t].store(dynamic.count,std::memory_order_relaxed);
-  for(int j=0;j<di::DynamicCurve::capacity;++j){
-   duckDynamicX[(size_t)t][(size_t)j].store(dynamic.x[(size_t)j],std::memory_order_relaxed);
-   duckDynamicY[(size_t)t][(size_t)j].store(dynamic.y[(size_t)j],std::memory_order_relaxed);
-  }
+  for(int scene=0;scene<gridScenes;++scene)
+   for(int step=0;step<gridSteps;++step){
+    duckDynamicCount[(size_t)scene][(size_t)t][(size_t)step].store(dynamic.count,std::memory_order_relaxed);
+    for(int j=0;j<di::DynamicCurve::capacity;++j){
+     duckDynamicX[(size_t)scene][(size_t)t][(size_t)step][(size_t)j].store(dynamic.x[(size_t)j],std::memory_order_relaxed);
+     duckDynamicY[(size_t)scene][(size_t)t][(size_t)step][(size_t)j].store(dynamic.y[(size_t)j],std::memory_order_relaxed);
+    }
+   }
  }
 }
-di::DynamicCurve DISidechainProcessor::getDynamicDuckCurve(int track) const noexcept {
+di::DynamicCurve DISidechainProcessor::getDynamicDuckCurve(int track,int step) const noexcept {
  di::DynamicCurve c;
- if(track<0||track>=6)return c;
- const auto t=(size_t)track;
- c.count=juce::jlimit(2,di::DynamicCurve::capacity,duckDynamicCount[t].load(std::memory_order_acquire));
+ if(track<0||track>=gridTracks||step<0||step>=gridSteps)return c;
+ const auto scene=(size_t)getGridScene(),t=(size_t)track,k=(size_t)step;
+ c.count=juce::jlimit(2,di::DynamicCurve::capacity,
+   duckDynamicCount[scene][t][k].load(std::memory_order_acquire));
  for(int i=0;i<c.count;++i){
-  c.x[(size_t)i]=duckDynamicX[t][(size_t)i].load(std::memory_order_relaxed);
-  c.y[(size_t)i]=duckDynamicY[t][(size_t)i].load(std::memory_order_relaxed);
+  c.x[(size_t)i]=duckDynamicX[scene][t][k][(size_t)i].load(std::memory_order_relaxed);
+  c.y[(size_t)i]=duckDynamicY[scene][t][k][(size_t)i].load(std::memory_order_relaxed);
  }
  return c;
 }
-void DISidechainProcessor::setDynamicDuckCurve(int track,const di::DynamicCurve& c) noexcept {
- if(track<0||track>=6||c.count<2||c.count>di::DynamicCurve::capacity)return;
- const auto t=(size_t)track;
- // Host state is untrusted. A malformed stored curve must never introduce
- // NaNs or unsorted times into the realtime envelope interpreter.
+void DISidechainProcessor::setDynamicDuckCurve(int track,int step,const di::DynamicCurve& c) noexcept {
+ if(track<0||track>=gridTracks||step<0||step>=gridSteps||
+    c.count<2||c.count>di::DynamicCurve::capacity)return;
+ const auto scene=(size_t)getGridScene(),t=(size_t)track,k=(size_t)step;
  float previous=0.f;
  for(int i=0;i<c.count;++i){
   float time=i==0?0.f:i==c.count-1?1.f:
-    (std::isfinite(c.x[(size_t)i])?c.x[(size_t)i]:
-     (float)i/(c.count-1));
+    (std::isfinite(c.x[(size_t)i])?c.x[(size_t)i]:(float)i/(c.count-1));
   if(i>0&&i<c.count-1)
-   time=juce::jlimit(previous+.015f,
-                    1.f-(c.count-1-i)*.015f,time);
+   time=juce::jlimit(previous+.015f,1.f-(c.count-1-i)*.015f,time);
   previous=time;
   const float y=std::isfinite(c.y[(size_t)i])?
    juce::jlimit(0.f,1.f,c.y[(size_t)i]):1.f;
-  duckDynamicX[t][(size_t)i].store(time,std::memory_order_relaxed);
-  duckDynamicY[t][(size_t)i].store(y,std::memory_order_relaxed);
+  duckDynamicX[scene][t][k][(size_t)i].store(time,std::memory_order_relaxed);
+  duckDynamicY[scene][t][k][(size_t)i].store(y,std::memory_order_relaxed);
  }
- duckDynamicCount[t].store(c.count,std::memory_order_release);
+ duckDynamicCount[scene][t][k].store(c.count,std::memory_order_release);
 }
 void DISidechainProcessor::setDuckTrackDepth(int t,float v) noexcept {
  if(t>=0&&t<6&&std::isfinite(v))duckDepth[(size_t)t].store(juce::jlimit(0.f,1.f,v),std::memory_order_relaxed);
@@ -137,12 +138,11 @@ float DISidechainProcessor::getDuckTrackLength(int t) const noexcept {
 void DISidechainProcessor::setDuckCurvePoint(int t,int j,float v) noexcept {
  if(t>=0&&t<6&&j>=0&&j<8&&std::isfinite(v)){
   duckCurve[(size_t)t][(size_t)j].store(juce::jlimit(0.f,1.f,v),std::memory_order_relaxed);
-  auto dc=getDynamicDuckCurve(t);
-  if(j<dc.count){dc.y[(size_t)j]=juce::jlimit(0.f,1.f,v);setDynamicDuckCurve(t,dc);}
+  // Legacy track curve cache; independent step envelopes are untouched.
  }
 }
 float DISidechainProcessor::getDuckCurvePoint(int t,int j) const noexcept {
- return t>=0&&t<6&&j>=0&&j<8?getDynamicDuckCurve(t).evaluate(j/7.f):1.f;
+ return t>=0&&t<6&&j>=0&&j<8?getDynamicDuckCurve(t,0).evaluate(j/7.f):1.f;
 }
 void DISidechainProcessor::setCellFxFlag(int track,int step,int flag,bool enabled) noexcept {
  if(track<0||track>=6||step<0||step>=gridSteps||flag<0||flag>4)return;
