@@ -51,7 +51,7 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
   sliders.push_back(std::move(s));labels.push_back(std::move(l));
  }
  const char* cids[]={"mode","trigger","division"};
- const juce::StringArray choices[]={{"Full","Low","High","Band"},{"Audio + MIDI","Audio only","MIDI only"},{"1/32","1/16","1/8","1/4","1/2","1 bar","2 bars"}};
+ const juce::StringArray choices[]={{"Lowpass","Highpass","Bandpass","Notch"},{"Audio + MIDI","Audio only","MIDI only"},{"1/32","1/16","1/8","1/4","1/2","1 bar","2 bars"}};
  for(int i=0;i<3;++i) {
   auto c=std::make_unique<juce::ComboBox>();c->addItemList(choices[i],1);
   c->setColour(juce::ComboBox::backgroundColourId,juce::Colour(0xff212b36));
@@ -300,7 +300,7 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
   applyShape(key,seq,defaults);
   pushEdit(key,seq,before,defaults);repaint();
  };
- const char* filterNames[]={"FULL","LOW","HIGH","BAND"};
+ const char* filterNames[]={"LOWPASS","HIGHPASS","BANDPASS","NOTCH"};
  for(int i=0;i<4;++i){filterButtons[i]=std::make_unique<juce::TextButton>(filterNames[i]);filterButtons[i]->onClick=[this,i]{selectFilter(i);};addAndMakeVisible(*filterButtons[i]);}
  filterModelBox=std::make_unique<juce::ComboBox>();
  filterModelBox->addItemList({"CLEAN","ANALOG LADDER"},1);
@@ -316,6 +316,57 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  addAndMakeVisible(*filterResonanceSlider);
  filterResonanceAttachment=std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
   p.state,"ladderResonance",*filterResonanceSlider);
+ // FILTER sweep frequency range is edited in the modulation lane.
+ for(int i=0;i<2;++i){
+  filterSweepSliders[(size_t)i]=std::make_unique<juce::Slider>(
+   juce::Slider::LinearHorizontal,juce::Slider::TextBoxRight);
+  auto& slider=*filterSweepSliders[(size_t)i];
+  slider.setTextBoxStyle(juce::Slider::TextBoxRight,false,69,21);
+  slider.textFromValueFunction=[](double hz){
+   return hz>=1000.?juce::String(hz/1000.,1)+" kHz":
+                    juce::String(juce::roundToInt(hz))+" Hz";
+  };
+  slider.valueFromTextFunction=[](const juce::String& text){
+   const auto value=text.getDoubleValue();
+   return text.containsIgnoreCase("k")?value*1000.:value;
+  };
+  slider.setColour(juce::Slider::trackColourId,juce::Colour(0xff2ad3da));
+  slider.setColour(juce::Slider::thumbColourId,juce::Colour(0xff2ad3da));
+  addAndMakeVisible(slider);
+  filterSweepAttachments[(size_t)i]=std::make_unique<
+   juce::AudioProcessorValueTreeState::SliderAttachment>(
+    p.state,i==0?"filterSweepMin":"filterSweepMax",slider);
+ }
+ // Static INPUT FILTER is physically and logically independent of FILTER FX.
+ const char* inputIds[]={"inputHpEnabled","inputLpEnabled"};
+ const char* cutoffIds[]={"inputHpHz","inputLpHz"};
+ const char* labels[]={"HP ON","LP ON"};
+ for(int i=0;i<2;++i){
+  inputCutButtons[(size_t)i]=std::make_unique<juce::TextButton>(labels[i]);
+  auto& toggle=*inputCutButtons[(size_t)i];
+  toggle.setClickingTogglesState(true);
+  toggle.setColour(juce::TextButton::buttonColourId,juce::Colour(0xff1a303c));
+  toggle.setColour(juce::TextButton::buttonOnColourId,juce::Colour(0xff28ced8));
+  toggle.setColour(juce::TextButton::textColourOnId,juce::Colour(0xff07141e));
+  addAndMakeVisible(toggle);
+  inputCutButtonAttachments[(size_t)i]=std::make_unique<
+   juce::AudioProcessorValueTreeState::ButtonAttachment>(p.state,inputIds[i],toggle);
+  inputCutSliders[(size_t)i]=std::make_unique<juce::Slider>(
+   juce::Slider::LinearHorizontal,juce::Slider::TextBoxRight);
+  auto& cutoff=*inputCutSliders[(size_t)i];
+  cutoff.setTextBoxStyle(juce::Slider::TextBoxRight,false,75,22);
+  cutoff.textFromValueFunction=[](double hz){
+   return hz>=1000.?juce::String(hz/1000.,1)+" kHz":juce::String(juce::roundToInt(hz))+" Hz";
+  };
+  cutoff.valueFromTextFunction=[](const juce::String& t){
+   return t.containsIgnoreCase("k")?t.getDoubleValue()*1000.:t.getDoubleValue();
+  };
+  cutoff.setColour(juce::Slider::trackColourId,juce::Colour(0xff2ad3da));
+  cutoff.setColour(juce::Slider::thumbColourId,juce::Colour(0xff2ad3da));
+  addAndMakeVisible(cutoff);
+  inputCutSliderAttachments[(size_t)i]=std::make_unique<
+   juce::AudioProcessorValueTreeState::SliderAttachment>(p.state,cutoffIds[i],cutoff);
+ }
  if(combos.size()>0)combos[0]->setVisible(false);
  refreshFilterButtons();refreshFxButtons();
  // Reverb and distortion settings remain independent of legacy FX controls.
