@@ -45,7 +45,7 @@ public:
   // Conservative feedforward peak emphasizes transitions without feedback instability.
   const float boost=std::clamp(std::isfinite(resonance)?resonance:0.f,0.f,.95f)*.25f;
   const float lp=std::clamp(low2+boost*(low1-low2),-8.f,8.f);
-  const float analogLow=ladder.process(signal);
+  const float analogLow=analog?ladder.process(signal):0.f;
   const float selectedLow=analog?analogLow:lp;
   const float hp=signal-selectedLow;
   const float bp=(analog?analogLow:low1)-bandLow;
