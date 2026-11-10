@@ -150,6 +150,22 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p)
         combos.push_back(std::move(combo));
     }
 
+    presetBrowser = std::make_unique<juce::ComboBox>();
+    for (int program = 0; program < proc.getNumPrograms(); ++program)
+        presetBrowser->addItem(proc.getProgramName(program), program + 1);
+    presetBrowser->setSelectedId(proc.getCurrentProgram() + 1, juce::dontSendNotification);
+    presetBrowser->setTooltip("Factory preset - selecting a preset changes all sound parameters");
+    presetBrowser->onChange = [this]
+    {
+        if (controlsReady)
+        {
+            const int selected = presetBrowser->getSelectedId() - 1;
+            if (selected >= 0 && selected < proc.getNumPrograms())
+                proc.setCurrentProgram(selected);
+        }
+    };
+    addAndMakeVisible(*presetBrowser);
+
     sync = std::make_unique<juce::ToggleButton>("BPM SYNC");
     bypass = std::make_unique<juce::ToggleButton>("BYPASS");
     addAndMakeVisible(*sync);
@@ -212,12 +228,13 @@ juce::Rectangle<int> DISidechainEditor::scaled(int x, int y, int w, int h) const
 
 void DISidechainEditor::resized()
 {
-    if (!controlsReady || sliders.size() != knobs.size() || combos.size() != 6 || !sync || !bypass)
+    if (!controlsReady || sliders.size() != knobs.size() || combos.size() != 6 || !sync || !bypass || !presetBrowser)
         return;
 
     bypass->setBounds(scaled(710, 15, 100, 33));
     sync->setBounds(scaled(810, 15, 115, 33));
     combos.back()->setBounds(scaled(934, 16, 140, 31));
+    presetBrowser->setBounds(scaled(440, 83, 332, 27));
 
     const int selectorWidth = 208;
     for (size_t i = 0; i < 5; ++i)
@@ -233,6 +250,12 @@ void DISidechainEditor::resized()
 
 void DISidechainEditor::timerCallback()
 {
+    if (controlsReady && presetBrowser && !presetBrowser->isPopupActive())
+    {
+        const int target = proc.getCurrentProgram() + 1;
+        if (presetBrowser->getSelectedId() != target)
+            presetBrowser->setSelectedId(target, juce::dontSendNotification);
+    }
     repaint(scaled(22, 64, 1056, 250));
     repaint(scaled(620, 16, 82, 35));
 }
@@ -273,7 +296,7 @@ void DISidechainEditor::paint(juce::Graphics& g)
     section({22.0f, 72.0f, 1056.0f, 226.0f});
     g.setColour(juce::Colour(0xffd4e5f2));
     g.setFont(juce::FontOptions(12.0f));
-    g.drawText("GAIN ENVELOPE  /  TRIGGER ALIGNED", 40, 83, 370, 20,
+    g.drawText("ENVELOPE / FACTORY PRESET", 40, 83, 370, 20,
                juce::Justification::left);
 
     constexpr float graphLeft = 43.0f, graphRight = 1054.0f;
