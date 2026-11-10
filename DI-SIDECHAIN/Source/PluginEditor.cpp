@@ -1,5 +1,6 @@
 #include "PluginEditor.h"
 #include "CurvePointEditing.h"
+#include "FrequencyDisplay.h"
 #include "CurveSelection.h"
 #include "CurvePresets.h"
 #include <cmath>
@@ -330,8 +331,7 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
   auto& slider=*filterSweepSliders[(size_t)i];
   slider.setTextBoxStyle(juce::Slider::TextBoxRight,false,69,21);
   slider.textFromValueFunction=[](double hz){
-   return hz>=1000.?juce::String(hz/1000.,1)+" kHz":
-                    juce::String(juce::roundToInt(hz))+" Hz";
+   return juce::String(di::shortFrequency(static_cast<float>(hz)).c_str());
   };
   slider.valueFromTextFunction=[](const juce::String& text){
    const auto value=text.getDoubleValue();
@@ -343,6 +343,7 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
   filterSweepAttachments[(size_t)i]=std::make_unique<
    juce::AudioProcessorValueTreeState::SliderAttachment>(
     p.state,i==0?"filterSweepMin":"filterSweepMax",slider);
+  slider.setNumDecimalPlacesToDisplay(0);
  }
  // Static INPUT FILTER is physically and logically independent of FILTER FX.
  const char* inputIds[]={"inputHpEnabled","inputLpEnabled"};
@@ -364,7 +365,7 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
   auto& cutoff=*inputCutSliders[(size_t)i];
   cutoff.setTextBoxStyle(juce::Slider::TextBoxRight,false,75,22);
   cutoff.textFromValueFunction=[](double hz){
-   return hz>=1000.?juce::String(hz/1000.,1)+" kHz":juce::String(juce::roundToInt(hz))+" Hz";
+   return juce::String(di::shortFrequency(static_cast<float>(hz)).c_str());
   };
   cutoff.valueFromTextFunction=[](const juce::String& t){
    return t.containsIgnoreCase("k")?t.getDoubleValue()*1000.:t.getDoubleValue();
@@ -374,6 +375,7 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
   addAndMakeVisible(cutoff);
   inputCutSliderAttachments[(size_t)i]=std::make_unique<
    juce::AudioProcessorValueTreeState::SliderAttachment>(p.state,cutoffIds[i],cutoff);
+  cutoff.setNumDecimalPlacesToDisplay(0);
  }
  if(combos.size()>0)combos[0]->setVisible(false);
  refreshFilterButtons();refreshFxButtons();
