@@ -1264,7 +1264,8 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
      if(enabled&&proc.getCellFxMask(selectedTrack,selectedStep)==0)
       proc.setCellFxFlag(selectedTrack,selectedStep,5,true);
     }
-    selectedLane=0;
+    // Preserve the selected modulation lane; clicking a FILTER cell should
+    // display its FILTER envelope, not silently jump back to VOLUME.
    } // SEQUENCE row selects a column, never toggles a musical event.
    refreshDuckControls();
    refreshCreativePage();
