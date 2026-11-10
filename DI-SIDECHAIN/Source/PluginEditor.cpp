@@ -300,7 +300,7 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
   applyShape(key,seq,defaults);
   pushEdit(key,seq,before,defaults);repaint();
  };
- const char* filterNames[]={"LOWPASS","HIGHPASS","BANDPASS","NOTCH"};
+ const char* filterNames[]={"LP","HP","BP","NOTCH"};
  for(int i=0;i<4;++i){filterButtons[i]=std::make_unique<juce::TextButton>(filterNames[i]);filterButtons[i]->onClick=[this,i]{selectFilter(i);};addAndMakeVisible(*filterButtons[i]);}
  filterModelBox=std::make_unique<juce::ComboBox>();
  filterModelBox->addItemList({"CLEAN","ANALOG LADDER"},1);
@@ -565,34 +565,30 @@ void DISidechainEditor::selectFilter(int index) {
  refreshFilterButtons();
 }
 void DISidechainEditor::updateContextualControls(){
- const auto raw=[this](const char* key)->float {
-  const auto* p=proc.state.getRawParameterValue(key);
-  return p?p->load(std::memory_order_relaxed):0.f;
- };
- const int mode=juce::jlimit(0,3,(int)raw("mode"));
- const int trigger=juce::jlimit(0,2,(int)raw("trigger"));
- const bool synced=raw("sync")>.5f;
- // FULL mode has no band cutoff; LOW uses high crossover,
- // HIGH uses low crossover; BAND uses both crossovers.
- const bool lowEnabled=mode!=0;
- const bool highEnabled=mode==3;
+ const auto* triggerParam=proc.state.getRawParameterValue("trigger");
+ const int trigger=triggerParam?juce::jlimit(0,2,(int)triggerParam->load()):0;
  const bool audioTrigger=trigger!=2;
- const bool ladder=raw("filterModel")>.5f;
- if(filterModelBox)filterModelBox->setEnabled(mode!=0);
+ const bool analog=proc.state.getRawParameterValue("filterModel")->load()>.5f;
+ if(filterModelBox)filterModelBox->setEnabled(selectedLane==1);
+ if(filterResonanceSlider)filterResonanceSlider->setEnabled(selectedLane==1&&analog);
+ for(auto& b:filterButtons)if(b)b->setEnabled(selectedLane==1);
  if(delaySliders[2])delaySliders[2]->setEnabled(
   proc.state.getRawParameterValue("delaySync")->load()<=.5f);
  if(delayDivisionBox)delayDivisionBox->setEnabled(
   proc.state.getRawParameterValue("delaySync")->load()>.5f);
- if(filterResonanceSlider)filterResonanceSlider->setEnabled(mode!=0&&ladder);
  if(sliders.size()>=8){
-  sliders[3]->setEnabled(!synced); // free-running envelope length
-  sliders[5]->setEnabled(lowEnabled);
-  sliders[6]->setEnabled(highEnabled);
+  // Keep host parameters attached, but expose only input threshold and MIDI
+  // holdoff here. Hidden obsolete crossover knobs must never appear active.
   sliders[2]->setEnabled(audioTrigger);
-  sliders[7]->setEnabled(true); // retrigger holdoff also applies to MIDI notes
+  sliders[7]->setEnabled(true);
  }
- if(combos.size()>=3)combos[2]->setEnabled(synced);
- if(sync)sync->setEnabled(true);
+ for(int i=0;i<2;++i){
+  if(inputCutSliders[(size_t)i])
+   inputCutSliders[(size_t)i]->setEnabled(
+    proc.state.getRawParameterValue(i==0?"inputHpEnabled":"inputLpEnabled")->load()>.5f);
+ }
+ if(combos.size()>=3)combos[2]->setEnabled(
+  proc.state.getRawParameterValue("sync")->load()>.5f);
 }
 void DISidechainEditor::refreshFilterButtons(){
  const auto* raw=proc.state.getRawParameterValue("mode");
@@ -960,27 +956,29 @@ void DISidechainEditor::paint(juce::Graphics& g) {
   text(g,"DUCK DEPTH",{1143,566,280,17},11,lime,true);
   text(g,"ENVELOPE LENGTH (STEPS)",{1143,616,349,17},11,orange,true);
  }else if(selectedLane==1){
-  text(g,"FILTER MODULATION AMOUNT",{1143,566,340,17},11,cyan,true);
-  text(g,"Requires LOW, HIGH or BAND filter mode.",{1143,616,350,18},11,faint);
+  text(g,"FILTER FX  /  CUTOFF SHAPE",{1143,553,340,15},11,cyan,true);
+  text(g,"SWEEP DEPTH",{1143,599,340,15},11,cyan,true);
+  text(g,"MINIMUM Hz",{1143,647,175,14},10,faint,true);
+  text(g,"MAXIMUM Hz",{1328,647,175,14},10,faint,true);
  }else if(selectedLane==2){
   text(g,"PAN MODULATION AMOUNT",{1143,566,340,17},11,juce::Colour(0xffa57dff),true);
   text(g,"Positive = pan envelope, negative = inverted.",{1143,616,350,18},11,faint);
  }
  text(g,"BYP skips volume duck; effects stay available.",{1143,670,353,16},10,faint);
- // Always visible frequency controls and output meters.
- paintPanel(g,filterPanel,"DUCK / FILTER ENGINE");
+ // Input EQ is independent of rhythm modulation; this section has NO
+ // FILTER-lane character, envelopes or crossover-duck controls.
+ paintPanel(g,filterPanel,"INPUT FILTER  /  PRE-FX");
  paintPanel(g,outputPanel,"OUTPUT / SIDECHAIN");
- text(g,"MODE",{30,747,70,18},11,faint);
- text(g,"TRIGGER SOURCE",{375,747,170,18},11,faint);
- text(g,"BEAT DIVISION",{594,747,150,18},11,faint);
- text(g,"FILTER MODEL",{758,745,165,18},11,faint);
- text(g,"RESONANCE",{940,745,165,18},11,faint);
- const char* knobs[]={"SENSITIVITY","FREE LENGTH","SMOOTH","CUTOFF","BAND HIGH","HOLDOFF"};
- for(int i=0;i<6;++i){
-  const bool enabled=sliders.size()>static_cast<size_t>(i+2)&&sliders[(size_t)(i+2)]->isEnabled();
-  text(g,knobs[i],{29+i*116,805,112,19},11,enabled?faint:faint.withAlpha(.32f));
- }
- paintFrequencyResponse(g,{755,809,348,94});
+ text(g,"HIGH PASS",{32,743,185,17},11,cyan,true);
+ text(g,"LOW PASS",{260,743,185,17},11,cyan,true);
+ text(g,"TRIGGER SOURCE",{497,743,205,17},11,faint,true);
+ text(g,"HP CUTOFF",{32,795,185,17},11,faint,true);
+ text(g,"LP CUTOFF",{260,795,185,17},11,faint,true);
+ text(g,"SENSITIVITY",{500,801,125,17},11,faint,true);
+ text(g,"RETRIGGER",{623,801,125,17},11,faint,true);
+ text(g,"Independent input cleanup • FILTER lane controls rhythmic sweeps",
+      {758,768,346,28},10,faint);
+ paintFrequencyResponse(g,{755,813,348,90});
  const float duckGr=juce::jlimit(0.f,1.f,
   proc.duckReduction.load(std::memory_order_relaxed));
  const float grDb=duckGr>0.f?-20.f*std::log10(juce::jmax(.001f,1.f-duckGr)):0.f;
@@ -1052,6 +1050,16 @@ void DISidechainEditor::refreshCreativePage(){
  // consequently the user could edit the envelope but hear no change.
  if(laneSliders[0])laneSliders[0]->setVisible(active&&selectedLane==1);
  if(laneSliders[1])laneSliders[1]->setVisible(active&&selectedLane==2);
+ // Creative filter settings live ONLY beneath the FILTER modulation lane.
+ const bool filterLane=selectedLane==1;
+ for(auto& b:filterButtons)if(b)b->setVisible(filterLane);
+ if(filterModelBox)filterModelBox->setVisible(filterLane);
+ if(filterResonanceSlider)filterResonanceSlider->setVisible(filterLane);
+ for(auto& slider:filterSweepSliders)if(slider)slider->setVisible(filterLane);
+ // Separate, always-visible input cleanup rack.
+ for(auto& button:inputCutButtons)if(button)button->setVisible(true);
+ for(auto& slider:inputCutSliders)if(slider)slider->setVisible(true);
+
  if(duckDepthSlider)duckDepthSlider->setVisible(duckPage&&selectedLane==0);
  if(duckLengthSlider)duckLengthSlider->setVisible(duckPage&&selectedLane==0);
  const juce::Colour laneColours[]={juce::Colour(0xffa4ed38),juce::Colour(0xff2ad3da),
@@ -1142,13 +1150,31 @@ void DISidechainEditor::resized() {
   laneTabs[i]->setBounds(908,498+i*31,200,27);
   laneTabs[i]->setToggleState(i==selectedLane,juce::dontSendNotification);
  }
- for(int i=0;i<4;++i)if(filterButtons[i])filterButtons[i]->setBounds(31+i*78,768,73,30);
- if(sliders.size()==8 && labels.size()==8){
-  const int xs[]={1163,1290,28,144,260,376,492,608};
+ for(int i=0;i<4;++i)if(filterButtons[i])
+  filterButtons[i]->setBounds(1143+i*91,570,85,25);
+ if(filterModelBox)filterModelBox->setBounds(32,502,177,28);
+ if(filterResonanceSlider)filterResonanceSlider->setBounds(540,502,235,28);
+ if(laneSliders[0])laneSliders[0]->setBounds(1143,614,359,26);
+ for(int i=0;i<2;++i){
+  if(filterSweepSliders[(size_t)i])
+   filterSweepSliders[(size_t)i]->setBounds(1143+i*184,666,176,25);
+  if(inputCutButtons[(size_t)i])
+   inputCutButtons[(size_t)i]->setBounds(32+i*228,763,102,27);
+  if(inputCutSliders[(size_t)i])
+   inputCutSliders[(size_t)i]->setBounds(32+i*228,817,202,30);
+ }
+ if(sliders.size()==8&&labels.size()==8){
   for(int i=0;i<8;++i){
-   labels[i]->setVisible(false); // titles are painted in the aligned premium panel
-   sliders[i]->setBounds(xs[i],i<2?791:825,111,102);
+   labels[(size_t)i]->setVisible(false);
+   const bool use=i==2||i==7;
+   sliders[(size_t)i]->setVisible(use);
+   if(use)sliders[(size_t)i]->setBounds(i==2?500:623,826,95,89);
   }
+ }
+ if(combos.size()>=3){
+  // Original mode combo is hidden in favor of the four FILTER-lane buttons.
+  combos[1]->setBounds(495,766,211,28);
+  combos[2]->setBounds(639,124,109,29);
  }
  // Scale actual child bounds (including origin), not component-local transforms.
  // A local transform scales each button about its own position and would leave
