@@ -32,6 +32,7 @@ public:
  std::array<std::atomic<float>,8> points;
  std::atomic<float> meter {0};
  std::atomic<float> duckReduction {0}; // actual post-smoothing gain reduction, 0..1
+ std::atomic<float> inputLevel {0}; // pre-FX audio input peak; diagnoses silent MIDI/audio routing
  std::atomic<int> activeSequenceStep {0};
  static constexpr int gridTracks=6, gridSteps=16;
  static constexpr int gridScenes=4;
