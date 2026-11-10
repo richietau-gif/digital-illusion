@@ -237,7 +237,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  const int trig=(int)bounded("trigger",0.f,2.f,0.f);
  const float depth=bounded("depth",0.f,1.f,1.f);
  const float mix=bounded("mix",0.f,1.f,1.f);
- const float shapeOffset=bounded("shapeOffset",-1.f,1.f,0.f);
+ // No global shape offset: every GRID cell owns its full independent curve.
  const float panMod=bounded("panMod",-1.f,1.f,0.f);
  const float filterMod=bounded("filterMod",0.f,1.f,0.f);
  const float fxDrive=bounded("fxDrive",0.f,24.f,0.f);
@@ -431,7 +431,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
   env=duckVoices.process(gridStep,cellRoute.duck,envelopeLength*sr,
                          sequencer.getStepGeneration());
  }
- if(sequenceOn)env=juce::jlimit(0.f,1.f,env+shapeOffset);
+ // Do not add a global offset that changes all per-cell envelopes.
  const float target=di::duckGainTarget(env,depth);
  smoothGain=coeff*smoothGain+(1.f-coeff)*target;
  minimumDuckGain=juce::jmin(minimumDuckGain,smoothGain);
@@ -572,16 +572,8 @@ void DISidechainProcessor::setStateInformation(const void* data,int bytes){
      dc.y[(size_t)j]=(float)tree.getProperty(savedCell?key+"_y_"+juce::String(j):
        "duckDynY_"+juce::String(t)+"_"+juce::String(j),dc.y[(size_t)j]);
     }
-    const auto sc=(size_t)scene,track=(size_t)t,step=(size_t)k;
-    for(int j=0;j<dc.count;++j){
-     duckDynamicX[sc][track][step][(size_t)j].store(
-      std::isfinite(dc.x[(size_t)j])?juce::jlimit(0.f,1.f,dc.x[(size_t)j]):j/(float)(dc.count-1),
-      std::memory_order_relaxed);
-     duckDynamicY[sc][track][step][(size_t)j].store(
-      std::isfinite(dc.y[(size_t)j])?juce::jlimit(0.f,1.f,dc.y[(size_t)j]):1.f,
-      std::memory_order_relaxed);
-    }
-    duckDynamicCount[sc][track][step].store(dc.count,std::memory_order_release);
+    // Setter validates time ordering, finite levels and count for each cell.
+    setDynamicDuckCurve(t,k,dc,scene);
    }
   }
   setGridScene((int)tree.getProperty("gridScene",0));
