@@ -201,10 +201,30 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  settingsButton->onClick=[this]{
   juce::PopupMenu menu;
   menu.addItem(1,"UI 50%");menu.addItem(2,"UI 75%");menu.addItem(3,"UI 100%");
+  menu.addSeparator();menu.addItem(4,"Load user preset...");
   juce::Component::SafePointer<DISidechainEditor> safe(this);
   menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(settingsButton.get()),[safe](int selection){
-   if(safe!=nullptr&&selection>=1&&selection<=3)
+   if(safe==nullptr)return;
+   if(selection>=1&&selection<=3){
     safe->combos[6]->setSelectedId(selection,juce::sendNotificationSync);
+   } else if(selection==4) {
+    safe->presetLoadChooser=std::make_unique<juce::FileChooser>(
+     "Load PRECISION SIDECHAIN preset",juce::File::getSpecialLocation(juce::File::userDocumentsDirectory),"*.preset");
+    juce::Component::SafePointer<DISidechainEditor> owner(safe);
+    safe->presetLoadChooser->launchAsync(
+     juce::FileBrowserComponent::openMode|juce::FileBrowserComponent::canSelectFiles,
+     [owner](const juce::FileChooser& chooser) {
+      if(owner==nullptr)return;
+      const auto file=chooser.getResult();
+      juce::MemoryBlock data;
+      if(file.existsAsFile()&&file.getSize()>0&&file.getSize()<4*1024*1024&&file.loadFileAsData(data)){
+       owner->proc.setStateInformation(data.getData(),(int)data.getSize());
+       owner->pullNodes();
+       owner->snapshots[owner->activeSnapshot]=owner->proc.state.copyState();
+       owner->snapshotCurves[owner->activeSnapshot]=owner->curve;
+      }
+     });
+   }
   });
  };
  powerButton->onClick=[this]{
