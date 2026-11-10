@@ -75,3 +75,20 @@ DSP corrections included:
 **Still not validated:** Windows JUCE compilation/pluginval/actual screenshot for these commits. Editable envelope correctness under automation and negative offset/sample alignment, A/B snapshot persistence across closing/host save, user preset import, exact nonlinear filter response visualization, full creative-filter DSP quality and GUI text legibility at 50/75/100%. These are release blockers, not accepted completed tests.
 
 Do not run Actions or merge into main without explicit user approval.
+
+## 2026-11-10: Real host screenshot follow-up (not yet Windows-built)
+
+A Global VST Host screenshot of the previous build revealed hard-to-read/clipped value fields, overlapping labels, and unintuitive node interactions. The plugin did load in this host, but that does not prove Ableton stability.
+
+Source corrections in this PR:
+- All 18 knob/value readouts now use consistent vector-painted, concise units; removed native JUCE text boxes whose parameter attachments displayed excessive fractional precision.
+- Repositioned knobs/values and BPM Sync/Attack Protection, freed the filter ENV/MIX slider-value area, removed missing-font glyphs, corrected the oversized curve text field and widened BYPASS.
+- The editable orange envelope stays distinct from the offset-adjusted cyan output preview.
+- Graph mouse hit-testing now shares the exact scaled rectangle used by input conversion; removed repeated integer truncation in node position rendering.
+- Node dragging preserves the initial grab offset, so selecting off-center no longer jumps the node to the cursor.
+- Increased minimum separation of neighboring nodes, preventing nearly coincident graph points and invalid clamp ranges.
+- New instances start with GRID Off; existing projects retain their saved GRID setting. With GRID enabled, dragging remains continuous and snapping happens on **mouse release**, with Alt bypassing the snap.
+- Undo captures newly inserted and dragged nodes independently, without guessing state from previous history.
+- A basic source-level structural scan found balanced C++ blocks and all required event methods in place.
+
+**UNVERIFIED:** No Windows compile, CTest, pluginval, screenshot comparison or Ableton/host mouse testing has run for these new GUI edits. This must be verified in a separately authorized build. In particular, pluginval can verify editor creation without simulating real node dragging.
