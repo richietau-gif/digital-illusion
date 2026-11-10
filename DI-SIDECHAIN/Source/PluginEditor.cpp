@@ -16,24 +16,24 @@ struct Knob {
  const char* id; const char* label; int x,y,w,h; const char* suffix; int digits; bool percent;
 };
 constexpr std::array<Knob,18> knobSpecs{{
- {"threshold","Threshold",34,445,94,77," dB",1,false},
- {"retrigger","Holdoff",151,445,94,77," ms",0,false},
- {"length","Length",276,445,84,78," ms",0,false},
- {"timeOffset","Offset",365,445,84,78," %",0,true},
- {"lookahead","Lookahead",454,445,84,78," ms",1,false},
- {"attackMs","Attack",552,445,79,78," ms",1,false},
- {"releaseMs","Release",637,445,79,78," ms",1,false},
- {"depth","Depth",723,445,79,78," %",0,true},
- {"mix","Dry / Wet",831,445,110,78," %",0,true},
- {"output","Output",953,445,110,78," dB",1,false},
- {"cutoff","Cutoff",30,621,103,84," Hz",0,false},
- {"resonance","Resonance",140,621,103,84,"",2,false},
- {"filterDrive","Drive",250,621,103,84," dB",1,false},
- {"filterMod","ENV AMOUNT",380,669,233,28," %",0,true},
- {"filterMix","FILTER MIX",380,698,233,27," %",0,true},
- {"colorDrive","Drive",685,621,107,84," dB",1,false},
- {"colorTone","Tone",808,621,107,84," %",0,true},
- {"colorMix","Mix",929,621,107,84," %",0,true}
+ {"threshold","Threshold",34,435,94,66," dB",1,false},
+ {"retrigger","Holdoff",151,435,94,66," ms",0,false},
+ {"length","Length",276,435,84,66," ms",0,false},
+ {"timeOffset","Offset",365,435,84,66," %",0,true},
+ {"lookahead","Lookahead",454,435,84,66," ms",1,false},
+ {"attackMs","Attack",552,435,79,66," ms",1,false},
+ {"releaseMs","Release",637,435,79,66," ms",1,false},
+ {"depth","Depth",723,435,79,66," %",0,true},
+ {"mix","Dry / Wet",831,435,110,66," %",0,true},
+ {"output","Output",953,435,110,66," dB",1,false},
+ {"cutoff","Cutoff",30,614,103,67," Hz",0,false},
+ {"resonance","Resonance",140,614,103,67,"",2,false},
+ {"filterDrive","Drive",250,614,103,67," dB",1,false},
+ {"filterMod","ENV AMOUNT",425,662,196,19," %",0,true},
+ {"filterMix","FILTER MIX",425,694,196,19," %",0,true},
+ {"colorDrive","Drive",685,614,107,67," dB",1,false},
+ {"colorTone","Tone",808,614,107,67," %",0,true},
+ {"colorMix","Mix",929,614,107,67," %",0,true}
 }};
 juce::Rectangle<float> rect(float x,float y,float w,float h){return {x,y,w,h};}
 float clamp(float x){return juce::jlimit(0.f,1.f,x);}
@@ -103,7 +103,7 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
   s->setName(spec.id);
   s->setSliderStyle((juce::String(spec.id)=="filterMod"||juce::String(spec.id)=="filterMix")
                     ?juce::Slider::LinearHorizontal:juce::Slider::RotaryHorizontalVerticalDrag);
-  s->setTextBoxStyle(juce::Slider::TextBoxBelow,false,78,16);
+  s->setTextBoxStyle(juce::Slider::NoTextBox,false,0,0);
   s->setColour(juce::Slider::textBoxTextColourId,pale);
   s->setColour(juce::Slider::textBoxBackgroundColourId,ink);
   s->setColour(juce::Slider::textBoxOutlineColourId,juce::Colour(0xff25384a));
@@ -157,7 +157,7 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  syncLengthSlider=std::make_unique<juce::Slider>();
  syncLengthSlider->setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
  syncLengthSlider->setName("syncLength");
- syncLengthSlider->setTextBoxStyle(juce::Slider::TextBoxBelow,false,85,16);
+ syncLengthSlider->setTextBoxStyle(juce::Slider::NoTextBox,false,0,0);
  syncLengthSlider->setColour(juce::Slider::textBoxTextColourId,pale);
  syncLengthSlider->setColour(juce::Slider::textBoxBackgroundColourId,ink);
  syncLengthSlider->setColour(juce::Slider::textBoxOutlineColourId,juce::Colour(0xff25384a));
@@ -390,16 +390,16 @@ void DISidechainEditor::resized() {
  b(clearCurve.get(),325,96,59,30);
  b(curveShapeButton.get(),43,99,77,29);b(gridPicker.get(),725,91,122,32);
  b(combos[3].get(),399,515,132,24);
- b(syncLengthSlider.get(),276,445,84,78);
- b(attackProtectToggle.get(),550,518,129,22);
+ b(syncLengthSlider.get(),276,435,84,66);
+ b(attackProtectToggle.get(),551,518,120,22);
  b(curveAmountSlider.get(),858,93,135,29);
  b(combos[0].get(),33,406,118,27);
  b(sourceInt.get(),154,406,29,27);
  b(sourceExt.get(),184,406,29,27);
  b(sourceMidi.get(),214,406,38,27);
  combos[1]->setVisible(false);
- b(combos[2].get(),33,519,104,20);
- b(sync.get(),287,515,105,24);
+ b(combos[2].get(),31,521,100,21);
+ b(sync.get(),274,518,112,24);
  b(filterPower.get(),104,564,51,26);b(combos[4].get(),162,564,162,27);
  b(filterEnvelopePower.get(),335,564,83,27);
  b(colorPower.get(),734,564,52,27);b(combos[5].get(),795,563,255,29);
