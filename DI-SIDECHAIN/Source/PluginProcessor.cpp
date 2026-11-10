@@ -357,14 +357,26 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
   }
   hasEvent=it.getNextEvent(msg,midiPos);
  }
- if(hasSide&&trig!=2&&side.getNumSamples()>=n){const float v=di::sidechainPeak(side.getSample(0,i),side.getNumChannels()>1?side.getSample(1,i):0.f,side.getNumChannels()>1);detector=di::followPeak(detector,(double)v,detectorRelease);if(detector<threshold*.65)armed=true;if(armed&&detector>=threshold)audioPeak=true;}
+ if(trig!=2){
+  // Prefer the external sidechain bus, but the detector also works on the
+  // main audio input if no sidechain is routed in Ableton. Audio triggering
+  // must not silently stop working merely because the bus is unconnected.
+  const bool sideReady=hasSide&&side.getNumChannels()>0&&side.getNumSamples()>=n;
+  const float v=sideReady
+    ?di::sidechainPeak(side.getSample(0,i),
+      side.getNumChannels()>1?side.getSample(1,i):0.f,side.getNumChannels()>1)
+    :di::sidechainPeak(main.getSample(0,i),main.getSample(1,i),true);
+  detector=di::followPeak(detector,(double)v,detectorRelease);
+  if(detector<threshold*.65f)armed=true;
+  if(armed&&detector>=threshold)audioPeak=true;
+ }
  const bool fire=di::shouldFireTrigger(midiNoteOn,audioPeak,armed,refractory,trig);
  // Consume a threshold crossing even during holdoff or a simultaneous MIDI note.
  // Otherwise a sustained kick can fire a delayed ghost trigger after holdoff.
  if(di::shouldConsumeAudioPeak(audioPeak,armed,trig))armed=false;
  if(refractory>0)--refractory;
  if(fire){
-  // External audio sidechain crossings also trigger Track 1 directly.
+  // External OR internal audio threshold crossings trigger Track 1 directly.
   // MIDI notes 36..41 remain independent and do not depend on this detector.
   if(sequenceOn&&creativeGrid&&audioPeak&&trig!=2)
    duckVoices.triggerTrack(0,envelopeLength*sr,1.f);
