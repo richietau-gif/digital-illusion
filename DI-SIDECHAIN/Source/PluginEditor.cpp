@@ -1171,9 +1171,14 @@ void DISidechainEditor::resized() {
  if(sliders.size()==8&&labels.size()==8){
   for(int i=0;i<8;++i){
    labels[(size_t)i]->setVisible(false);
-   const bool use=i==2||i==7;
-   sliders[(size_t)i]->setVisible(use);
-   if(use)sliders[(size_t)i]->setBounds(i==2?500:623,826,95,89);
+   // Retain the two OUTPUT rotary knobs; only the old crossover knobs
+   // are replaced by the static INPUT HP/LP controls.
+   const bool visible=i==0||i==1||i==2||i==7;
+   sliders[(size_t)i]->setVisible(visible);
+   if(i==0)sliders[(size_t)i]->setBounds(1163,791,111,102);
+   if(i==1)sliders[(size_t)i]->setBounds(1290,791,111,102);
+   if(i==2)sliders[(size_t)i]->setBounds(500,826,95,89);
+   if(i==7)sliders[(size_t)i]->setBounds(623,826,95,89);
   }
  }
  if(combos.size()>=3){
