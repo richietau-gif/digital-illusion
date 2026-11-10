@@ -20,7 +20,7 @@ DISidechainProcessor::DISidechainProcessor():AudioProcessor(BusesProperties().wi
  applyPreset(0);
 }
 bool DISidechainProcessor::isBusesLayoutSupported(const BusesLayout& b) const{return b.getMainInputChannelSet()==juce::AudioChannelSet::stereo()&&b.getMainOutputChannelSet()==juce::AudioChannelSet::stereo();}
-void DISidechainProcessor::prepareToPlay(double s,int n){sr=s;maxBlock=n; delaySamples=(int)std::ceil(state.getRawParameterValue("lookahead")->load()*0.001f*sr); delaySamples=juce::jlimit(0,192000,delaySamples);previousDelaySamples=delaySamples;delayTransitionSamples=0;pendingLatencySamples.store(delaySamples);setLatencySamples(delaySamples);delayWrite=0;colorToneLow={0.f,0.f};phase=1;gain=1;detector=0;holdoff=0;for(auto& f:filters){juce::dsp::ProcessSpec sp{s,(juce::uint32)n,1};f.prepare(sp);f.reset();for(auto* a:{&f.animated,&f.animated2,&f.animated3,&f.animated4}){a->setResonance(.707f);a->setCutoffFrequency(800.f);}}}
+void DISidechainProcessor::prepareToPlay(double s,int n){sr=s;maxBlock=n; delaySamples=(int)std::ceil(state.getRawParameterValue("lookahead")->load()*0.001f*sr); delaySamples=juce::jlimit(0,192000,delaySamples);previousDelaySamples=delaySamples;delayTransitionSamples=0;pendingLatencySamples.store(delaySamples);setLatencySamples(delaySamples);delayWrite=0;colorToneLow={0.f,0.f};phase=1;gain=1;detector=0;rmsEnergy=0;transientFast=0;transientSlow=0;holdoff=0;for(auto& f:filters){juce::dsp::ProcessSpec sp{s,(juce::uint32)n,1};f.prepare(sp);f.reset();for(auto* a:{&f.animated,&f.animated2,&f.animated3,&f.animated4}){a->setResonance(.707f);a->setCutoffFrequency(800.f);}}}
 int DISidechainProcessor::getEnvelopeNodes(std::array<EnvelopeNode,maxEnvelopeNodes>& target) const noexcept
 {
  const int count=juce::jlimit(2,maxEnvelopeNodes,envelopeNodeCount.load(std::memory_order_acquire));
@@ -91,7 +91,27 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& b,juce::MidiBu
  f.b.coefficients=(model==2?blockLp:blockHp);
  f.c.coefficients=(model==4||model==5?blockHp:blockLp);
  f.d.coefficients=(model==5?blockHp:blockLp);
-} for(int i=0;i<n;++i){bool note=false;while(has&&mp<=i){note=mm.isNoteOn()&&mm.getVelocity()>0;has=mi.getNextEvent(mm,mp);}float sv=0;if((int)val("detectorSource")!=1 && side.getNumChannels()>0)sv=std::max(std::abs(side.getSample(0,i)),side.getNumChannels()>1?std::abs(side.getSample(1,i)):0.f); else sv=std::max(std::abs(main.getSample(0,i)),std::abs(main.getSample(1,i)));detector=std::max(sv,detector*0.995f);if(detector<threshold*.65f)gateArmed=true;bool audio=gateArmed&&detector>=threshold;if(audio)gateArmed=false;bool fire=(trig==0?audio:trig==1?note:(audio||note))&&holdoff<=0;if(fire){phase=0;holdoff=hold;triggerActivity.store(1.f);}if(holdoff>0)--holdoff;triggerActivity.store(triggerActivity.load()*.995f);float t=juce::jlimit(0.f,1.f,phase+offset);float e=phase>=1?1:envelope(t);if(attack>0)e=std::max(e,attack*(1.f-phase));float target=1.f-depth*(1.f-e);const float smoothingMs=target<gain?val("attackMs"):val("releaseMs");const float c=std::exp(-1.f/(std::max(.1f,smoothingMs)*.001f*sr));gain=c*gain+(1-c)*target;reduction=std::max(reduction,1.f-gain);phase=juce::jmin(1.f,phase+1.f/juce::jmax(1.f,len));for(int ch=0;ch<2;++ch){float dry=main.getSample(ch,i);const int readIndex=(delayWrite+192001-delaySamples)%192001;
+} for(int i=0;i<n;++i){bool note=false;while(has&&mp<=i){
+ note=note||(mm.isNoteOn()&&mm.getVelocity()>0);
+ has=mi.getNextEvent(mm,mp);
+}
+float sv=0;
+const int source=juce::jlimit(0,2,(int)val("detectorSource"));
+const bool hasExternal=side.getNumChannels()>0;
+if((source==2||source==0&&hasExternal)&&hasExternal)
+ sv=std::max(std::abs(side.getSample(0,i)),side.getNumChannels()>1?std::abs(side.getSample(1,i)):0.f);
+else if(source!=2)
+ sv=std::max(std::abs(main.getSample(0,i)),std::abs(main.getSample(1,i)));
+const int mode=juce::jlimit(0,2,(int)val("detector"));
+if(mode==1) {
+ rmsEnergy=rmsEnergy*.992f+sv*sv*.008f;
+ sv=std::sqrt(rmsEnergy);
+} else if(mode==2) {
+ transientFast+=.12f*(sv-transientFast);
+ transientSlow+=.008f*(sv-transientSlow);
+ sv=juce::jmax(0.f,(transientFast-transientSlow)*3.f);
+}
+detector=std::max(sv,detector*.995f);if(detector<threshold*.65f)gateArmed=true;bool audio=gateArmed&&detector>=threshold;if(audio)gateArmed=false;bool fire=(trig==0?audio:trig==1?note:(audio||note))&&holdoff<=0;if(fire){phase=0;holdoff=hold;triggerActivity.store(1.f);}if(holdoff>0)--holdoff;triggerActivity.store(triggerActivity.load()*.995f);float t=juce::jlimit(0.f,1.f,phase+offset);float e=phase>=1?1:envelope(t);if(attack>0)e=std::max(e,attack*(1.f-phase));float target=1.f-depth*(1.f-e);const float smoothingMs=target<gain?val("attackMs"):val("releaseMs");const float c=std::exp(-1.f/(std::max(.1f,smoothingMs)*.001f*sr));gain=c*gain+(1-c)*target;reduction=std::max(reduction,1.f-gain);phase=juce::jmin(1.f,phase+1.f/juce::jmax(1.f,len));for(int ch=0;ch<2;++ch){float dry=main.getSample(ch,i);const int readIndex=(delayWrite+192001-delaySamples)%192001;
  float delayed=(delaySamples==0?dry:delay[(size_t)readIndex][(size_t)ch]);
  if(delayTransitionSamples>0){
   const int previousIndex=(delayWrite+192001-previousDelaySamples)%192001;
