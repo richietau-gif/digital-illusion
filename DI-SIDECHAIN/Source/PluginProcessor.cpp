@@ -11,10 +11,58 @@ juce::AudioProcessorValueTreeState::ParameterLayout DISidechainProcessor::makePa
  p.push_back(std::make_unique<juce::AudioParameterBool>("filterEnvelopeEnabled","Filter Envelope Enabled",true));
  p.push_back(std::make_unique<juce::AudioParameterBool>("colorEnabled","Color Enabled",true));
  p.push_back(std::make_unique<juce::AudioParameterBool>("bypass","Bypass",false)); p.push_back(std::make_unique<juce::AudioParameterChoice>("uiScale","UI Scale",juce::StringArray{"50%","75%","100%"},1)); return {p.begin(),p.end()}; }
-DISidechainProcessor::DISidechainProcessor():AudioProcessor(BusesProperties().withInput("Input",juce::AudioChannelSet::stereo(),true).withInput("Sidechain",juce::AudioChannelSet::stereo(),false).withOutput("Output",juce::AudioChannelSet::stereo(),true)),state(*this,nullptr,"PARAMS",makeParams()){applyPreset(0);}
+DISidechainProcessor::DISidechainProcessor():AudioProcessor(BusesProperties().withInput("Input",juce::AudioChannelSet::stereo(),true).withInput("Sidechain",juce::AudioChannelSet::stereo(),false).withOutput("Output",juce::AudioChannelSet::stereo(),true)),state(*this,nullptr,"PARAMS",makeParams()){
+ std::array<EnvelopeNode,maxEnvelopeNodes> initial{};
+ initial[0]={0.f,0.f,0.f}; initial[1]={.15f,.03f,.25f};
+ initial[2]={.35f,.26f,-.15f}; initial[3]={.55f,.60f,.3f};
+ initial[4]={.75f,.93f,.1f}; initial[5]={1.f,1.f,0.f};
+ setEnvelopeNodes(initial,6);
+ applyPreset(0);
+}
 bool DISidechainProcessor::isBusesLayoutSupported(const BusesLayout& b) const{return b.getMainInputChannelSet()==juce::AudioChannelSet::stereo()&&b.getMainOutputChannelSet()==juce::AudioChannelSet::stereo();}
 void DISidechainProcessor::prepareToPlay(double s,int n){sr=s;maxBlock=n; delaySamples=(int)std::ceil(state.getRawParameterValue("lookahead")->load()*0.001f*sr); delaySamples=juce::jlimit(0,192000,delaySamples);setLatencySamples(delaySamples);delayWrite=0;phase=1;gain=1;detector=0;holdoff=0;for(auto& f:filters){juce::dsp::ProcessSpec sp{s,(juce::uint32)n,1};f.prepare(sp);f.reset();f.animated.setResonance(0.707f);f.animated.setCutoffFrequency(800.f);}}
-float DISidechainProcessor::envelope(float t) const noexcept {t=juce::jlimit(0.f,1.f,t);return t*t*(3.f-2.f*t);}
+int DISidechainProcessor::getEnvelopeNodes(std::array<EnvelopeNode,maxEnvelopeNodes>& target) const noexcept
+{
+ const int count=juce::jlimit(2,maxEnvelopeNodes,envelopeNodeCount.load(std::memory_order_acquire));
+ for(int i=0;i<count;++i)
+  target[(size_t)i]={envelopeXs[(size_t)i].load(),envelopeYs[(size_t)i].load(),envelopeCurves[(size_t)i].load()};
+ return count;
+}
+void DISidechainProcessor::setEnvelopeNodes(const std::array<EnvelopeNode,maxEnvelopeNodes>& source,int count) noexcept
+{
+ count=juce::jlimit(2,maxEnvelopeNodes,count);
+ for(int i=0;i<count;++i) {
+  const auto& v=source[(size_t)i];
+  envelopeXs[(size_t)i].store(juce::jlimit(0.f,1.f,v.x),std::memory_order_relaxed);
+  envelopeYs[(size_t)i].store(juce::jlimit(0.f,1.f,v.y),std::memory_order_relaxed);
+  envelopeCurves[(size_t)i].store(juce::jlimit(-1.f,1.f,v.curve),std::memory_order_relaxed);
+ }
+ envelopeNodeCount.store(count,std::memory_order_release);
+ envelopeRevision.fetch_add(1,std::memory_order_relaxed);
+}
+float DISidechainProcessor::getEnvelopeAt(float t) const noexcept
+{
+ const int count=juce::jlimit(2,maxEnvelopeNodes,envelopeNodeCount.load(std::memory_order_acquire));
+ t=juce::jlimit(0.f,1.f,t);
+ float prevX=envelopeXs[0].load(std::memory_order_relaxed);
+ float prevY=envelopeYs[0].load(std::memory_order_relaxed);
+ if(t<=prevX)return prevY;
+ for(int i=1;i<count;++i) {
+  const float x=envelopeXs[(size_t)i].load(std::memory_order_relaxed);
+  const float y=envelopeYs[(size_t)i].load(std::memory_order_relaxed);
+  if(t<=x||i==count-1) {
+   const float span=juce::jmax(0.0001f,x-prevX);
+   float u=juce::jlimit(0.f,1.f,(t-prevX)/span);
+   const float tension=envelopeCurves[(size_t)i-1].load(std::memory_order_relaxed);
+   if(tension>=0.f) u=std::pow(u,1.f+3.f*tension);
+   else u=1.f-std::pow(1.f-u,1.f-3.f*tension);
+   return juce::jlimit(0.f,1.f,prevY+(y-prevY)*u);
+  }
+  prevX=x;prevY=y;
+ }
+ return prevY;
+}
+float DISidechainProcessor::envelope(float t) const noexcept {return getEnvelopeAt(t);}
 float DISidechainProcessor::colour(float x,int m,float d) const noexcept {const float k=1.f+juce::Decibels::decibelsToGain(d)*4.f; switch(m){case 1:return std::tanh(x*k);case 2:return juce::jlimit(-1.f,1.f,x*k);case 3:return std::tanh((x>=0?x*k:x*k*0.65f));case 4:{float y=x*k;return 2.f*std::abs(y-std::round(y))-1.f;}case 5:return std::round(x*k*8.f)/8.f;default:return std::tanh(x*k*0.7f);}}
 void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& b,juce::MidiBuffer& midi){juce::ScopedNoDenormals nd;auto main=getBusBuffer(b,true,0);auto side=getBusBuffer(b,true,1);const int n=main.getNumSamples();if(n==0)return;auto val=[&](const char* id){return state.getRawParameterValue(id)->load();};const float depth=juce::jlimit(0.f,1.f,val("depth")),mix=juce::jlimit(0.f,1.f,val("mix")); const bool bypass=val("bypass")>0.5f;const int trig=(int)val("triggerMode");const float threshold=juce::Decibels::decibelsToGain(val("threshold"));const int hold=(int)(val("retrigger")*.001f*sr);float lengthSeconds=val("length")*.001f; if(val("sync")>0.5f){ double bpm=120.0; if(auto* ph=getPlayHead()) if(auto pos=ph->getPosition()) if(auto b=pos->getBpm()) if(std::isfinite(*b)&&*b>1.0) bpm=*b; static constexpr double beats[]={0.25,0.333333,0.5,0.666667,1.0,2.0,4.0}; lengthSeconds=(float)(60.0/bpm*beats[juce::jlimit(0,6,(int)val("division"))]); } const float len=juce::jmax(1.f,lengthSeconds*float(sr));const float offset=val("timeOffset");const float attack=val("attackProtection");const int model=(int)val("filterModel"), color=(int)val("colorModel");juce::MidiMessage mm;int mp=0;juce::MidiBuffer::Iterator mi(midi);bool has=mi.getNextEvent(mm,mp);float peak=0;const float blockCut=juce::jlimit(20.f,(float)(sr*.45),val("cutoff")); const float q=juce::jmax(.1f,1.f-val("resonance")*.9f);
  const bool filterOn=val("filterEnabled")>0.5f;
@@ -43,5 +91,38 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& b,juce::MidiBu
  out*=outputGain;}if(!std::isfinite(out))out=0;main.setSample(ch,i,out);peak=std::max(peak,std::abs(out));}delayWrite=(delayWrite+1)%192001;}meter.store(peak);midi.clear();}
 void DISidechainProcessor::setCurrentProgram(int p){currentPreset=juce::jlimit(0,31,p);applyPreset(currentPreset);}const juce::String DISidechainProcessor::getProgramName(int p){static const char* n[]={"Clean Kick Duck","Tight Drum Duck","Deep Wobble","Talking Bass","Growl Filter","Metallic Sweep","Aggressive Formant","Liquid Movement","Elastic Bass","Vowel Bounce","Glassy Growl","Warm Harsh","Digital Motion","Rhythmic Resonance","Reese Movement","Jungle Duck","Neuro Sweep","Rolling Pulse","Reverse Swell","Filter Drop","Resonant Impact","Distorted Pulse","Stereo Motion","Sub Safe Duck","Fast Breakbeat","Half Time Growl","Razor Resonance","Dark Movement","Formant Pulse","Precision Pump","Gate Bass","Future Duck"};return p>=0&&p<32?n[p]:"Custom";}
 void DISidechainProcessor::applyPreset(int p){ auto set=[&](const char* id,float v){ if(auto* x=state.getParameter(id)) x->setValueNotifyingHost(x->convertTo0to1(v)); }; const int g=p/8; set("depth",0.35f+0.15f*(p%5)); set("mix",0.7f+0.05f*(p%5)); set("length",80.f+40.f*(p%10)); set("timeOffset",-1.f+0.5f*(p%5)); set("lookahead",5.f+5.f*(p%8)); set("attackProtection",(p%4)*0.25f); set("cutoff",120.f+220.f*(p%12)); set("resonance",0.05f+0.07f*(p%8)); set("filterDrive",(p%6)*3.f); set("filterMod",-0.8f+0.2f*(p%9)); set("filterMix",0.55f+0.08f*(p%5)); set("colorDrive",(p%7)*3.f); set("colorMix",(p%4)*0.2f); set("output",-3.f+g); set("filterModel",(float)(p%13)); set("colorModel",(float)(p%6)); set("triggerMode",(float)(p%3)); set("division",(float)(p%7)); }
-void DISidechainProcessor::getStateInformation(juce::MemoryBlock& d){if(auto x=state.copyState().createXml())copyXmlToBinary(*x,d);}void DISidechainProcessor::setStateInformation(const void* d,int n){if(auto x=getXmlFromBinary(d,n))state.replaceState(juce::ValueTree::fromXml(*x));}
+void DISidechainProcessor::getStateInformation(juce::MemoryBlock& d)
+{
+ if(auto xml=state.copyState().createXml()){
+  std::array<EnvelopeNode,maxEnvelopeNodes> nodes{};
+  const int count=getEnvelopeNodes(nodes);
+  auto* envelopeXml=xml->createNewChildElement("PRECISION_ENVELOPE");
+  envelopeXml->setAttribute("count",count);
+  for(int i=0;i<count;++i){
+   auto* node=envelopeXml->createNewChildElement("NODE");
+   node->setAttribute("x",(double)nodes[(size_t)i].x);
+   node->setAttribute("y",(double)nodes[(size_t)i].y);
+   node->setAttribute("curve",(double)nodes[(size_t)i].curve);
+  }
+  copyXmlToBinary(*xml,d);
+ }
+}
+void DISidechainProcessor::setStateInformation(const void* data,int size)
+{
+ if(auto xml=getXmlFromBinary(data,size)){
+  if(auto* envelopeXml=xml->getChildByName("PRECISION_ENVELOPE")){
+   std::array<EnvelopeNode,maxEnvelopeNodes> nodes{};
+   int count=0;
+   for(auto* node=envelopeXml->getFirstChildElement();node!=nullptr&&count<maxEnvelopeNodes;node=node->getNextElement()){
+    if(node->hasTagName("NODE"))
+     nodes[(size_t)count++]={(float)node->getDoubleAttribute("x",0.0),
+                              (float)node->getDoubleAttribute("y",1.0),
+                              (float)node->getDoubleAttribute("curve",0.0)};
+   }
+   if(count>=2)setEnvelopeNodes(nodes,count);
+   xml->removeChildElement(envelopeXml,true);
+  }
+  state.replaceState(juce::ValueTree::fromXml(*xml));
+ }
+}
 juce::AudioProcessorEditor* DISidechainProcessor::createEditor(){return new DISidechainEditor(*this);}juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter(){return new DISidechainProcessor();}
