@@ -460,7 +460,7 @@ int DISidechainEditor::currentShapeKey() const {
 di::ShapeSequencer::Shape DISidechainEditor::captureShape(int step,bool sequence) const {
  di::ShapeSequencer::Shape shape{};
  if(sequence&&step>=96&&step<102){
-  for(int i=0;i<8;++i)shape[i]=proc.getDuckCurvePoint(step-96,i);
+  for(int i=0;i<8;++i)shape[i]=proc.getDynamicDuckCurve(step-96,selectedStep).evaluate(i/7.f);
   return shape;
  }
  const int lane=step/32, actualStep=step%32;
@@ -469,7 +469,9 @@ di::ShapeSequencer::Shape DISidechainEditor::captureShape(int step,bool sequence
 }
 void DISidechainEditor::applyShape(int step,bool sequence,const di::ShapeSequencer::Shape& shape) {
  if(sequence&&step>=96){
-  for(int i=0;i<8;++i)proc.setDuckCurvePoint(step-96,i,shape[i]);
+  di::DynamicCurve dc;
+  for(int i=0;i<8;++i)dc.y[(size_t)i]=shape[(size_t)i];
+  proc.setDynamicDuckCurve(step-96,selectedStep,dc);
   return;
  }
  const int lane=step/32, actualStep=step%32;
@@ -1164,7 +1166,11 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
    const int playableHeight=juce::jmax(1,graph.getBottom()-top-32);
    if(pos.y<top+playableHeight){
     selectedTrack=juce::jlimit(0,5,(pos.y-top)*6/playableHeight);
-    proc.setGridCell(selectedTrack,selectedStep,!proc.getGridCell(selectedTrack,selectedStep));
+    // Editing is non-destructive: a single click selects that cell's
+    // unique envelope. Right-click or double-click toggles event enable.
+    if(e.mods.isRightButtonDown()||e.getNumberOfClicks()>1)
+     proc.setGridCell(selectedTrack,selectedStep,!proc.getGridCell(selectedTrack,selectedStep));
+    selectedLane=0;
    } // SEQUENCE row selects a column, never toggles a musical event.
    if(gridModeButton&&!gridModeButton->getToggleState())
     gridModeButton->setToggleState(true,juce::sendNotificationSync);
