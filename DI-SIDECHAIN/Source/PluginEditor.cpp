@@ -182,6 +182,20 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  button(curveShapeButton,"SHAPES");
  button(settingsButton,"SETUP");
  button(powerButton,"ON",true);
+ button(sourceInt,"INT",true);
+ button(sourceExt,"EXT",true);
+ button(sourceMidi,"MIDI",true);
+ auto setDiscreteParameter=[this](const char* id,float value) {
+  if(auto* parameter=proc.state.getParameter(id)){
+   parameter->beginChangeGesture();
+   parameter->setValueNotifyingHost(parameter->convertTo0to1(value));
+   parameter->endChangeGesture();
+  }
+ };
+ sourceInt->onClick=[setDiscreteParameter](){setDiscreteParameter("triggerMode",0.f);setDiscreteParameter("detectorSource",1.f);};
+ sourceExt->onClick=[setDiscreteParameter](){setDiscreteParameter("triggerMode",0.f);setDiscreteParameter("detectorSource",2.f);};
+ sourceMidi->onClick=[setDiscreteParameter](){setDiscreteParameter("triggerMode",1.f);};
+
  powerButton->setTooltip("Enable/disable entire PRECISION SIDECHAIN processing (inverted Bypass)");
  powerButton->setToggleState(true,juce::dontSendNotification);
  settingsButton->onClick=[this]{
@@ -324,7 +338,11 @@ void DISidechainEditor::resized() {
  b(syncLengthSlider.get(),276,445,84,78);
  b(attackProtectToggle.get(),550,518,129,22);
  b(curveAmountSlider.get(),858,93,135,29);
- b(combos[0].get(),33,406,118,27);b(combos[1].get(),157,406,85,27);
+ b(combos[0].get(),33,406,118,27);
+ b(sourceInt.get(),154,406,29,27);
+ b(sourceExt.get(),184,406,29,27);
+ b(sourceMidi.get(),214,406,38,27);
+ combos[1]->setVisible(false);
  b(combos[2].get(),33,519,104,20);
  b(sync.get(),287,515,105,24);
  b(filterPower.get(),104,564,51,26);b(combos[4].get(),162,564,162,27);
@@ -340,6 +358,11 @@ void DISidechainEditor::timerCallback() {
  if(!controlsReady)return;
  const bool synced=proc.state.getRawParameterValue("sync")->load()>.5f;
  powerButton->setToggleState(proc.state.getRawParameterValue("bypass")->load()<=.5f,juce::dontSendNotification);
+ const int triggerMode=(int)proc.state.getRawParameterValue("triggerMode")->load();
+ const int detectorSource=(int)proc.state.getRawParameterValue("detectorSource")->load();
+ sourceInt->setToggleState(triggerMode!=1&&detectorSource==1,juce::dontSendNotification);
+ sourceExt->setToggleState(triggerMode!=1&&detectorSource==2,juce::dontSendNotification);
+ sourceMidi->setToggleState(triggerMode==1,juce::dontSendNotification);
  syncLengthSlider->setVisible(synced);
  for(size_t i=0;i<knobSpecs.size();++i)
   if(juce::String(knobSpecs[i].id)=="length")sliders[i]->setVisible(!synced);
