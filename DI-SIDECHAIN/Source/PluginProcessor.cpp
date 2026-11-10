@@ -335,6 +335,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  const double detectorRelease=di::peakReleaseCoefficient(sr);
  juce::MidiBuffer::Iterator it(midi);juce::MidiMessage msg;int midiPos=0;bool hasEvent=it.getNextEvent(msg,midiPos);float peak=0;
  float minimumDuckGain=1.f;
+ float maximumInputLevel=0.f;
  for(int i=0;i<n;++i){bool midiNoteOn=false,audioPeak=false;
  fxBlend=fxTarget+(fxBlend-fxTarget)*fxSmoothing;
  saturatorBlend=saturatorTarget+(saturatorBlend-saturatorTarget)*fxSmoothing;
@@ -406,7 +407,9 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  const auto panGain=di::panModulation(panEnv,panMod);
  const float panLeft=panGain.left,panRight=panGain.right;
  const float filterLaneGain=di::filterModulationBlend(filterEnv,filterRange);
- for(int ch=0;ch<2;++ch){float dry=main.getSample(ch,i);if(!std::isfinite(dry))dry=0.f;float wet=dry*smoothGain;
+ for(int ch=0;ch<2;++ch){float dry=main.getSample(ch,i);if(!std::isfinite(dry))dry=0.f;
+ maximumInputLevel=juce::jmax(maximumInputLevel,std::abs(dry));
+ float wet=dry*smoothGain;
  if(mode!=0){
   auto& f=filters[ch];
   float affected=0.f;
@@ -456,6 +459,8 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  const float reduction=1.f-juce::jlimit(0.f,1.f,minimumDuckGain);
  const float previous=duckReduction.load(std::memory_order_relaxed);
  duckReduction.store(juce::jmax(reduction,previous*.86f),std::memory_order_relaxed);
+ const float previousInput=inputLevel.load(std::memory_order_relaxed);
+ inputLevel.store(juce::jmax(maximumInputLevel,previousInput*.91f),std::memory_order_relaxed);
  meter.store(peak);midi.clear();
 }
 void DISidechainProcessor::getStateInformation(juce::MemoryBlock& dest){auto tree=state.copyState();for(int i=0;i<8;++i)tree.setProperty("point"+juce::String(i),points[i].load(),nullptr);for(int k=0;k<32;++k)for(int j=0;j<8;++j)tree.setProperty("seq_"+juce::String(k)+"_"+juce::String(j),getSequencePoint(k,j),nullptr);for(int lane=0;lane<2;++lane)for(int k=0;k<32;++k)for(int j=0;j<8;++j)tree.setProperty("mod_"+juce::String(lane)+"_"+juce::String(k)+"_"+juce::String(j),getModulationPoint(lane,k,j),nullptr);tree.setProperty("gridScene",getGridScene(),nullptr);
