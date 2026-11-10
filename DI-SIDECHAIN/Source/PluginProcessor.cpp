@@ -20,7 +20,7 @@ DISidechainProcessor::DISidechainProcessor():AudioProcessor(BusesProperties().wi
  applyPreset(0);
 }
 bool DISidechainProcessor::isBusesLayoutSupported(const BusesLayout& b) const{return b.getMainInputChannelSet()==juce::AudioChannelSet::stereo()&&b.getMainOutputChannelSet()==juce::AudioChannelSet::stereo();}
-void DISidechainProcessor::prepareToPlay(double s,int n){sr=s;maxBlock=n; delaySamples=(int)std::ceil(state.getRawParameterValue("lookahead")->load()*0.001f*sr); delaySamples=juce::jlimit(0,192000,delaySamples);previousDelaySamples=delaySamples;delayTransitionSamples=0;pendingLatencySamples.store(delaySamples);setLatencySamples(delaySamples);delayWrite=0;transportPlaying.store(false);colorToneLow={0.f,0.f};phase=1;gain=1;detector=0;rmsEnergy=0;transientFast=0;transientSlow=0;holdoff=0;for(auto& f:filters){juce::dsp::ProcessSpec sp{s,(juce::uint32)n,1};f.prepare(sp);f.reset();for(auto* a:{&f.animated,&f.animated2,&f.animated3,&f.animated4}){a->setResonance(.707f);a->setCutoffFrequency(800.f);}}}
+void DISidechainProcessor::prepareToPlay(double s,int n){sr=s;maxBlock=n; delaySamples=(int)std::ceil(state.getRawParameterValue("lookahead")->load()*0.001f*sr); delaySamples=juce::jlimit(0,192000,delaySamples);previousDelaySamples=delaySamples;delayTransitionSamples=0;pendingLatencySamples.store(delaySamples);setLatencySamples(delaySamples);appliedLatencySamples.store(delaySamples,std::memory_order_release);delayWrite=0;transportPlaying.store(false);colorToneLow={0.f,0.f};phase=1;gain=1;detector=0;rmsEnergy=0;transientFast=0;transientSlow=0;holdoff=0;for(auto& f:filters){juce::dsp::ProcessSpec sp{s,(juce::uint32)n,1};f.prepare(sp);f.reset();for(auto* a:{&f.animated,&f.animated2,&f.animated3,&f.animated4}){a->setResonance(.707f);a->setCutoffFrequency(800.f);}}}
 int DISidechainProcessor::getEnvelopeNodes(std::array<EnvelopeNode,maxEnvelopeNodes>& target) const noexcept
 {
  const int count=juce::jlimit(2,maxEnvelopeNodes,envelopeNodeCount.load(std::memory_order_acquire));
@@ -77,7 +77,7 @@ void DISidechainProcessor::handleAsyncUpdate() {
  // JUCE hosts may reconfigure processing graph while UI/audio events are active.
  if(transportPlaying.load(std::memory_order_acquire))return;
  const int wanted=pendingLatencySamples.load(std::memory_order_acquire);
- if(getLatencySamples()!=wanted)setLatencySamples(wanted);
+ if(appliedLatencySamples.load(std::memory_order_acquire)!=wanted){setLatencySamples(wanted);appliedLatencySamples.store(wanted,std::memory_order_release);}
 }
 void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& b,juce::MidiBuffer& midi){juce::ScopedNoDenormals nd;auto main=getBusBuffer(b,true,0);auto side=getBusBuffer(b,true,1);const int n=main.getNumSamples();if(n==0)return;bool playing=false;
  if(auto* playhead=getPlayHead())
@@ -93,7 +93,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& b,juce::MidiBu
   delayTransitionSamples=delayTransitionLength;
   pendingLatencySamples.store(delaySamples,std::memory_order_release);
   triggerAsyncUpdate();
- } else if(!playing && pendingLatencySamples.load(std::memory_order_acquire)!=getLatencySamples()) {
+ } else if(!playing && pendingLatencySamples.load(std::memory_order_acquire)!=appliedLatencySamples.load(std::memory_order_acquire)) {
   triggerAsyncUpdate();
  }auto val=[&](const char* id){return state.getRawParameterValue(id)->load();};const float depth=juce::jlimit(0.f,1.f,val("depth")),mix=juce::jlimit(0.f,1.f,val("mix")); const bool bypass=val("bypass")>0.5f;const int trig=(int)val("triggerMode");const float threshold=juce::Decibels::decibelsToGain(val("threshold"));const int hold=(int)(val("retrigger")*.001f*sr);float lengthSeconds=val("length")*.001f; if(val("sync")>0.5f){ double bpm=120.0; if(auto* ph=getPlayHead()) if(auto pos=ph->getPosition()) if(auto b=pos->getBpm()) if(std::isfinite(*b)&&*b>1.0) bpm=*b; static constexpr double beats[]={0.25,0.333333,0.5,0.666667,1.0,2.0,4.0}; lengthSeconds=(float)(60.0/bpm*beats[juce::jlimit(0,6,(int)val("division"))]); } const float len=juce::jmax(1.f,lengthSeconds*float(sr));const float offset=val("timeOffset");const float attack=val("attackProtection");const int model=(int)val("filterModel"), color=(int)val("colorModel");juce::MidiMessage mm;int mp=0;juce::MidiBuffer::Iterator mi(midi);bool has=mi.getNextEvent(mm,mp);float peak=0, peakL=0, peakR=0, reduction=0;const float blockCut=juce::jlimit(20.f,(float)(sr*.45),val("cutoff")); const float q=juce::jmax(.1f,1.f-val("resonance")*.9f);
  const bool filterOn=val("filterEnabled")>0.5f;
