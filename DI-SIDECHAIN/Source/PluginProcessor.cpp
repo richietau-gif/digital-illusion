@@ -6,7 +6,7 @@ namespace { juce::StringArray filterNames(){ return {"LP12","LP24","LP48","HP12"
 juce::AudioProcessorValueTreeState::ParameterLayout DISidechainProcessor::makeParams(){
  std::vector<std::unique_ptr<juce::RangedAudioParameter>> p;
  auto f=[&](const char* id,const char* n,float lo,float hi,float d){p.push_back(std::make_unique<juce::AudioParameterFloat>(id,n,juce::NormalisableRange<float>(lo,hi),d));};
- f("depth","Depth",0,1,1); f("mix","Dry/Wet",0,1,1); f("threshold","Trigger Threshold",-60,0,-24); f("length","Envelope Length ms",10,2000,250); f("timeOffset","Time Offset",-1,1,0); f("lookahead","Lookahead ms",0,200,20); f("attackProtection","Attack Protection",0,1,0); f("retrigger","Retrigger Holdoff ms",1,250,35); f("smooth","Gain Smoothing ms",0.1f,50,3); f("cutoff","Cutoff Hz",20,20000,800); f("resonance","Resonance",0,1,0.15f); f("filterDrive","Filter Drive",0,24,0); f("filterMod","Filter Envelope",-1,1,0); f("filterMix","Filter Mix",0,1,1); f("colorDrive","Color Drive",0,24,0); f("colorTone","Color Tone",-1,1,0); f("colorMix","Color Mix",0,1,0); f("output","Output dB",-24,12,0);
+ f("depth","Depth",0,1,1); f("mix","Dry/Wet",0,1,1); f("threshold","Trigger Threshold",-60,0,-24); f("length","Envelope Length ms",10,2000,250); f("timeOffset","Time Offset",-1,1,0); f("curveAmount","Curve Tension",0,1,.5f); f("lookahead","Lookahead ms",0,200,20); f("attackProtection","Attack Protection",0,1,0); f("retrigger","Retrigger Holdoff ms",1,250,35); f("smooth","Gain Smoothing ms",0.1f,50,3); f("cutoff","Cutoff Hz",20,20000,800); f("resonance","Resonance",0,1,0.15f); f("filterDrive","Filter Drive",0,24,0); f("filterMod","Filter Envelope",-1,1,0); f("filterMix","Filter Mix",0,1,1); f("colorDrive","Color Drive",0,24,0); f("colorTone","Color Tone",-1,1,0); f("colorMix","Color Mix",0,1,0); f("output","Output dB",-24,12,0);
  p.push_back(std::make_unique<juce::AudioParameterChoice>("triggerMode","Trigger",juce::StringArray{"Audio","MIDI","Audio + MIDI"},0)); p.push_back(std::make_unique<juce::AudioParameterChoice>("detector","Detector",juce::StringArray{"Peak","RMS","Transient"},0)); p.push_back(std::make_unique<juce::AudioParameterChoice>("detectorSource","Detector Source",juce::StringArray{"Auto","Internal","External"},0)); p.push_back(std::make_unique<juce::AudioParameterChoice>("division","Sync Division",juce::StringArray{"1/16","1/8T","1/8","1/4T","1/4","1/2","1 bar"},2)); p.push_back(std::make_unique<juce::AudioParameterChoice>("filterModel","Filter Model",filterNames(),0)); p.push_back(std::make_unique<juce::AudioParameterChoice>("colorModel","Color",juce::StringArray{"Warm Saturation","Soft Clip","Hard Clip","Asymmetric Drive","Wavefold","Digital Crush"},0)); p.push_back(std::make_unique<juce::AudioParameterBool>("sync","BPM Sync",true)); p.push_back(std::make_unique<juce::AudioParameterBool>("filterEnabled","Filter Enabled",true));
  p.push_back(std::make_unique<juce::AudioParameterBool>("filterEnvelopeEnabled","Filter Envelope Enabled",true));
  p.push_back(std::make_unique<juce::AudioParameterBool>("colorEnabled","Color Enabled",true));
@@ -53,7 +53,8 @@ float DISidechainProcessor::getEnvelopeAt(float t) const noexcept
   if(t<=x||i==count-1) {
    const float span=juce::jmax(0.0001f,x-prevX);
    float u=juce::jlimit(0.f,1.f,(t-prevX)/span);
-   const float tension=envelopeCurves[(size_t)i-1].load(std::memory_order_relaxed);
+   const float globalCurve=state.getRawParameterValue("curveAmount")->load();
+   const float tension=juce::jlimit(-1.f,1.f,envelopeCurves[(size_t)i-1].load(std::memory_order_relaxed)+(globalCurve-.5f)*1.4f);
    if(tension>=0.f) u=std::pow(u,1.f+3.f*tension);
    else u=1.f-std::pow(1.f-u,1.f-3.f*tension);
    return juce::jlimit(0.f,1.f,prevY+(y-prevY)*u);
