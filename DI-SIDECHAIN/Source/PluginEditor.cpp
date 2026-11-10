@@ -96,6 +96,20 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p)
         slider->setName(spec.id);
         slider->setNumDecimalPlacesToDisplay(spec.decimals);
         slider->setTextValueSuffix(spec.suffix);
+        const juce::String id(spec.id);
+        if (id == "depth" || id == "mix" || id == "attackProtection"
+            || id == "resonance" || id == "filterMix" || id == "colorMix"
+            || id == "filterMod" || id == "timeOffset")
+        {
+            slider->textFromValueFunction = [](double value)
+            {
+                return juce::String(value * 100.0, 0) + " %";
+            };
+            slider->valueFromTextFunction = [](const juce::String& text)
+            {
+                return text.getDoubleValue() / 100.0;
+            };
+        }
         slider->setTextBoxStyle(juce::Slider::TextBoxBelow, false, 90, 18);
         slider->setColour(juce::Slider::textBoxTextColourId, juce::Colour(0xffe5eef6));
         slider->setColour(juce::Slider::textBoxBackgroundColourId, juce::Colour(0xff0e1c2d));
@@ -213,7 +227,7 @@ void DISidechainEditor::resized()
     {
         const int column = (int) (i % 6);
         const int row = (int) (i / 6);
-        sliders[i]->setBounds(scaled(29 + column * 178, 385 + row * 95, 153, 75));
+        sliders[i]->setBounds(scaled(29 + column * 178, 405 + row * 95, 153, 62));
     }
 }
 
