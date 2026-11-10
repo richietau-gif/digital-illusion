@@ -3,383 +3,470 @@
 #include <array>
 #include <cmath>
 
-namespace
-{
-constexpr int designWidth = 1100;
-constexpr int designHeight = 700;
-
-struct KnobSpec
-{
-    const char* id;
-    const char* title;
-    const char* suffix;
-    int decimals;
+namespace {
+constexpr float W = 1100.f, H = 740.f;
+constexpr float gx0=78.f, gx1=956.f, gy0=135.f, gy1=293.f;
+constexpr auto cyan=juce::Colour(0xff05d9e5);
+constexpr auto orange=juce::Colour(0xffff9019);
+constexpr auto ink=juce::Colour(0xff09121c);
+constexpr auto panel=juce::Colour(0xff111c28);
+constexpr auto pale=juce::Colour(0xffe1eef3);
+constexpr auto muted=juce::Colour(0xff8ca5b7);
+struct Knob {
+ const char* id; const char* label; int x,y,w,h; const char* suffix; int digits; bool percent;
 };
-
-constexpr std::array<KnobSpec, 17> knobs {{
-    {"depth", "DUCK DEPTH", "", 2},
-    {"mix", "DRY / WET", "", 2},
-    {"threshold", "THRESHOLD", " dB", 1},
-    {"length", "LENGTH", " ms", 0},
-    {"timeOffset", "TIME OFFSET", "", 2},
-    {"lookahead", "LOOKAHEAD", " ms", 0},
-    {"attackProtection", "ATTACK PROTECT", "", 2},
-    {"retrigger", "RETRIGGER", " ms", 0},
-    {"smooth", "SMOOTHING", " ms", 1},
-    {"cutoff", "CUTOFF", " Hz", 0},
-    {"resonance", "RESONANCE", "", 2},
-    {"filterDrive", "FILTER DRIVE", " dB", 1},
-    {"filterMod", "FILTER ENV", "", 2},
-    {"filterMix", "FILTER MIX", "", 2},
-    {"colorDrive", "COLOR DRIVE", " dB", 1},
-    {"colorMix", "COLOR MIX", "", 2},
-    {"output", "OUTPUT", " dB", 1}
+constexpr std::array<Knob,18> knobSpecs{{
+ {"threshold","Threshold",34,445,94,77," dB",1,false},
+ {"retrigger","Holdoff",151,445,94,77," ms",0,false},
+ {"length","Length",276,445,84,78," ms",0,false},
+ {"timeOffset","Offset",365,445,84,78," %",0,true},
+ {"lookahead","Lookahead",454,445,84,78," ms",1,false},
+ {"attackProtection","Attack protect",552,445,79,78," %",0,true},
+ {"smooth","Smoothing",637,445,79,78," ms",1,false},
+ {"depth","Depth",723,445,79,78," %",0,true},
+ {"mix","Dry / Wet",831,445,110,78," %",0,true},
+ {"output","Output",953,445,110,78," dB",1,false},
+ {"cutoff","Cutoff",30,621,103,84," Hz",0,false},
+ {"resonance","Resonance",140,621,103,84,"",2,false},
+ {"filterDrive","Drive",250,621,103,84," dB",1,false},
+ {"filterMod","ENV AMOUNT",380,669,233,28," %",0,true},
+ {"filterMix","FILTER MIX",380,698,233,27," %",0,true},
+ {"colorDrive","Drive",685,621,107,84," dB",1,false},
+ {"colorTone","Tone",808,621,107,84," %",0,true},
+ {"colorMix","Mix",929,621,107,84," %",0,true}
 }};
-
-constexpr std::array<const char*, 5> choiceTitles {{
-    "TRIGGER", "DETECTOR", "RATE", "FILTER TYPE", "COLOR TYPE"
-}};
-
-float smoothstep(float x) noexcept
-{
-    x = juce::jlimit(0.0f, 1.0f, x);
-    return x * x * (3.0f - 2.0f * x);
-}
+juce::Rectangle<float> rect(float x,float y,float w,float h){return {x,y,w,h};}
+float clamp(float x){return juce::jlimit(0.f,1.f,x);}
 }
 
-PrecisionLookAndFeel::PrecisionLookAndFeel()
-{
-    setColour(juce::ComboBox::backgroundColourId, juce::Colour(0xff1a2a3d));
-    setColour(juce::ComboBox::outlineColourId, juce::Colour(0xff31495d));
-    setColour(juce::ComboBox::textColourId, juce::Colours::white);
-    setColour(juce::ComboBox::arrowColourId, juce::Colour(0xff55d9e9));
-    setColour(juce::TextEditor::backgroundColourId, juce::Colour(0xff101c2a));
-    setColour(juce::TextEditor::textColourId, juce::Colours::white);
-    setColour(juce::TextEditor::outlineColourId, juce::Colour(0xff344e61));
-    setColour(juce::ToggleButton::textColourId, juce::Colours::white);
+PrecisionLookAndFeel::PrecisionLookAndFeel() {
+ setColour(juce::ComboBox::backgroundColourId,juce::Colour(0xff111f2d));
+ setColour(juce::ComboBox::outlineColourId,juce::Colour(0xff365064));
+ setColour(juce::ComboBox::textColourId,pale);
+ setColour(juce::ComboBox::arrowColourId,cyan);
+ setColour(juce::TextEditor::backgroundColourId,ink);
+ setColour(juce::TextEditor::textColourId,pale);
+ setColour(juce::TextEditor::outlineColourId,juce::Colour(0xff365064));
+ setColour(juce::TextButton::textColourOffId,pale);
+ setColour(juce::TextButton::textColourOnId,juce::Colours::black);
+ setColour(juce::ToggleButton::textColourId,pale);
+}
+void PrecisionLookAndFeel::drawRotarySlider(juce::Graphics& g,int x,int y,int width,int height,float pos,float a,float b,juce::Slider& slider) {
+ const float diameter=(float)juce::jmin(width,height);
+ const float radius=diameter*.34f,cx=x+width*.5f,cy=y+height*.43f;
+ const float angle=a+pos*(b-a);
+ juce::Path base,progress;
+ base.addCentredArc(cx,cy,radius,radius,0,a,b,true);
+ progress.addCentredArc(cx,cy,radius,radius,0,a,angle,true);
+ g.setColour(juce::Colour(0xff263743));
+ g.strokePath(base,juce::PathStrokeType(4.6f));
+ g.setColour(slider.getName()=="timeOffset"?orange:cyan);
+ g.strokePath(progress,juce::PathStrokeType(4.6f));
+ g.setColour(juce::Colour(0xff101c29));
+ g.fillEllipse(cx-radius*.78f,cy-radius*.78f,radius*1.56f,radius*1.56f);
+ g.setColour(pale);
+ g.drawLine(cx+std::sin(angle)*radius*.25f,cy-std::cos(angle)*radius*.25f,
+            cx+std::sin(angle)*radius*.75f,cy-std::cos(angle)*radius*.75f,2.f);
+}
+void PrecisionLookAndFeel::drawButtonBackground(juce::Graphics& g,juce::Button& button,const juce::Colour&,bool hovered,bool pressed) {
+ const bool on=button.getToggleState();
+ auto bounds=button.getLocalBounds().toFloat().reduced(1);
+ g.setColour(on?juce::Colour(0xff11c9d5):juce::Colour(hovered?0xff294357:0xff192939));
+ g.fillRoundedRectangle(bounds,6.f);
+ g.setColour(on?cyan:juce::Colour(0xff355368));
+ g.drawRoundedRectangle(bounds,6.f,1.f);
+ if(pressed){g.setColour(juce::Colours::white.withAlpha(.08f));g.fillRoundedRectangle(bounds,6.f);}
 }
 
-void PrecisionLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int width, int height,
-                                           float position, float startAngle, float endAngle,
-                                           juce::Slider& slider)
-{
-    const float diameter = (float) juce::jmin(width, height);
-    const float radius = diameter * 0.37f;
-    const float cx = (float) x + (float) width * 0.5f;
-    const float cy = (float) y + (float) height * 0.49f;
-    const float angle = startAngle + position * (endAngle - startAngle);
-    juce::Path rail, value;
-    rail.addCentredArc(cx, cy, radius, radius, 0.0f, startAngle, endAngle, true);
-    value.addCentredArc(cx, cy, radius, radius, 0.0f, startAngle, angle, true);
-    g.setColour(juce::Colour(0xff283a49));
-    g.strokePath(rail, juce::PathStrokeType(4.5f));
-    const auto accent = slider.getName() == "timeOffset" ? juce::Colour(0xffff9f42)
-                                                          : juce::Colour(0xff48cedf);
-    g.setColour(slider.isEnabled() ? accent : juce::Colour(0xff617480));
-    g.strokePath(value, juce::PathStrokeType(4.5f));
-    const float dx = std::sin(angle);
-    const float dy = -std::cos(angle);
-    g.setColour(juce::Colour(0xffe4f5f9));
-    g.drawLine(cx + dx * radius * 0.48f, cy + dy * radius * 0.48f,
-               cx + dx * radius * 0.82f, cy + dy * radius * 0.82f, 2.0f);
+DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEditor(&p),proc(p) {
+ setLookAndFeel(&lookAndFeel);
+ for(const auto& spec:knobSpecs){
+  auto s=std::make_unique<juce::Slider>();
+  s->setName(spec.id);
+  s->setSliderStyle((juce::String(spec.id)=="filterMod"||juce::String(spec.id)=="filterMix")
+                    ?juce::Slider::LinearHorizontal:juce::Slider::RotaryHorizontalVerticalDrag);
+  s->setTextBoxStyle(juce::Slider::TextBoxBelow,false,78,16);
+  s->setColour(juce::Slider::textBoxTextColourId,pale);
+  s->setColour(juce::Slider::textBoxBackgroundColourId,ink);
+  s->setColour(juce::Slider::textBoxOutlineColourId,juce::Colour(0xff25384a));
+  s->setColour(juce::Slider::trackColourId,cyan);
+  s->setColour(juce::Slider::thumbColourId,cyan);
+  s->setNumDecimalPlacesToDisplay(spec.digits);
+  s->setTooltip(juce::String(spec.label));
+  if(spec.percent) {
+   const bool bipolar=(juce::String(spec.id)=="timeOffset"||juce::String(spec.id)=="filterMod"||juce::String(spec.id)=="colorTone");
+   s->textFromValueFunction=[bipolar](double v){return juce::String(v*100.,0)+" %";};
+   s->valueFromTextFunction=[](const juce::String& t){return t.getDoubleValue()/100.;};
+   juce::ignoreUnused(bipolar);
+  } else s->setTextValueSuffix(spec.suffix);
+  addAndMakeVisible(*s);
+  sliderAttachments.emplace_back(std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(proc.state,spec.id,*s));
+  sliders.emplace_back(std::move(s));
+ }
+ struct Choice{const char* id;juce::StringArray names;};
+ const std::array<Choice,7> choices{{
+  {"triggerMode",{"Audio","MIDI","Audio + MIDI"}},
+  {"detectorSource",{"Auto","INT","EXT"}},
+  {"detector",{"Peak","RMS","Transient"}},
+  {"division",{"1/16","1/8T","1/8","1/4T","1/4","1/2","1 bar"}},
+  {"filterModel",{"LP12","LP24","LP48","HP12","HP24","HP48","Band Pass","Notch","Analog Ladder","SVF Morph","Comb","Formant / Vowel","Aggressive Bass"}},
+  {"colorModel",{"Warm Saturation","Soft Clip","Hard Clip","Asymmetric Drive","Wavefold","Digital Crush"}},
+  {"uiScale",{"50%","75%","100%"}}
+ }};
+ for(const auto& choice:choices) {
+  auto c=std::make_unique<juce::ComboBox>();
+  c->addItemList(choice.names,1);
+  addAndMakeVisible(*c);
+  comboAttachments.emplace_back(std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(proc.state,choice.id,*c));
+  combos.emplace_back(std::move(c));
+ }
+ presetBrowser=std::make_unique<juce::ComboBox>();
+ for(int i=0;i<proc.getNumPrograms();++i) presetBrowser->addItem(proc.getProgramName(i),i+1);
+ presetBrowser->setSelectedId(proc.getCurrentProgram()+1,juce::dontSendNotification);
+ presetBrowser->onChange=[this] {
+  if(controlsReady){
+   int selected=presetBrowser->getSelectedId()-1;
+   if(selected>=0&&selected<proc.getNumPrograms())proc.setCurrentProgram(selected);
+  }
+ };
+ addAndMakeVisible(*presetBrowser);
+ auto button=[this](std::unique_ptr<juce::TextButton>& target,const juce::String& text,bool toggle=false) {
+  target=std::make_unique<juce::TextButton>(text);
+  target->setClickingTogglesState(toggle);
+  addAndMakeVisible(*target);
+ };
+ button(prevPreset,"<");
+ button(nextPreset,">");
+ button(aButton,"A",true);
+ button(bButton,"B",true);
+ button(copyAB,"A > B");
+ button(savePreset,"SAVE");
+ button(undoButton,"↶");
+ button(redoButton,"↷");
+ button(filterPower,"ON",true);
+ button(filterEnvelopePower,"ENV ON",true);
+ button(colorPower,"ON",true);
+ button(curveShapeButton,"SHAPES");
+ prevPreset->onClick=[this]{movePreset(-1);};
+ nextPreset->onClick=[this]{movePreset(1);};
+ aButton->onClick=[this]{setSnapshot(0);};
+ bButton->onClick=[this]{setSnapshot(1);};
+ copyAB->onClick=[this]{copySnapshot(0,1);};
+ undoButton->onClick=[this]{undo();};
+ redoButton->onClick=[this]{redo();};
+ filterAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(proc.state,"filterEnabled",*filterPower);
+ filterEnvelopeAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(proc.state,"filterEnvelopeEnabled",*filterEnvelopePower);
+ colorAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(proc.state,"colorEnabled",*colorPower);
+
+ sync=std::make_unique<juce::ToggleButton>("BPM SYNC");
+ bypass=std::make_unique<juce::ToggleButton>("BYPASS");
+ addAndMakeVisible(*sync);addAndMakeVisible(*bypass);
+ syncAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(proc.state,"sync",*sync);
+ bypassAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(proc.state,"bypass",*bypass);
+
+ curveShapeButton->onClick=[this] {
+  juce::PopupMenu menu;
+  menu.addItem(1,"Classic Duck");menu.addItem(2,"Hard Gate");
+  menu.addItem(3,"Double Pump");menu.addItem(4,"Smooth Wobble");
+  menu.addItem(5,"Reverse");
+  juce::Component::SafePointer<DISidechainEditor> safe(this);
+  menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(curveShapeButton.get()),[safe](int result) {
+   if(safe==nullptr||result<1)return;
+   safe->recordUndo();
+   auto& c=safe->curve;
+   c.count= result==3?6:result==4?7:4;
+   const float x6[]={0.f,.16f,.38f,.61f,.83f,1.f,1.f};
+   const float x7[]={0.f,.15f,.30f,.48f,.65f,.82f,1.f};
+   for(int i=0;i<c.count;i++) {
+    float x=result==3?x6[i]:result==4?x7[i]:(float)i/(float)(c.count-1);
+    float y=result==1?x*x*(3.f-2.f*x):
+            result==2?(x<.3f?0.f:1.f):
+            result==3?((i==1||i==3)?0.f:1.f):
+            result==4?(i%2==0?1.f:0.05f):1.f-x;
+    c.nodes[(size_t)i]={x,y,0.f};
+   }
+   safe->pushNodes();
+  });
+ };
+ savePreset->onClick=[this] {
+  presetFileChooser=std::make_unique<juce::FileChooser>("Save PRECISION SIDECHAIN preset",juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("PrecisionSidechain.preset"),"*.preset");
+  juce::Component::SafePointer<DISidechainEditor> safe(this);
+  presetFileChooser->launchAsync(juce::FileBrowserComponent::saveMode|juce::FileBrowserComponent::canSelectFiles,
+    [safe](const juce::FileChooser& chooser){
+     if(safe==nullptr)return;
+     auto path=chooser.getResult();
+     if(path!=juce::File()) {
+      juce::MemoryBlock state;
+      safe->proc.getStateInformation(state);
+      path.replaceWithData(state.getData(),state.getSize());
+     }
+    });
+ };
+ combos.back()->onChange=[this]{if(controlsReady)changeScale();};
+ pullNodes();
+ snapshots[0]=proc.state.copyState();snapshots[1]=snapshots[0].createCopy();
+ snapshotCurves[0]=curve;snapshotCurves[1]=curve;
+ aButton->setToggleState(true,juce::dontSendNotification);
+ bButton->setToggleState(false,juce::dontSendNotification);
+ controlsReady=true;
+ setResizable(true,true);
+ setResizeLimits(550,370,1400,940);
+ changeScale();
+ startTimerHz(25);
 }
-
-DISidechainEditor::DISidechainEditor(DISidechainProcessor& p)
-    : juce::AudioProcessorEditor(&p), proc(p)
-{
-    setLookAndFeel(&lookAndFeel);
-
-    for (const auto& spec : knobs)
-    {
-        auto slider = std::make_unique<juce::Slider>(juce::Slider::RotaryHorizontalVerticalDrag,
-                                                     juce::Slider::TextBoxBelow);
-        slider->setName(spec.id);
-        slider->setNumDecimalPlacesToDisplay(spec.decimals);
-        slider->setTextValueSuffix(spec.suffix);
-        const juce::String id(spec.id);
-        if (id == "depth" || id == "mix" || id == "attackProtection"
-            || id == "resonance" || id == "filterMix" || id == "colorMix"
-            || id == "filterMod" || id == "timeOffset")
-        {
-            slider->textFromValueFunction = [](double value)
-            {
-                return juce::String(value * 100.0, 0) + " %";
-            };
-            slider->valueFromTextFunction = [](const juce::String& text)
-            {
-                return text.getDoubleValue() / 100.0;
-            };
-        }
-        slider->setTextBoxStyle(juce::Slider::TextBoxBelow, false, 90, 18);
-        slider->setColour(juce::Slider::textBoxTextColourId, juce::Colour(0xffe5eef6));
-        slider->setColour(juce::Slider::textBoxBackgroundColourId, juce::Colour(0xff0e1c2d));
-        slider->setColour(juce::Slider::textBoxOutlineColourId, juce::Colour(0xff2e4356));
-        slider->setTooltip(juce::String(spec.title));
-        addAndMakeVisible(*slider);
-        sliderAttachments.push_back(std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-            proc.state, spec.id, *slider));
-        sliders.push_back(std::move(slider));
-    }
-
-    struct Choice
-    {
-        const char* id;
-        juce::StringArray options;
-    };
-    const std::array<Choice, 6> choices {{
-        {"triggerMode", {"Audio", "MIDI", "Audio + MIDI"}},
-        {"detector", {"Peak", "RMS", "Transient"}},
-        {"division", {"1/16", "1/8T", "1/8", "1/4T", "1/4", "1/2", "1 bar"}},
-        {"filterModel", {"LP12", "LP24", "LP48", "HP12", "HP24", "HP48",
-                          "Band Pass", "Notch", "Analog Ladder", "SVF Morph",
-                          "Comb", "Formant / Vowel", "Aggressive Bass"}},
-        {"colorModel", {"Warm Saturation", "Soft Clip", "Hard Clip",
-                         "Asymmetric Drive", "Wavefold", "Digital Crush"}},
-        {"uiScale", {"50%", "75%", "100%"}}
-    }};
-
-    for (const auto& choice : choices)
-    {
-        auto combo = std::make_unique<juce::ComboBox>();
-        combo->addItemList(choice.options, 1);
-        combo->setJustificationType(juce::Justification::centredLeft);
-        combo->setTooltip(juce::String(choice.id));
-        addAndMakeVisible(*combo);
-        comboAttachments.push_back(std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
-            proc.state, choice.id, *combo));
-        combos.push_back(std::move(combo));
-    }
-
-    presetBrowser = std::make_unique<juce::ComboBox>();
-    for (int program = 0; program < proc.getNumPrograms(); ++program)
-        presetBrowser->addItem(proc.getProgramName(program), program + 1);
-    presetBrowser->setSelectedId(proc.getCurrentProgram() + 1, juce::dontSendNotification);
-    presetBrowser->setTooltip("Factory preset - selecting a preset changes all sound parameters");
-    presetBrowser->onChange = [this]
-    {
-        if (controlsReady)
-        {
-            const int selected = presetBrowser->getSelectedId() - 1;
-            if (selected >= 0 && selected < proc.getNumPrograms())
-                proc.setCurrentProgram(selected);
-        }
-    };
-    addAndMakeVisible(*presetBrowser);
-
-    sync = std::make_unique<juce::ToggleButton>("BPM SYNC");
-    bypass = std::make_unique<juce::ToggleButton>("BYPASS");
-    addAndMakeVisible(*sync);
-    addAndMakeVisible(*bypass);
-    syncAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
-        proc.state, "sync", *sync);
-    bypassAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
-        proc.state, "bypass", *bypass);
-
-    controlsReady = true;
-    combos.back()->onChange = [this]
-    {
-        if (!controlsReady) return;
-        const int index = combos.back()->getSelectedId();
-        if (index >= 1 && index <= 3)
-        {
-            const int widths[] = {550, 825, 1100};
-            const int heights[] = {350, 525, 700};
-            setSize(widths[index - 1], heights[index - 1]);
-        }
-    };
-
-    setResizable(true, true);
-    setResizeLimits(550, 350, 1400, 900);
-    setWindowScaleFromParameter();
-    startTimerHz(20);
+DISidechainEditor::~DISidechainEditor() {
+ stopTimer();controlsReady=false;
+ filterAttachment.reset();filterEnvelopeAttachment.reset();colorAttachment.reset();
+ syncAttachment.reset();bypassAttachment.reset();sliderAttachments.clear();comboAttachments.clear();
+ setLookAndFeel(nullptr);
 }
-
-DISidechainEditor::~DISidechainEditor()
-{
-    stopTimer();
-    controlsReady = false;
-    // Destroy attachments before components and remove our custom look-and-feel.
-    syncAttachment.reset();
-    bypassAttachment.reset();
-    sliderAttachments.clear();
-    comboAttachments.clear();
-    setLookAndFeel(nullptr);
+void DISidechainEditor::changeScale() {
+ const auto* p=proc.state.getRawParameterValue("uiScale");
+ const int i=p?juce::jlimit(0,2,juce::roundToInt(p->load())):1;
+ const int sizes[][2]={{550,370},{825,555},{1100,740}};
+ setSize(sizes[i][0],sizes[i][1]);
 }
-
-void DISidechainEditor::setWindowScaleFromParameter()
-{
-    const auto* parameter = proc.state.getRawParameterValue("uiScale");
-    const int selected = parameter != nullptr
-        ? juce::jlimit(0, 2, juce::roundToInt(parameter->load())) : 1;
-    const int widths[] = {550, 825, 1100};
-    const int heights[] = {350, 525, 700};
-    setSize(widths[selected], heights[selected]);
+juce::Rectangle<int> DISidechainEditor::scaled(int x,int y,int w,int h) const {
+ const float f=juce::jmin(getWidth()/W,getHeight()/H);
+ const float ox=(getWidth()-W*f)*.5f,oy=(getHeight()-H*f)*.5f;
+ return {juce::roundToInt(ox+x*f),juce::roundToInt(oy+y*f),juce::roundToInt(w*f),juce::roundToInt(h*f)};
 }
-
-juce::Rectangle<int> DISidechainEditor::scaled(int x, int y, int w, int h) const
-{
-    const float factor = juce::jmin((float) getWidth() / designWidth,
-                                    (float) getHeight() / designHeight);
-    const float ox = ((float) getWidth() - designWidth * factor) * 0.5f;
-    const float oy = ((float) getHeight() - designHeight * factor) * 0.5f;
-    return {juce::roundToInt(ox + x * factor), juce::roundToInt(oy + y * factor),
-            juce::roundToInt(w * factor), juce::roundToInt(h * factor)};
+void DISidechainEditor::resized() {
+ if(!controlsReady||sliders.size()!=knobSpecs.size()||combos.size()!=7||!presetBrowser)return;
+ const auto b=[this](juce::Component* component,int x,int y,int w,int h){component->setBounds(scaled(x,y,w,h));};
+ b(prevPreset.get(),327,19,30,31);b(presetBrowser.get(),365,18,225,33);
+ b(nextPreset.get(),597,19,30,31);b(savePreset.get(),636,19,52,31);
+ b(aButton.get(),700,19,32,31);b(bButton.get(),737,19,32,31);
+ b(copyAB.get(),775,19,52,31);b(undoButton.get(),834,19,30,31);b(redoButton.get(),869,19,30,31);
+ b(bypass.get(),914,22,75,27);b(combos[6].get(),1001,19,81,31);
+ b(curveShapeButton.get(),43,93,77,30);b(combos[3].get(),725,91,122,32);
+ b(combos[0].get(),33,406,118,27);b(combos[1].get(),157,406,85,27);
+ b(combos[2].get(),33,519,104,20);
+ b(sync.get(),287,515,105,24);
+ b(filterPower.get(),104,564,51,26);b(combos[4].get(),162,564,162,27);
+ b(filterEnvelopePower.get(),335,564,83,27);
+ b(colorPower.get(),734,564,52,27);b(combos[5].get(),795,563,255,29);
+ for(size_t i=0;i<sliders.size();++i) {
+  const auto& k=knobSpecs[i];
+  b(sliders[i].get(),k.x,k.y,k.w,k.h);
+ }
 }
-
-void DISidechainEditor::resized()
-{
-    if (!controlsReady || sliders.size() != knobs.size() || combos.size() != 6 || !sync || !bypass || !presetBrowser)
-        return;
-
-    bypass->setBounds(scaled(710, 15, 100, 33));
-    sync->setBounds(scaled(810, 15, 115, 33));
-    combos.back()->setBounds(scaled(934, 16, 140, 31));
-    presetBrowser->setBounds(scaled(440, 83, 332, 27));
-
-    const int selectorWidth = 208;
-    for (size_t i = 0; i < 5; ++i)
-        combos[i]->setBounds(scaled(24 + (int) i * 211, 331, selectorWidth - 10, 29));
-
-    for (size_t i = 0; i < sliders.size(); ++i)
-    {
-        const int column = (int) (i % 6);
-        const int row = (int) (i / 6);
-        sliders[i]->setBounds(scaled(29 + column * 178, 405 + row * 95, 153, 62));
-    }
+void DISidechainEditor::timerCallback() {
+ if(!controlsReady)return;
+ if(proc.envelopeRevision.load()!=knownRevision&&draggedNode<0)pullNodes();
+ if(!presetBrowser->isPopupActive())presetBrowser->setSelectedId(proc.getCurrentProgram()+1,juce::dontSendNotification);
+ repaint();
 }
-
-void DISidechainEditor::timerCallback()
-{
-    if (controlsReady && presetBrowser && !presetBrowser->isPopupActive())
-    {
-        const int target = proc.getCurrentProgram() + 1;
-        if (presetBrowser->getSelectedId() != target)
-            presetBrowser->setSelectedId(target, juce::dontSendNotification);
-    }
-    repaint(scaled(22, 64, 1056, 250));
-    repaint(scaled(620, 16, 82, 35));
+void DISidechainEditor::pullNodes() {curve.count=proc.getEnvelopeNodes(curve.nodes);knownRevision=proc.envelopeRevision.load();}
+void DISidechainEditor::pushNodes() {proc.setEnvelopeNodes(curve.nodes,curve.count);knownRevision=proc.envelopeRevision.load();repaint();}
+void DISidechainEditor::recordUndo() {
+ if(undoHistory.size()>=32)undoHistory.erase(undoHistory.begin());
+ undoHistory.push_back(curve);redoHistory.clear();
 }
-
-void DISidechainEditor::paint(juce::Graphics& g)
-{
-    g.fillAll(juce::Colour(0xff090f19));
-    const float factor = juce::jmin((float) getWidth() / designWidth,
-                                    (float) getHeight() / designHeight);
-    const float ox = ((float) getWidth() - designWidth * factor) * 0.5f;
-    const float oy = ((float) getHeight() - designHeight * factor) * 0.5f;
-    g.addTransform(juce::AffineTransform::translation(ox, oy).scaled(factor));
-
-    auto section = [&g](juce::Rectangle<float> r)
-    {
-        g.setColour(juce::Colour(0xff111d2b));
-        g.fillRoundedRectangle(r, 9.0f);
-        g.setColour(juce::Colour(0xff243649));
-        g.drawRoundedRectangle(r, 9.0f, 1.0f);
-    };
-    g.setColour(juce::Colour(0xffe6f1f8));
-    g.setFont(juce::Font(juce::FontOptions(23.0f).withStyle("Bold")));
-    g.drawText("PRECISION SIDECHAIN", 24, 11, 460, 34, juce::Justification::centredLeft);
-    g.setColour(juce::Colour(0xff57cfe1));
-    g.setFont(juce::FontOptions(10.5f));
-    g.drawText("DIGITAL ILLUSION  /  PRECISION DUCK + FILTER", 27, 43, 520, 18,
-               juce::Justification::centredLeft);
-
-    const float activity = juce::jlimit(0.0f, 1.0f, proc.triggerActivity.load());
-    const float peak = juce::jlimit(0.0f, 1.0f, proc.meter.load());
-    g.setColour(juce::Colour(0xff33495a));
-    g.fillRoundedRectangle(604.0f, 29.0f, 88.0f, 6.0f, 3.0f);
-    g.setColour(juce::Colour(0xff57d9e9));
-    g.fillRoundedRectangle(604.0f, 29.0f, 88.0f * peak, 6.0f, 3.0f);
-    g.setColour(activity > 0.07f ? juce::Colour(0xffa8f76c) : juce::Colour(0xff354b51));
-    g.fillEllipse(582.0f, 25.0f, 13.0f, 13.0f);
-
-    section({22.0f, 72.0f, 1056.0f, 226.0f});
-    g.setColour(juce::Colour(0xffd4e5f2));
-    g.setFont(juce::FontOptions(12.0f));
-    g.drawText("ENVELOPE / FACTORY PRESET", 40, 83, 370, 20,
-               juce::Justification::left);
-
-    constexpr float graphLeft = 43.0f, graphRight = 1054.0f;
-    constexpr float graphTop = 111.0f, graphBottom = 235.0f;
-    g.setColour(juce::Colour(0xff243344));
-    for (int i = 0; i <= 4; ++i)
-    {
-        const float x = graphLeft + (graphRight - graphLeft) * (float) i / 4.0f;
-        const float y = graphTop + (graphBottom - graphTop) * (float) i / 4.0f;
-        g.drawLine(x, graphTop, x, graphBottom, 0.7f);
-        g.drawLine(graphLeft, y, graphRight, y, 0.7f);
-    }
-
-    const auto read = [this](const char* id, float fallback) -> float
-    {
-        const auto* v = proc.state.getRawParameterValue(id);
-        return v != nullptr ? v->load() : fallback;
-    };
-    const float depth = juce::jlimit(0.0f, 1.0f, read("depth", 1.0f));
-    const float offset = juce::jlimit(-1.0f, 1.0f, read("timeOffset", 0.0f));
-    const float attack = juce::jlimit(0.0f, 1.0f, read("attackProtection", 0.0f));
-    juce::Path curve;
-    for (int i = 0; i <= 256; ++i)
-    {
-        const float phase = (float) i / 256.0f;
-        const float envelope = smoothstep(phase + offset);
-        const float protectedEnv = juce::jmax(envelope, attack * (1.0f - phase));
-        const float gain = 1.0f - depth * (1.0f - protectedEnv);
-        const float x = graphLeft + phase * (graphRight - graphLeft);
-        const float y = graphBottom - gain * (graphBottom - graphTop);
-        if (i == 0) curve.startNewSubPath(x, y);
-        else curve.lineTo(x, y);
-    }
-    g.setColour(juce::Colour(0xffff9b34));
-    g.strokePath(curve, juce::PathStrokeType(3.2f));
-
-    g.setColour(juce::Colour(0xff56d4e5));
-    g.drawLine(graphLeft, graphTop, graphLeft, graphBottom, 1.5f);
-    g.setColour(juce::Colour(0xffa6bccc));
-    g.setFont(juce::FontOptions(11.0f));
-    g.drawText("TRIGGER", 44, 239, 110, 18, juce::Justification::left);
-    g.drawText("OFFSET " + juce::String(juce::roundToInt(offset * 100.0f)) + "%",
-               807, 82, 240, 19, juce::Justification::right);
-
-    const float cutoff = juce::jlimit(20.0f, 20000.0f, read("cutoff", 800.0f));
-    const float cutoffX = graphLeft + (std::log(cutoff / 20.0f) / std::log(1000.0f))
-                                        * (graphRight - graphLeft);
-    g.setColour(juce::Colour(0xff1b3444));
-    g.fillRoundedRectangle(graphLeft, 270.0f, graphRight - graphLeft, 8.0f, 4.0f);
-    g.setColour(juce::Colour(0xff4ac7db));
-    g.fillRoundedRectangle(graphLeft, 270.0f, juce::jmax(0.0f, cutoffX - graphLeft),
-                           8.0f, 4.0f);
-    g.setColour(juce::Colour(0xffc2d8e7));
-    g.setFont(juce::FontOptions(10.0f));
-    g.drawText("FILTER CUTOFF MARKER", 43, 280, 280, 14, juce::Justification::left);
-
-    g.setColour(juce::Colour(0xffa0b8ca));
-    g.setFont(juce::FontOptions(10.5f));
-    for (size_t i = 0; i < choiceTitles.size(); ++i)
-        g.drawText(choiceTitles[i], 28 + (int) i * 211, 309, 200, 18,
-                   juce::Justification::left);
-
-    section({22.0f, 367.0f, 1056.0f, 301.0f});
-    const char* groupTitles[] = {"ENVELOPE / TIMING", "DETECTOR / FILTER",
-                                 "FILTER / COLOR / OUTPUT"};
-    for (int row = 0; row < 3; ++row)
-    {
-        const int baseY = 376 + row * 95;
-        g.setColour(juce::Colour(0xff83a5bb));
-        g.setFont(juce::FontOptions(9.0f));
-        g.drawText(groupTitles[row], 39, baseY - 7, 450, 13, juce::Justification::left);
-        for (int col = 0; col < 6; ++col)
-        {
-            const size_t index = (size_t) (row * 6 + col);
-            if (index >= knobs.size()) break;
-            g.setColour(juce::Colour(0xffd9e7f0));
-            g.setFont(juce::FontOptions(11.0f));
-            g.drawText(knobs[index].title, 29 + col * 178, baseY + 7, 153, 16,
-                       juce::Justification::centred);
-        }
-    }
-    g.setColour(juce::Colour(0xff7f9bb0));
-    g.setFont(juce::FontOptions(10.5f));
-    g.drawText("VST3  /  v1.0 RC  •  SINGLE ENVELOPE", 28, 672, 680, 17,
-               juce::Justification::left);
+void DISidechainEditor::undo() {
+ if(undoHistory.empty())return;
+ redoHistory.push_back(curve);curve=undoHistory.back();undoHistory.pop_back();pushNodes();
+}
+void DISidechainEditor::redo() {
+ if(redoHistory.empty())return;
+ undoHistory.push_back(curve);curve=redoHistory.back();redoHistory.pop_back();pushNodes();
+}
+float DISidechainEditor::graphX(float x) const {return (float)scaled((int)(gx0+x*(gx1-gx0)),0,1,1).getX();}
+float DISidechainEditor::graphY(float y) const {return (float)scaled(0,(int)(gy1-y*(gy1-gy0)),1,1).getY();}
+bool DISidechainEditor::graphContains(juce::Point<int> p) const {return scaled((int)gx0,(int)gy0,(int)(gx1-gx0),(int)(gy1-gy0)).expanded(9).contains(p);}
+void DISidechainEditor::mouseDown(const juce::MouseEvent& e) {
+ if(!graphContains(e.getPosition()))return;
+ const auto p=e.getPosition();
+ int nearest=-1;float best=15.f;
+ for(int i=0;i<curve.count;++i) {
+  const float dx=(float)p.x-graphX(curve.nodes[(size_t)i].x);
+  const float dy=(float)p.y-graphY(curve.nodes[(size_t)i].y);
+  const float d=std::sqrt(dx*dx+dy*dy);
+  if(d<best){best=d;nearest=i;}
+ }
+ if(e.mods.isRightButtonDown()) {
+  if(nearest>0&&nearest<curve.count-1) {
+   recordUndo();
+   for(int i=nearest;i<curve.count-1;i++)curve.nodes[(size_t)i]=curve.nodes[(size_t)i+1];
+   --curve.count;pushNodes();
+  }
+  return;
+ }
+ recordUndo();
+ if(nearest<0&&curve.count<maxNodes) {
+  const auto bounds=scaled((int)gx0,(int)gy0,(int)(gx1-gx0),(int)(gy1-gy0));
+  const float x=clamp((p.x-bounds.getX())/(float)bounds.getWidth());
+  const float y=clamp(1.f-(p.y-bounds.getY())/(float)bounds.getHeight());
+  int insert=1;
+  while(insert<curve.count&&curve.nodes[(size_t)insert].x<x)++insert;
+  for(int j=curve.count;j>insert;--j)curve.nodes[(size_t)j]=curve.nodes[(size_t)j-1];
+  curve.nodes[(size_t)insert]={x,y,0.f};++curve.count;nearest=insert;pushNodes();
+ }
+ draggedNode=nearest;changeCurve=e.mods.isShiftDown();
+ if(nearest>=0)dragStartCurve=curve.nodes[(size_t)nearest].curve;
+}
+void DISidechainEditor::mouseDrag(const juce::MouseEvent& e) {
+ if(draggedNode<0)return;
+ auto& node=curve.nodes[(size_t)draggedNode];
+ if(changeCurve||e.mods.isShiftDown()) {
+  node.curve=juce::jlimit(-1.f,1.f,dragStartCurve-e.getDistanceFromDragStartY()*.008f);
+ } else {
+  const auto bounds=scaled((int)gx0,(int)gy0,(int)(gx1-gx0),(int)(gy1-gy0));
+  float x=clamp((e.x-bounds.getX())/(float)bounds.getWidth());
+  if(draggedNode==0)x=0.f;
+  else if(draggedNode==curve.count-1)x=1.f;
+  else x=juce::jlimit(curve.nodes[(size_t)draggedNode-1].x+.01f,curve.nodes[(size_t)draggedNode+1].x-.01f,x);
+  node.x=x;
+  node.y=clamp(1.f-(e.y-bounds.getY())/(float)bounds.getHeight());
+ }
+ pushNodes();
+}
+void DISidechainEditor::mouseUp(const juce::MouseEvent&) {draggedNode=-1;changeCurve=false;}
+void DISidechainEditor::movePreset(int delta) {
+ proc.setCurrentProgram((proc.getCurrentProgram()+delta+proc.getNumPrograms())%proc.getNumPrograms());
+ presetBrowser->setSelectedId(proc.getCurrentProgram()+1,juce::dontSendNotification);
+}
+void DISidechainEditor::setSnapshot(int slot) {
+ if(slot==activeSnapshot)return;
+ snapshots[activeSnapshot]=proc.state.copyState();
+ snapshotCurves[activeSnapshot]=curve;
+ if(snapshots[slot].isValid())proc.state.replaceState(snapshots[slot].createCopy());
+ curve=snapshotCurves[slot];pushNodes();
+ activeSnapshot=slot;
+ aButton->setToggleState(slot==0,juce::dontSendNotification);
+ bButton->setToggleState(slot==1,juce::dontSendNotification);
+}
+void DISidechainEditor::copySnapshot(int source,int destination) {
+ if(source==activeSnapshot){snapshots[source]=proc.state.copyState();snapshotCurves[source]=curve;}
+ snapshots[destination]=snapshots[source].createCopy();snapshotCurves[destination]=snapshotCurves[source];
+ if(destination==activeSnapshot){proc.state.replaceState(snapshots[destination].createCopy());curve=snapshotCurves[destination];pushNodes();}
+}
+void DISidechainEditor::paint(juce::Graphics& g) {
+ g.fillAll(ink);
+ const float scale=juce::jmin(getWidth()/W,getHeight()/H);
+ const float ox=(getWidth()-W*scale)*.5f,oy=(getHeight()-H*scale)*.5f;
+ g.addTransform(juce::AffineTransform::scale(scale).translated(ox,oy));
+ const auto panelBox=[&](float x,float y,float w,float h){
+  g.setColour(panel);g.fillRoundedRectangle(rect(x,y,w,h),9.f);
+  g.setColour(juce::Colour(0xff2b4656));g.drawRoundedRectangle(rect(x,y,w,h),9.f,1.f);
+ };
+ const auto label=[&](juce::String s,float x,float y,float width,float size,juce::Colour color,bool bold=false){
+  g.setColour(color);
+  g.setFont(juce::Font(juce::FontOptions(size).withStyle(bold?"Bold":"Regular")));
+  g.drawText(s,juce::Rectangle<float>(x,y,width,size+6.f),juce::Justification::centredLeft);
+ };
+ g.setColour(juce::Colour(0xff102330));g.fillRect(0.f,0.f,W,67.f);
+ // Vector logo - original Digital Illusion pulse icon, no image dependency.
+ juce::Path logo;logo.startNewSubPath(15,34);
+ const float ly[]={34,34,27,44,17,48,32,34,25,40,34,34};
+ for(int i=1;i<12;i++)logo.lineTo(15.f+i*4.f,ly[i]);
+ g.setColour(cyan);g.strokePath(logo,juce::PathStrokeType(2.2f));
+ label("PRECISION SIDECHAIN",74,9,250,19,pale,true);
+ label("D I G I T A L   I L L U S I O N",75,37,250,9,muted);
+ panelBox(13,73,1074,284);
+ label("ENVELOPE EDITOR",30,77,285,12,cyan,true);
+ label("LEFT: ADD / DRAG     RIGHT: DELETE     SHIFT + DRAG: CURVATURE",138,82,530,10,muted);
+ label("GRID",687,92,40,10,muted);
+ label("TRIGGER",80,307,70,10,muted);
+ label("1/4",294,307,60,10,muted);
+ label("1/2",528,307,60,10,muted);
+ label("3/4",754,307,60,10,muted);
+ label("1 BAR",927,307,60,10,muted);
+ // Large envelope editing graph.
+ g.setColour(juce::Colour(0xff0b1723));
+ g.fillRoundedRectangle(rect(gx0,gy0,gx1-gx0,gy1-gy0),6);
+ for(int i=0;i<=8;i++){
+  float x=gx0+(gx1-gx0)*(float)i/8.f;
+  g.setColour(juce::Colour(0xff283847));g.drawLine(x,gy0,x,gy1,.7f);
+ }
+ for(int i=0;i<=4;i++){
+  float y=gy0+(gy1-gy0)*(float)i/4.f;
+  g.setColour(juce::Colour(0xff283847));g.drawLine(gx0,y,gx1,y,.7f);
+  label(juce::String(1.f-(float)i*.25f,2),36,y-5,34,9,muted);
+ }
+ const auto get=[this](const char* id,float def){
+  auto* p=proc.state.getRawParameterValue(id);return p?p->load():def;
+ };
+ const float depth=clamp(get("depth",1.f));
+ const float offset=juce::jlimit(-1.f,1.f,get("timeOffset",0.f));
+ const float attack=clamp(get("attackProtection",0.f));
+ juce::Path env;env.startNewSubPath(gx0,gy1);
+ for(int i=0;i<=320;i++){
+  const float phase=(float)i/320.f;
+  const float shaped=proc.getEnvelopeAt(clamp(phase+offset));
+  const float protectedEnv=juce::jmax(shaped,attack*(1.f-phase));
+  const float value=1.f-depth*(1.f-protectedEnv);
+  const float x=gx0+(gx1-gx0)*phase,y=gy1-(gy1-gy0)*value;
+  if(i==0)env.startNewSubPath(x,y);else env.lineTo(x,y);
+ }
+ g.setColour(orange.withAlpha(.13f));
+ juce::Path fill=env;fill.lineTo(gx1,gy1);fill.lineTo(gx0,gy1);fill.closeSubPath();g.fillPath(fill);
+ g.setColour(orange);g.strokePath(env,juce::PathStrokeType(3.3f));
+ for(int i=0;i<curve.count;i++){
+  const float x=gx0+(gx1-gx0)*curve.nodes[(size_t)i].x;
+  const float y=gy1-(gy1-gy0)*curve.nodes[(size_t)i].y;
+  g.setColour(juce::Colour(0xff060d16));g.fillEllipse(x-7,y-7,14,14);
+  g.setColour(juce::Colours::white);g.fillEllipse(x-5,y-5,10,10);
+  g.setColour(orange);g.fillEllipse(x-4,y-4,8,8);
+ }
+ g.setColour(cyan.withAlpha(.7f));g.drawLine(gx0,gy0,gx0,gy1,1.3f);
+ label("OFFSET "+juce::String(juce::roundToInt(offset*100.f))+"%",840,82,110,11,orange,true);
+ // ENV and OUT meter, sourced from actual plugin atomics.
+ label("TRIG",1000,90,36,11,muted);label("OUT",1044,90,38,11,muted);
+ const float meter=clamp(proc.meter.load()),trig=clamp(proc.triggerActivity.load());
+ for(int ch=0;ch<2;ch++){
+  const float x=1003.f+ch*39.f;
+  g.setColour(juce::Colour(0xff142e36));g.fillRoundedRectangle(rect(x,131,17,165),4.f);
+  const float level=ch==0?trig:meter;
+  g.setColour(ch==0?juce::Colour(0xff94ee53):cyan);
+  g.fillRoundedRectangle(rect(x,296-165.f*level,17,165.f*level),3.f);
+ }
+ // Mid row: Trigger, Timing, Envelope, Mix.
+ panelBox(14,365,240,178);panelBox(262,365,276,178);
+ panelBox(546,365,260,178);panelBox(814,365,272,178);
+ label("◉  TRIGGER",30,372,212,13,cyan,true);
+ label("◷  TIMING",278,372,250,13,cyan,true);
+ label("∿  ENVELOPE",558,372,244,13,cyan,true);
+ label("◉  MIX",830,372,245,13,cyan,true);
+ for(int i=0;i<10;i++){
+  const auto& spec=knobSpecs[(size_t)i];
+  label(spec.label,spec.x,spec.y-18,spec.w,11,pale);
+ }
+ label("SOURCE",158,389,80,9,muted);
+ label("DETECTOR",34,502,106,9,muted);
+ label("GRID",682,378,72,10,muted);
+ // Bottom row: large filter and COLOR.
+ panelBox(14,551,628,177);panelBox(651,551,435,177);
+ label("FILTER",30,559,81,13,cyan,true);
+ label("ENV CUT-OFF",427,566,150,10,muted);
+ label("COLOR",668,559,63,13,cyan,true);
+ for(int i=10;i<18;i++){
+  const auto& spec=knobSpecs[(size_t)i];
+  label(spec.label,spec.x,spec.y-18,spec.w,11,pale);
+ }
+ // Approximate visual frequency response. Real audio uses the selected DSP model.
+ const float cutoff=juce::jlimit(20.f,20000.f,get("cutoff",800.f));
+ const int model=(int)get("filterModel",0.f);
+ const bool filterEnabled=get("filterEnabled",1.f)>.5f;
+ const bool envelopeFilter=get("filterEnvelopeEnabled",1.f)>.5f;
+ juce::Path filterPath;
+ for(int i=0;i<=128;i++){
+  const float x=445.f+(float)i/128.f*171.f;
+  const float frequency=20.f*std::pow(1000.f,(float)i/128.f);
+  const float ratio=frequency/cutoff;
+  float magnitude=1.f/std::sqrt(1.f+std::pow(ratio,model==0||model==3?2.f:model==1||model==4?4.f:6.f));
+  if(model>=3&&model<=5)magnitude=1.f-magnitude;
+  if(model==6)magnitude=std::exp(-2.5f*std::abs(std::log(juce::jmax(.001f,ratio))));
+  if(model==7)magnitude=1.f-.85f*std::exp(-5.f*std::abs(std::log(juce::jmax(.001f,ratio))));
+  const float y=642.f-magnitude*46.f;
+  if(i==0)filterPath.startNewSubPath(x,y);else filterPath.lineTo(x,y);
+ }
+ g.setColour(cyan.withAlpha(filterEnabled?1.f:.35f));
+ g.strokePath(filterPath,juce::PathStrokeType(2.4f));
+ if(filterEnabled&&envelopeFilter) {
+  g.setColour(juce::Colour(0xffa4f465));g.fillEllipse(612,563,6,6);
+ }
+ label("20",446,644,30,9,muted);label("1k",516,644,30,9,muted);
+ label("20k",585,644,40,9,muted);
+ label("DIGITAL ILLUSION • PRECISION SIDECHAIN 1.0",16,728,500,9,muted);
 }
