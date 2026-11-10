@@ -104,7 +104,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& b,juce::MidiBu
       filtered=f.animated4.processSample(0,filtered);
      }
  }
- elseif(model>=3){float h=f.b.processSample(out);if(model>=3&&model<=5){
+ else if(model>=3){float h=f.b.processSample(out);if(model>=3&&model<=5){
   filtered=h;
   if(model>=4)filtered=f.c.processSample(filtered);
   if(model==5){filtered=f.d.processSample(filtered);filtered=f.a.processSample(filtered);}
