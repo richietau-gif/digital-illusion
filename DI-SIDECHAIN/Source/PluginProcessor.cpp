@@ -175,6 +175,19 @@ void DISidechainProcessor::copyGridScene(int source,int destination) noexcept {
  for(int k=0;k<gridSteps;++k)
   sceneReverseCells[(size_t)destination][(size_t)k].store(
    sceneReverseCells[(size_t)source][(size_t)k].load(std::memory_order_relaxed),std::memory_order_relaxed);
+ // Scene copy must copy the exact envelope in every cell as well as its
+ // on/off flags. Otherwise identical-looking scenes play different shapes.
+ for(int t=0;t<gridTracks;++t)for(int k=0;k<gridSteps;++k){
+  const auto src=(size_t)source,dst=(size_t)destination,track=(size_t)t,step=(size_t)k;
+  const int count=duckDynamicCount[src][track][step].load(std::memory_order_acquire);
+  for(int node=0;node<juce::jlimit(2,di::DynamicCurve::capacity,count);++node){
+   duckDynamicX[dst][track][step][(size_t)node].store(
+    duckDynamicX[src][track][step][(size_t)node].load(std::memory_order_relaxed),std::memory_order_relaxed);
+   duckDynamicY[dst][track][step][(size_t)node].store(
+    duckDynamicY[src][track][step][(size_t)node].load(std::memory_order_relaxed),std::memory_order_relaxed);
+  }
+  duckDynamicCount[dst][track][step].store(count,std::memory_order_release);
+ }
 }
 void DISidechainProcessor::setGridReverse(int step,bool enabled) noexcept {
  if(step>=0&&step<gridSteps)
@@ -492,17 +505,23 @@ void DISidechainProcessor::getStateInformation(juce::MemoryBlock& dest){auto tre
   for(int k=0;k<gridSteps;++k)
    tree.setProperty("reverse_"+juce::String(scene)+"_"+juce::String(k),
     sceneReverseCells[(size_t)scene][(size_t)k].load(std::memory_order_relaxed),nullptr);
+  for(int t=0;t<gridTracks;++t)for(int k=0;k<gridSteps;++k){
+   const auto key="duckCell_"+juce::String(scene)+"_"+juce::String(t)+"_"+juce::String(k);
+   const auto sc=(size_t)scene,track=(size_t)t,step=(size_t)k;
+   const int count=juce::jlimit(2,di::DynamicCurve::capacity,
+     duckDynamicCount[sc][track][step].load(std::memory_order_acquire));
+   tree.setProperty(key+"_count",count,nullptr);
+   for(int j=0;j<count;++j){
+    tree.setProperty(key+"_x_"+juce::String(j),
+     duckDynamicX[sc][track][step][(size_t)j].load(std::memory_order_relaxed),nullptr);
+    tree.setProperty(key+"_y_"+juce::String(j),
+     duckDynamicY[sc][track][step][(size_t)j].load(std::memory_order_relaxed),nullptr);
+   }
+  }
  }
- for(int t=0;t<6;++t) {
+ for(int t=0;t<6;++t){
   tree.setProperty("duckDepth_"+juce::String(t),getDuckTrackDepth(t),nullptr);
   tree.setProperty("duckLength_"+juce::String(t),getDuckTrackLength(t),nullptr);
-  const auto dc=getDynamicDuckCurve(t);
-  tree.setProperty("duckDynCount_"+juce::String(t),dc.count,nullptr);
-  for(int j=0;j<dc.count;++j){
-   tree.setProperty("duckDynX_"+juce::String(t)+"_"+juce::String(j),dc.x[(size_t)j],nullptr);
-   tree.setProperty("duckDynY_"+juce::String(t)+"_"+juce::String(j),dc.y[(size_t)j],nullptr);
-  }
-  for(int j=0;j<8;++j)tree.setProperty("duckCurve_"+juce::String(t)+"_"+juce::String(j),getDuckCurvePoint(t,j),nullptr);
  }
  if(auto xml=tree.createXml())copyXmlToBinary(*xml,dest);}
 void DISidechainProcessor::setStateInformation(const void* data,int bytes){
@@ -536,33 +555,39 @@ void DISidechainProcessor::setStateInformation(const void* data,int bytes){
     const auto key="reverse_"+juce::String(scene)+"_"+juce::String(k);
     sceneReverseCells[(size_t)scene][(size_t)k].store((bool)tree.getProperty(key,false),std::memory_order_relaxed);
    }
+   for(int t=0;t<gridTracks;++t)for(int k=0;k<gridSteps;++k){
+    const auto key="duckCell_"+juce::String(scene)+"_"+juce::String(t)+"_"+juce::String(k);
+    di::DynamicCurve dc;
+    // Clean new-format presets store their curves per scene/track/step.
+    // For older files we migrate the former per-track shape to every cell.
+    const bool savedCell=tree.hasProperty(key+"_count");
+    const juce::String legacy="duckDyn"+juce::String();
+    dc.count=juce::jlimit(2,di::DynamicCurve::capacity,
+      (int)tree.getProperty(savedCell?key+"_count":
+       "duckDynCount_"+juce::String(t),8));
+    for(int j=0;j<dc.count;++j){
+     const auto fallbackX=j/(float)(dc.count-1);
+     dc.x[(size_t)j]=(float)tree.getProperty(savedCell?key+"_x_"+juce::String(j):
+       "duckDynX_"+juce::String(t)+"_"+juce::String(j),fallbackX);
+     dc.y[(size_t)j]=(float)tree.getProperty(savedCell?key+"_y_"+juce::String(j):
+       "duckDynY_"+juce::String(t)+"_"+juce::String(j),dc.y[(size_t)j]);
+    }
+    const auto sc=(size_t)scene,track=(size_t)t,step=(size_t)k;
+    for(int j=0;j<dc.count;++j){
+     duckDynamicX[sc][track][step][(size_t)j].store(
+      std::isfinite(dc.x[(size_t)j])?juce::jlimit(0.f,1.f,dc.x[(size_t)j]):j/(float)(dc.count-1),
+      std::memory_order_relaxed);
+     duckDynamicY[sc][track][step][(size_t)j].store(
+      std::isfinite(dc.y[(size_t)j])?juce::jlimit(0.f,1.f,dc.y[(size_t)j]):1.f,
+      std::memory_order_relaxed);
+    }
+    duckDynamicCount[sc][track][step].store(dc.count,std::memory_order_release);
+   }
   }
   setGridScene((int)tree.getProperty("gridScene",0));
   for(int t=0;t<6;++t){
    setDuckTrackDepth(t,(float)tree.getProperty("duckDepth_"+juce::String(t),1.f));
    setDuckTrackLength(t,(float)tree.getProperty("duckLength_"+juce::String(t),1.f));
-   di::DynamicCurve dc;
-   dc.count=juce::jlimit(2,di::DynamicCurve::capacity,(int)tree.getProperty("duckDynCount_"+juce::String(t),8));
-   for(int j=0;j<dc.count;++j){
-    dc.x[(size_t)j]=(float)tree.getProperty("duckDynX_"+juce::String(t)+"_"+juce::String(j),j/7.f);
-    dc.y[(size_t)j]=(float)tree.getProperty("duckDynY_"+juce::String(t)+"_"+juce::String(j),dc.y[(size_t)j]);
-   }
-   // New variable-point envelope takes priority. Do NOT call the legacy
-   // setDuckCurvePoint() afterwards: it mutates the restored dynamic nodes
-   // and can silently change the actual ducking shape after DAW reload.
-   if(tree.hasProperty("duckDynCount_"+juce::String(t))){
-    setDynamicDuckCurve(t,dc);
-   }else{
-    constexpr float shape[8]={0.f,.02f,.2f,.65f,.9f,1.f,1.f,1.f};
-    for(int j=0;j<8;++j)
-     dc.y[(size_t)j]=restored("duckCurve_"+juce::String(t)+"_"+juce::String(j),shape[j]);
-    setDynamicDuckCurve(t,dc);
-   }
-   // Keep the old eight-point cache consistent without touching the
-   // authoritative dynamic curve; legacy presets remain importable.
-   for(int j=0;j<8;++j)
-    duckCurve[(size_t)t][(size_t)j].store(
-     getDynamicDuckCurve(t).evaluate(j/7.f),std::memory_order_relaxed);
   }
   duckVoices.reset();
   state.replaceState(tree);
