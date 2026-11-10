@@ -102,7 +102,7 @@ private:
  std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> delayDivisionAttachment;
  std::array<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>,7> creativeSliderAttachments;
  std::array<std::unique_ptr<juce::TextButton>,6> laneTabs;
- std::array<std::unique_ptr<juce::TextButton>,6> cellControls; // D, RVB, DST, REV, BYPASS
+ std::array<std::unique_ptr<juce::TextButton>,7> cellControls; // D, RVB, DST, REV, BYPASS
  void refreshCellControls();
  std::unique_ptr<juce::ToggleButton> sequenceToggle;
  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> sequenceAttachment;
