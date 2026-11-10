@@ -31,11 +31,18 @@ int DISidechainProcessor::getEnvelopeNodes(std::array<EnvelopeNode,maxEnvelopeNo
 void DISidechainProcessor::setEnvelopeNodes(const std::array<EnvelopeNode,maxEnvelopeNodes>& source,int count) noexcept
 {
  count=juce::jlimit(2,maxEnvelopeNodes,count);
+ float previousX=-0.0001f;
  for(int i=0;i<count;++i) {
   const auto& v=source[(size_t)i];
-  envelopeXs[(size_t)i].store(juce::jlimit(0.f,1.f,v.x),std::memory_order_relaxed);
-  envelopeYs[(size_t)i].store(juce::jlimit(0.f,1.f,v.y),std::memory_order_relaxed);
-  envelopeCurves[(size_t)i].store(juce::jlimit(-1.f,1.f,v.curve),std::memory_order_relaxed);
+  const float safeX=std::isfinite(v.x)?v.x:(float)i/(float)(count-1);
+  const float safeY=std::isfinite(v.y)?v.y:1.f;
+  const float safeCurve=std::isfinite(v.curve)?v.curve:0.f;
+  // Ignore corrupted or unordered coordinates from malformed state/presets.
+  const float x=juce::jlimit(0.f,1.f,juce::jmax(previousX,safeX));
+  envelopeXs[(size_t)i].store(x,std::memory_order_relaxed);
+  envelopeYs[(size_t)i].store(juce::jlimit(0.f,1.f,safeY),std::memory_order_relaxed);
+  envelopeCurves[(size_t)i].store(juce::jlimit(-1.f,1.f,safeCurve),std::memory_order_relaxed);
+  previousX=x;
  }
  envelopeNodeCount.store(count,std::memory_order_release);
  envelopeRevision.fetch_add(1,std::memory_order_relaxed);
@@ -43,7 +50,7 @@ void DISidechainProcessor::setEnvelopeNodes(const std::array<EnvelopeNode,maxEnv
 float DISidechainProcessor::getEnvelopeAt(float t) const noexcept
 {
  const int count=juce::jlimit(2,maxEnvelopeNodes,envelopeNodeCount.load(std::memory_order_acquire));
- t=juce::jlimit(0.f,1.f,t);
+ t=juce::jlimit(0.f,1.f,std::isfinite(t)?t:0.f);
  float prevX=envelopeXs[0].load(std::memory_order_relaxed);
  float prevY=envelopeYs[0].load(std::memory_order_relaxed);
  if(t<=prevX)return prevY;
