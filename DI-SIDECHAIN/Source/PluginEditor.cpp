@@ -1251,8 +1251,12 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
     selectedTrack=juce::jlimit(0,5,(pos.y-top)*6/playableHeight);
     // Editing is non-destructive: a single click selects that cell's
     // unique envelope. Right-click or double-click toggles event enable.
-    if(e.mods.isRightButtonDown()||e.getNumberOfClicks()>1)
-     proc.setGridCell(selectedTrack,selectedStep,!proc.getGridCell(selectedTrack,selectedStep));
+    if(e.mods.isRightButtonDown()||e.getNumberOfClicks()>1){
+     const bool enabled=!proc.getGridCell(selectedTrack,selectedStep);
+     proc.setGridCell(selectedTrack,selectedStep,enabled);
+     if(enabled&&proc.getCellFxMask(selectedTrack,selectedStep)==0)
+      proc.setCellFxFlag(selectedTrack,selectedStep,5,true);
+    }
     selectedLane=0;
    } // SEQUENCE row selects a column, never toggles a musical event.
    refreshDuckControls();
@@ -1333,7 +1337,7 @@ void DISidechainEditor::applyFactoryPreset(int index) {
   proc.setGridScene(scene);
   for(int track=0;track<6;++track)for(int step=0;step<16;++step){
    proc.setGridCell(track,step,false);
-   for(int flag=0;flag<5;++flag)proc.setCellFxFlag(track,step,flag,false);
+   for(int flag=0;flag<6;++flag)proc.setCellFxFlag(track,step,flag,false);
   }
  }
  proc.setGridScene(0);
@@ -1351,7 +1355,10 @@ void DISidechainEditor::applyFactoryPreset(int index) {
    for(int step=0;step<16;++step)
     proc.setDynamicDuckCurve(track,step,dc,scene);
  }
- const auto event=[this](int track,int step){proc.setGridCell(track,step,true);};
+ const auto event=[this](int track,int step){
+  proc.setGridCell(track,step,true);
+  proc.setCellFxFlag(track,step,5,true);
+ };
  for(int step=0;step<lengths[index];++step){
   switch(index){
    case 0: if(step%4==0)event(0,step);break;
