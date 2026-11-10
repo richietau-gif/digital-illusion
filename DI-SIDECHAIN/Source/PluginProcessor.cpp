@@ -261,9 +261,8 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  const float fxDrive=bounded("fxDrive",0.f,24.f,0.f);
  const float fxMix=bounded("fxMix",0.f,1.f,1.f);
  // Keep filter cutoffs below Nyquist at lower host sample rates (e.g. 22.05 kHz).
- const auto cutoffs=di::safeFilterCutoffs(sr,get("low"),get("high"));
- const float lo=cutoffs.low;
- const float hi=cutoffs.high;
+ // The old selective-duck crossover is gone: VOLUME ducks full-band.
+ // LP/HP input cleanup and the sequenced FILTER FX are independent.
  const float filterRange=juce::jlimit(0.f,1.f,filterMod);
  const float sweepMin=bounded("filterSweepMin",25.f,15000.f,90.f);
  const float sweepMax=bounded("filterSweepMax",25.f,18000.f,11000.f);
@@ -308,12 +307,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  const float saturatorTarget=saturatorEnabled?1.f:0.f;
  const float fxSmoothing=std::exp(-1.f/(float)(0.01*sr));
  const float fxParameterSmoothing=std::exp(-1.f/(float)(0.005*sr));
- for(auto& c:filters){
-  c.low.setCutoffFrequency(lo);
-  c.high.setCutoffFrequency(mode==3?hi:lo);
-  c.ladderLow.setCutoff(lo,resonance);
-  c.ladderHigh.setCutoff(hi,resonance);
- }
+
  double bpm=120;
  double hostPpq=0.;bool hasPlayingPpq=false;
  if(auto* ph=getPlayHead()){
@@ -471,21 +465,9 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  const float originalInput=dry;
  dry=inputFilters[(size_t)ch].process(dry,inputHpEnabled,inputLpEnabled);
  maximumInputLevel=juce::jmax(maximumInputLevel,std::abs(originalInput));
- float wet=dry*smoothGain;
- if(mode!=0){
-  auto& f=filters[ch];
-  float affected=0.f;
-  if(analogFilter){
-   const float low=f.ladderLow.process(dry);
-   const float high=f.ladderHigh.process(dry);
-   affected=mode==1?low:mode==2?dry-low:high-low;
-  } else {
-   const float low=f.low.processSample(0,dry),high=f.high.processSample(0,dry);
-   affected=mode==1?low:mode==2?high:dry-low-high;
-  }
-  wet=dry+affected*(smoothGain-1);
- }
- float out=mode==0?di::applyDuckGain(dry,smoothGain,mix):dry+(wet-dry)*mix;
+ // Volume ducking always acts on the entire cleaned input; the FILTER
+ // modulation envelope below now has its own independent spectral FX.
+ float out=di::applyDuckGain(dry,smoothGain,mix);
  // Per-step FILTER envelope performs genuine audio filtering. The
  // dedicated INPUT HP/LP above is unaffected by these rhythm curves.
  if(filterRange>0.0001f){
