@@ -29,8 +29,8 @@ constexpr std::array<Knob,18> knobSpecs{{
  {"cutoff","Cutoff",30,614,103,67," Hz",0,false},
  {"resonance","Resonance",140,614,103,67,"",2,false},
  {"filterDrive","Drive",250,614,103,67," dB",1,false},
- {"filterMod","ENV AMOUNT",425,662,196,19," %",0,true},
- {"filterMix","FILTER MIX",425,694,196,19," %",0,true},
+ {"filterMod","ENV AMOUNT",425,662,146,19," %",0,true},
+ {"filterMix","FILTER MIX",425,694,146,19," %",0,true},
  {"colorDrive","Drive",685,614,107,67," dB",1,false},
  {"colorTone","Tone",808,614,107,67," %",0,true},
  {"colorMix","Mix",929,614,107,67," %",0,true}
@@ -391,7 +391,7 @@ void DISidechainEditor::resized() {
  b(curveShapeButton.get(),43,99,77,29);b(gridPicker.get(),725,91,122,32);
  b(combos[3].get(),399,515,132,24);
  b(syncLengthSlider.get(),276,435,84,66);
- b(attackProtectToggle.get(),551,518,120,22);
+ b(attackProtectToggle.get(),551,522,120,19);
  b(curveAmountSlider.get(),858,93,135,29);
  b(combos[0].get(),33,406,118,27);
  b(sourceInt.get(),154,406,29,27);
@@ -399,7 +399,7 @@ void DISidechainEditor::resized() {
  b(sourceMidi.get(),214,406,38,27);
  combos[1]->setVisible(false);
  b(combos[2].get(),31,521,100,21);
- b(sync.get(),274,518,112,24);
+ b(sync.get(),274,522,112,19);
  b(filterPower.get(),104,564,51,26);b(combos[4].get(),162,564,162,27);
  b(filterEnvelopePower.get(),335,564,83,27);
  b(colorPower.get(),734,564,52,27);b(combos[5].get(),795,563,255,29);
@@ -565,6 +565,9 @@ void DISidechainEditor::paint(juce::Graphics& g) {
   g.setFont(juce::Font(juce::FontOptions(size).withStyle(bold?"Bold":"Regular")));
   g.drawText(s,juce::Rectangle<float>(x,y,width,size+6.f),juce::Justification::centredLeft);
  };
+ const auto get=[this](const char* id,float def){
+  auto* p=proc.state.getRawParameterValue(id);return p?p->load():def;
+ };
  g.setColour(juce::Colour(0xff102330));g.fillRect(0.f,0.f,W,67.f);
  // Vector logo - original Digital Illusion pulse icon, no image dependency.
  juce::Path logo;logo.startNewSubPath(15,34);
@@ -594,9 +597,7 @@ void DISidechainEditor::paint(juce::Graphics& g) {
   g.setColour(juce::Colour(0xff283847));g.drawLine(gx0,y,gx1,y,.7f);
   label(juce::String(1.f-(float)i*.25f,2),36,y-5,34,9,muted);
  }
- const auto get=[this](const char* id,float def){
-  auto* p=proc.state.getRawParameterValue(id);return p?p->load():def;
- };
+
  const float depth=clamp(get("depth",1.f));
  const float offset=juce::jlimit(-1.f,1.f,get("timeOffset",0.f));
  const float attack=clamp(get("attackProtection",0.f));
@@ -649,10 +650,10 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  // Mid row: Trigger, Timing, Envelope, Mix.
  panelBox(14,365,240,178);panelBox(262,365,276,178);
  panelBox(546,365,260,178);panelBox(814,365,272,178);
- label("◉  TRIGGER",30,372,212,13,cyan,true);
- label("◷  TIMING",278,372,250,13,cyan,true);
- label("∿  ENVELOPE",558,372,244,13,cyan,true);
- label("◉  MIX",830,372,245,13,cyan,true);
+ label("TRIGGER",30,372,212,14,cyan,true);
+ label("TIMING",278,372,250,14,cyan,true);
+ label("ENVELOPE",558,372,244,14,cyan,true);
+ label("MIX",830,372,245,14,cyan,true);
  const auto valueText=[&](const Knob& spec)->juce::String {
   const float value=get(spec.id,0.f);
   if(spec.percent)return juce::String(juce::roundToInt(value*100.f))+"%";
@@ -677,7 +678,7 @@ void DISidechainEditor::paint(juce::Graphics& g) {
   } else valueBadge(valueText(spec),spec.x,spec.y+68,spec.w);
  }
  label("SOURCE",158,389,80,9,muted);
- label("DETECTOR",34,502,106,9,muted);
+ // The detector selector includes its own current mode; avoid covering the value badge.
  
  // Bottom row: large filter and COLOR.
  panelBox(14,551,628,177);panelBox(651,551,435,177);
@@ -718,5 +719,5 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  }
  label("20",446,644,30,9,muted);label("1k",516,644,30,9,muted);
  label("20k",585,644,40,9,muted);
- label("DIGITAL ILLUSION • PRECISION SIDECHAIN 1.0",16,728,500,9,muted);
+ label("DIGITAL ILLUSION - PRECISION SIDECHAIN 1.0",16,728,500,9,muted);
 }
