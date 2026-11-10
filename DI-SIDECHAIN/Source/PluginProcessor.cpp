@@ -515,9 +515,22 @@ void DISidechainProcessor::setStateInformation(const void* data,int bytes){
     dc.x[(size_t)j]=(float)tree.getProperty("duckDynX_"+juce::String(t)+"_"+juce::String(j),j/7.f);
     dc.y[(size_t)j]=(float)tree.getProperty("duckDynY_"+juce::String(t)+"_"+juce::String(j),dc.y[(size_t)j]);
    }
-   setDynamicDuckCurve(t,dc);
-   constexpr float shape[8]={0.f,.02f,.2f,.65f,.9f,1.f,1.f,1.f};
-   for(int j=0;j<8;++j)setDuckCurvePoint(t,j,(float)tree.getProperty("duckCurve_"+juce::String(t)+"_"+juce::String(j),shape[j]));
+   // New variable-point envelope takes priority. Do NOT call the legacy
+   // setDuckCurvePoint() afterwards: it mutates the restored dynamic nodes
+   // and can silently change the actual ducking shape after DAW reload.
+   if(tree.hasProperty("duckDynCount_"+juce::String(t))){
+    setDynamicDuckCurve(t,dc);
+   }else{
+    constexpr float shape[8]={0.f,.02f,.2f,.65f,.9f,1.f,1.f,1.f};
+    for(int j=0;j<8;++j)
+     dc.y[(size_t)j]=restored("duckCurve_"+juce::String(t)+"_"+juce::String(j),shape[j]);
+    setDynamicDuckCurve(t,dc);
+   }
+   // Keep the old eight-point cache consistent without touching the
+   // authoritative dynamic curve; legacy presets remain importable.
+   for(int j=0;j<8;++j)
+    duckCurve[(size_t)t][(size_t)j].store(
+     getDynamicDuckCurve(t).evaluate(j/7.f),std::memory_order_relaxed);
   }
   duckVoices.reset();
   state.replaceState(tree);
