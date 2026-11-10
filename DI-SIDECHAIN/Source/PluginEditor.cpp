@@ -913,7 +913,7 @@ void DISidechainEditor::paint(juce::Graphics& g) {
        {38,536,150,27},19,colour,true);
   paintShape(g,detailGraph,selectedStep,true);
   text(g,selectedLane==0?
-     "Drag: move  ·  Double-click: add point  ·  Right-click: remove point":
+     "Drag: move  ·  Double-click: add  ·  Right-click / Alt+click: remove":
      "Drag a point to edit the selected modulation curve",
        {229,667,625,15},11,faint);
   for(int i=0;i<9;++i){
@@ -1288,10 +1288,11 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
   const float my=e.position.y/uiScale-detailGraph.getY();
   const float tx=juce::jlimit(0.f,1.f,mx/(float)juce::jmax(1,detailGraph.getWidth()));
   const float ty=juce::jlimit(0.f,1.f,1.f-my/(float)juce::jmax(1,detailGraph.getHeight()));
+  const bool removing=e.mods.isRightButtonDown()||e.mods.isAltDown();
   const int nearest=di::CurveHit::nearest(c,mx,my,(float)detailGraph.getWidth(),
-      (float)detailGraph.getHeight(),uiScale,e.mods.isRightButtonDown());
-  if(e.mods.isRightButtonDown()){
-   // A single RIGHT click reliably removes a visible interior point;
+      (float)detailGraph.getHeight(),uiScale,removing);
+  if(removing){
+   // Right click OR Alt+click removes a visible interior point;
    // endpoints remain anchored. Ignore clicks not targeting a handle.
    auto before=c;
    if(nearest>=0&&c.erase(nearest)){
