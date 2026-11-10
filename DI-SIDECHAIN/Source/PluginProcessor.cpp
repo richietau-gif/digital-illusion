@@ -93,10 +93,11 @@ DISidechainProcessor::DISidechainProcessor():AudioProcessor(BusesProperties().wi
    }
  }
 }
-di::DynamicCurve DISidechainProcessor::getDynamicDuckCurve(int track,int step) const noexcept {
+di::DynamicCurve DISidechainProcessor::getDynamicDuckCurve(int track,int step,int selectedScene) const noexcept {
  di::DynamicCurve c;
  if(track<0||track>=gridTracks||step<0||step>=gridSteps)return c;
- const auto scene=(size_t)getGridScene(),t=(size_t)track,k=(size_t)step;
+ const auto scene=(size_t)(selectedScene<0?getGridScene():juce::jlimit(0,gridScenes-1,selectedScene)),
+  t=(size_t)track,k=(size_t)step;
  c.count=juce::jlimit(2,di::DynamicCurve::capacity,
    duckDynamicCount[scene][t][k].load(std::memory_order_acquire));
  for(int i=0;i<c.count;++i){
@@ -105,7 +106,7 @@ di::DynamicCurve DISidechainProcessor::getDynamicDuckCurve(int track,int step) c
  }
  return c;
 }
-void DISidechainProcessor::setDynamicDuckCurve(int track,int step,const di::DynamicCurve& c) noexcept {
+void DISidechainProcessor::setDynamicDuckCurve(int track,int step,const di::DynamicCurve& c,int selectedScene) noexcept {
  if(track<0||track>=gridTracks||step<0||step>=gridSteps||
     c.count<2||c.count>di::DynamicCurve::capacity)return;
  const auto scene=(size_t)getGridScene(),t=(size_t)track,k=(size_t)step;
@@ -561,7 +562,6 @@ void DISidechainProcessor::setStateInformation(const void* data,int bytes){
     // Clean new-format presets store their curves per scene/track/step.
     // For older files we migrate the former per-track shape to every cell.
     const bool savedCell=tree.hasProperty(key+"_count");
-    const juce::String legacy="duckDyn"+juce::String();
     dc.count=juce::jlimit(2,di::DynamicCurve::capacity,
       (int)tree.getProperty(savedCell?key+"_count":
        "duckDynCount_"+juce::String(t),8));
