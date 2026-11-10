@@ -39,11 +39,13 @@ private:
  int renderQuality=1;
  std::unique_ptr<juce::TextButton> copyStep, pasteStep, resetStep, undoButton, redoButton, snapButton;
  struct ShapeEdit {int step;bool sequence;di::ShapeSequencer::Shape before,after;
-  bool dynamic=false;di::DynamicCurve beforeDynamic{},afterDynamic{};};
+  bool dynamic=false;int cellStep=0,scene=0;di::DynamicCurve beforeDynamic{},afterDynamic{};};
  std::vector<ShapeEdit> undoStack, redoStack;
  di::ShapeSequencer::Shape dragBefore{};
  di::DynamicCurve dragDynamicBefore{};
- void pushDynamicEdit(int track,const di::DynamicCurve& before,const di::DynamicCurve& after);
+ void pushDynamicEdit(int track,int step,const di::DynamicCurve& before,const di::DynamicCurve& after);
+ int dragCellStep=0;
+ int dragScene=0;
  bool draggingShape=false;
  int dragStep=0;
  int dragNode=-1;
