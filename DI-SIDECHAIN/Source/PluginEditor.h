@@ -74,6 +74,7 @@ private:
  unsigned knownRevision=0;
  int draggedNode=-1;
  float dragStartCurve=0.f;
+ juce::Point<float> dragGrabOffset{0.f,0.f};
  bool changeCurve=false, controlsReady=false;
  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DISidechainEditor)
 };
