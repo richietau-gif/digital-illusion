@@ -61,7 +61,7 @@ private:
  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> syncAttachment,bypassAttachment,filterAttachment,filterEnvelopeAttachment,colorAttachment,attackProtectAttachment;
  juce::ValueTree snapshots[2];
  CurveState snapshotCurves[2];
- std::unique_ptr<juce::FileChooser> presetFileChooser;
+ std::unique_ptr<juce::FileChooser> presetFileChooser,presetLoadChooser;
  enum class EditTool { select, bend, erase };
  EditTool editTool=EditTool::select;
  void selectEditTool(EditTool);
