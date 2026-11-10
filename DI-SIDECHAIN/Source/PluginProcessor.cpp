@@ -20,7 +20,7 @@ DISidechainProcessor::DISidechainProcessor():AudioProcessor(BusesProperties().wi
  applyPreset(0);
 }
 bool DISidechainProcessor::isBusesLayoutSupported(const BusesLayout& b) const{return b.getMainInputChannelSet()==juce::AudioChannelSet::stereo()&&b.getMainOutputChannelSet()==juce::AudioChannelSet::stereo();}
-void DISidechainProcessor::prepareToPlay(double s,int n){sr=s;maxBlock=n; delaySamples=(int)std::ceil(state.getRawParameterValue("lookahead")->load()*0.001f*sr); delaySamples=juce::jlimit(0,192000,delaySamples);setLatencySamples(delaySamples);delayWrite=0;colorToneLow={0.f,0.f};phase=1;gain=1;detector=0;holdoff=0;for(auto& f:filters){juce::dsp::ProcessSpec sp{s,(juce::uint32)n,1};f.prepare(sp);f.reset();f.animated.setResonance(0.707f);f.animated.setCutoffFrequency(800.f);}}
+void DISidechainProcessor::prepareToPlay(double s,int n){sr=s;maxBlock=n; delaySamples=(int)std::ceil(state.getRawParameterValue("lookahead")->load()*0.001f*sr); delaySamples=juce::jlimit(0,192000,delaySamples);setLatencySamples(delaySamples);delayWrite=0;colorToneLow={0.f,0.f};phase=1;gain=1;detector=0;holdoff=0;for(auto& f:filters){juce::dsp::ProcessSpec sp{s,(juce::uint32)n,1};f.prepare(sp);f.reset();for(auto* a:{&f.animated,&f.animated2,&f.animated3,&f.animated4}){a->setResonance(.707f);a->setCutoffFrequency(800.f);}}}
 int DISidechainProcessor::getEnvelopeNodes(std::array<EnvelopeNode,maxEnvelopeNodes>& target) const noexcept
 {
  const int count=juce::jlimit(2,maxEnvelopeNodes,envelopeNodeCount.load(std::memory_order_acquire));
@@ -73,19 +73,40 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& b,juce::MidiBu
  const float colorMix=juce::jlimit(0.f,1.f,val("colorMix"));
  const float filterDrive=juce::Decibels::decibelsToGain(val("filterDrive"));
  const float outputGain=juce::Decibels::decibelsToGain(val("output"));
- auto blockLp=juce::dsp::IIR::Coefficients<float>::makeLowPass(sr,blockCut,q); auto blockHp=juce::dsp::IIR::Coefficients<float>::makeHighPass(sr,blockCut,q); for(auto& f:filters){ f.a.coefficients=blockLp; f.b.coefficients=blockHp; } for(int i=0;i<n;++i){bool note=false;while(has&&mp<=i){note=mm.isNoteOn()&&mm.getVelocity()>0;has=mi.getNextEvent(mm,mp);}float sv=0;if((int)val("detectorSource")!=1 && side.getNumChannels()>0)sv=std::max(std::abs(side.getSample(0,i)),side.getNumChannels()>1?std::abs(side.getSample(1,i)):0.f); else sv=std::max(std::abs(main.getSample(0,i)),std::abs(main.getSample(1,i)));detector=std::max(sv,detector*0.995f);if(detector<threshold*.65f)gateArmed=true;bool audio=gateArmed&&detector>=threshold;if(audio)gateArmed=false;bool fire=(trig==0?audio:trig==1?note:(audio||note))&&holdoff<=0;if(fire){phase=0;holdoff=hold;triggerActivity.store(1.f);}if(holdoff>0)--holdoff;triggerActivity.store(triggerActivity.load()*.995f);float t=juce::jlimit(0.f,1.f,phase+offset);float e=phase>=1?1:envelope(t);if(attack>0)e=std::max(e,attack*(1.f-phase));float target=1.f-depth*(1.f-e);const float c=std::exp(-1.f/(std::max(.0001f,val("smooth"))*.001f*sr));gain=c*gain+(1-c)*target;phase=juce::jmin(1.f,phase+1.f/juce::jmax(1.f,len));for(int ch=0;ch<2;++ch){float dry=main.getSample(ch,i);const int readIndex=(delayWrite+192001-delaySamples)%192001; float delayed=(delaySamples==0?dry:delay[readIndex][ch]);delay[delayWrite][ch]=dry;float wet=delayed*gain;float out=bypass?delayed:delayed+(wet-delayed)*mix;if(!bypass){auto& f=filters[ch];
+ auto blockLp=juce::dsp::IIR::Coefficients<float>::makeLowPass(sr,blockCut,q); auto blockHp=juce::dsp::IIR::Coefficients<float>::makeHighPass(sr,blockCut,q); for(auto& f:filters){
+ f.a.coefficients=(model==5?blockHp:blockLp);
+ f.b.coefficients=(model==2?blockLp:blockHp);
+ f.c.coefficients=(model==4||model==5?blockHp:blockLp);
+ f.d.coefficients=(model==5?blockHp:blockLp);
+} for(int i=0;i<n;++i){bool note=false;while(has&&mp<=i){note=mm.isNoteOn()&&mm.getVelocity()>0;has=mi.getNextEvent(mm,mp);}float sv=0;if((int)val("detectorSource")!=1 && side.getNumChannels()>0)sv=std::max(std::abs(side.getSample(0,i)),side.getNumChannels()>1?std::abs(side.getSample(1,i)):0.f); else sv=std::max(std::abs(main.getSample(0,i)),std::abs(main.getSample(1,i)));detector=std::max(sv,detector*0.995f);if(detector<threshold*.65f)gateArmed=true;bool audio=gateArmed&&detector>=threshold;if(audio)gateArmed=false;bool fire=(trig==0?audio:trig==1?note:(audio||note))&&holdoff<=0;if(fire){phase=0;holdoff=hold;triggerActivity.store(1.f);}if(holdoff>0)--holdoff;triggerActivity.store(triggerActivity.load()*.995f);float t=juce::jlimit(0.f,1.f,phase+offset);float e=phase>=1?1:envelope(t);if(attack>0)e=std::max(e,attack*(1.f-phase));float target=1.f-depth*(1.f-e);const float c=std::exp(-1.f/(std::max(.0001f,val("smooth"))*.001f*sr));gain=c*gain+(1-c)*target;phase=juce::jmin(1.f,phase+1.f/juce::jmax(1.f,len));for(int ch=0;ch<2;++ch){float dry=main.getSample(ch,i);const int readIndex=(delayWrite+192001-delaySamples)%192001; float delayed=(delaySamples==0?dry:delay[readIndex][ch]);delay[delayWrite][ch]=dry;float wet=delayed*gain;float out=bypass?delayed:delayed+(wet-delayed)*mix;if(!bypass){auto& f=filters[ch];
  float filtered=f.a.processSample(out);
+ if(model==1)filtered=f.c.processSample(filtered);
+ if(model==2){filtered=f.b.processSample(filtered);filtered=f.c.processSample(filtered);filtered=f.d.processSample(filtered);}
  if(filterOn && envOn && std::abs(filterDepth)>0.0001f)
  {
      const float modulatedHz=juce::jlimit(20.f,(float)(sr*.45),blockCut*std::exp2(4.f*filterDepth*(1.f-e)));
-     f.animated.setCutoffFrequency(modulatedHz);
-     f.animated.setResonance(juce::jlimit(.15f,8.f,1.f+val("resonance")*7.f));
-     f.animated.setType(model>=3&&model<=5?juce::dsp::StateVariableTPTFilterType::highpass:
-                        model==6?juce::dsp::StateVariableTPTFilterType::bandpass:
-                        juce::dsp::StateVariableTPTFilterType::lowpass);
+     const auto newType=model>=3&&model<=5?juce::dsp::StateVariableTPTFilterType::highpass:
+                         model==6?juce::dsp::StateVariableTPTFilterType::bandpass:
+                         juce::dsp::StateVariableTPTFilterType::lowpass;
+     const float resonance=juce::jlimit(.15f,8.f,1.f+val("resonance")*7.f);
+     for(auto* stage:{&f.animated,&f.animated2,&f.animated3,&f.animated4}){
+      stage->setCutoffFrequency(modulatedHz);
+      stage->setResonance(resonance);
+      stage->setType(newType);
+     }
      filtered=f.animated.processSample(0,out);
+     if(model==1||model==4)filtered=f.animated2.processSample(0,filtered);
+     if(model==2||model==5){
+      filtered=f.animated2.processSample(0,filtered);
+      filtered=f.animated3.processSample(0,filtered);
+      filtered=f.animated4.processSample(0,filtered);
+     }
  }
- elseif(model>=3){float h=f.b.processSample(out);if(model>=3&&model<=5){ filtered=h; } else if(model==6){ filtered=0.5f*(filtered+h); } else if(model==7){ filtered=filtered-h; } else if(model==8){ filtered=std::tanh(filtered*juce::Decibels::decibelsToGain(val("filterDrive"))); } else if(model==9){ filtered=std::tanh((filtered+h)*1.5f)-0.5f*h; } else if(model==10){ filtered=std::sin(filtered*juce::Decibels::decibelsToGain(val("filterDrive"))); } else if(model==11){ filtered=std::tanh(filtered*3.f)+0.25f*h; } else if(model>=12){ filtered=std::tanh((filtered-h)*juce::Decibels::decibelsToGain(val("filterDrive"))); }}if(filterOn)out=out+(filtered-out)*filterMix;
+ elseif(model>=3){float h=f.b.processSample(out);if(model>=3&&model<=5){
+  filtered=h;
+  if(model>=4)filtered=f.c.processSample(filtered);
+  if(model==5){filtered=f.d.processSample(filtered);filtered=f.a.processSample(filtered);}
+ } else if(model==6){ filtered=0.5f*(filtered+h); } else if(model==7){ filtered=filtered-h; } else if(model==8){ filtered=std::tanh(filtered*juce::Decibels::decibelsToGain(val("filterDrive"))); } else if(model==9){ filtered=std::tanh((filtered+h)*1.5f)-0.5f*h; } else if(model==10){ filtered=std::sin(filtered*juce::Decibels::decibelsToGain(val("filterDrive"))); } else if(model==11){ filtered=std::tanh(filtered*3.f)+0.25f*h; } else if(model>=12){ filtered=std::tanh((filtered-h)*juce::Decibels::decibelsToGain(val("filterDrive"))); }}if(filterOn)out=out+(filtered-out)*filterMix;
  float cd=val("colorDrive");
  if(colorOn&&colorMix>0.f){
   float coloured=colour(out,color,cd);
