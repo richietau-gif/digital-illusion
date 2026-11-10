@@ -18,7 +18,7 @@ public:
   reset();
  }
  void reset() noexcept {
-  write=0;inputGate=0.f;lastSeconds=-1.;lastTap=1;
+  write=0;inputGate=0.f;dryGain=1.f;lastSeconds=-1.;lastTap=1;
   for(auto& b:buffer)std::fill(b.begin(),b.end(),0.f);
  }
  void process(float& left,float& right,bool enabled,float wet,float feedback,
@@ -46,14 +46,19 @@ public:
   buffer[0][write]=std::clamp(inL*inputGate+fb*(pingpong?dr:dl),-16.f,16.f);
   buffer[1][write]=std::clamp(inR*inputGate+fb*(pingpong?dl:dr),-16.f,16.f);
   if(++write==n)write=0;
-  left=inL+dl*w;
-  right=inR+dr*w;
+  // Wet is a real dry/wet crossfade while the step is active, not merely
+  // an additive echo send. When the step closes, restore full dry audio
+  // while feedback tails remain audible and decay naturally.
+  const float targetDry=enabled?1.f-w:1.f;
+  dryGain+=fadeCoeff*(targetDry-dryGain);
+  left=inL*dryGain+dl*w;
+  right=inR*dryGain+dr*w;
  }
 private:
  double sr=44100.;
  std::array<std::vector<float>,2> buffer;
  size_t write=0;
- float inputGate=0.f,fadeCoeff=.01f;
+ float inputGate=0.f,dryGain=1.f,fadeCoeff=.01f;
  double lastSeconds=-1.;
  size_t lastTap=1;
 };
