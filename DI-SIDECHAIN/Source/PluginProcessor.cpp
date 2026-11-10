@@ -1,4 +1,7 @@
 #include "PluginProcessor.h"
+#include "CellFxRouting.h"
+#include "DuckGain.h"
+#include "SoundModulation.h"
 #include "PluginEditor.h"
 #include "FxWaveshaper.h"
 #include "FxWetMix.h"
@@ -11,6 +14,22 @@
 static juce::AudioProcessorValueTreeState::ParameterLayout layoutParams(){
  std::vector<std::unique_ptr<juce::RangedAudioParameter>> p;
  auto f=[&](const char* id,const char* name,float lo,float hi,float def){p.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{id,1},name,juce::NormalisableRange<float>(lo,hi),def));};
+ // Musical filter sweeps: FILTER lane envelope controls the actual cutoff.
+ {juce::NormalisableRange<float> range(25.f,15000.f);range.setSkewForCentre(180.f);
+  p.push_back(std::make_unique<juce::AudioParameterFloat>(
+   juce::ParameterID{"filterSweepMin",1},"Filter sweep minimum Hz",range,90.f));}
+ {juce::NormalisableRange<float> range(25.f,18000.f);range.setSkewForCentre(3000.f);
+  p.push_back(std::make_unique<juce::AudioParameterFloat>(
+   juce::ParameterID{"filterSweepMax",1},"Filter sweep maximum Hz",range,11000.f));}
+ // Input cleanup is a separate pre-FX HP/LP rack, not an envelope lane.
+ p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"inputHpEnabled",1},"Input high-pass",false));
+ p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"inputLpEnabled",1},"Input low-pass",false));
+ {juce::NormalisableRange<float> range(20.f,2000.f);range.setSkewForCentre(110.f);
+  p.push_back(std::make_unique<juce::AudioParameterFloat>(
+   juce::ParameterID{"inputHpHz",1},"Input HP cutoff Hz",range,35.f));}
+ {juce::NormalisableRange<float> range(500.f,18000.f);range.setSkewForCentre(6000.f);
+  p.push_back(std::make_unique<juce::AudioParameterFloat>(
+   juce::ParameterID{"inputLpHz",1},"Input LP cutoff Hz",range,17000.f));}
  f("depth","Depth",0,1,1); f("mix","Mix",0,1,1);f("threshold","Trigger threshold dB",-60,0,-22);f("length","Envelope milliseconds",10,2000,250);f("smooth","Smoothing milliseconds",0.1,20,2);
  {juce::NormalisableRange<float> range(25.f,15000.f);
   range.setSkewForCentre(430.f);
@@ -18,20 +37,31 @@ static juce::AudioProcessorValueTreeState::ParameterLayout layoutParams(){
  {juce::NormalisableRange<float> range(60.f,18000.f);
   range.setSkewForCentre(2200.f);
   p.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{"high",1},"Upper frequency edge",range,400.f));}f("retrigger","Trigger holdoff milliseconds",1,250,35);f("shapeOffset","Shape vertical offset",-1,1,0);f("panMod","Pan modulation amount",-1,1,0);f("filterMod","Filter modulation amount",0,1,0);f("fxDrive","Legacy FX drive dB",0,24,0);f("saturatorDrive","Saturator drive dB",0,24,0);f("fxMix","FX wet mix",0,1,1);
- p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"mode",1},"Frequency mode",juce::StringArray{"Full","Low","High","Band"},0));
+ p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"mode",1},"FILTER FX type",juce::StringArray{"Lowpass","Highpass","Bandpass","Notch"},0));
+ p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"filterModel",1},
+  "Filter character",juce::StringArray{"Clean","Analog Ladder"},0));
+ f("ladderResonance","Ladder resonance",0.f,.95f,.25f);
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"trigger",1},"Trigger mode",juce::StringArray{"Audio + MIDI","Audio only","MIDI only"},0));
- p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"sequenceEnabled",1},"Shape sequencer enabled",true));
- p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"creativeGridEnabled",1},"Creative track sequencer enabled",true));
+
+
  p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"reverbEnabled",1},"Reverb enabled",false));
  p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"distortEnabled",1},"Distortion enabled",false));
  p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"reverbReverse",1},"Reverse before reverb",false));
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"reverbModel",1},"Reverb model",juce::StringArray{"Room","Plate","Hall","Ambient","Space"},0));
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"distortModel",1},"Distortion model",juce::StringArray{"Warm","Acid","Clip","Fold","Modern"},0));
  f("reverbWet","Reverb wet",0,1,.3f); f("reverbLength","Reverb length",.1f,8.f,3.f);
- f("reverbDecay","Reverb decay",0,1,.6f);
+ f("reverbDecay","Reverb decay time (approx seconds)",.2f,12.f,3.f);
  f("distortWet","Distortion wet",0,1,.4f); f("distortDrive","Distortion drive dB",0,24,8);
  f("reverbPreDelay","Reverb predelay ms",0,250,35);
  f("distortTone","Distortion tone",0,1,.7f);
+ p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"delayEnabled",1},"Delay enabled",false));
+ p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"delaySync",1},"Delay tempo sync",true));
+ p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"delayPingpong",1},"Delay ping pong",false));
+ p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"delayDivision",1},
+  "Delay note division",juce::StringArray{"1/32","1/16","1/8","1/8 dotted","1/4","1/4 dotted","1/2","1 bar"},2));
+ f("delayTime","Delay time ms",5.f,2000.f,375.f);
+ f("delayFeedback","Delay feedback",0.f,.95f,.35f);
+ f("delayWet","Delay wet",0.f,1.f,.3f);
 
  p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"fxEnabled",1},"FX enabled",false));
  p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"saturatorEnabled",1},"Independent saturator enabled",false));
@@ -40,7 +70,7 @@ static juce::AudioProcessorValueTreeState::ParameterLayout layoutParams(){
  p.push_back(std::make_unique<juce::AudioParameterInt>(juce::ParameterID{"sequenceSteps",1},"Sequence steps",1,16,16));
  p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"sync",1},"Tempo sync",true));
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"division",1},"Beat division",juce::StringArray{"1/32","1/16","1/8","1/4","1/2","1 bar","2 bars"},2));
- // Editor-only settings persist in the host project and user .dipreset files.
+ // Editor-only settings persist in the host project and user .diseqfx files.
  // New instances start at the compact 75% layout; restored host state still
  // overrides this default and therefore preserves existing projects.
  p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"uiScale",1},"UI scale",juce::StringArray{"50%","75%","100%"},1));
@@ -60,15 +90,57 @@ DISidechainProcessor::DISidechainProcessor():AudioProcessor(BusesProperties().wi
   cell.store(0,std::memory_order_relaxed);
  // An empty grid appears broken on first insertion. Scene A starts as a
  // familiar four-on-the-floor duck, while scenes B-D remain blank.
- for(int step=0;step<gridSteps;step+=4)
+ for(int step=0;step<gridSteps;step+=4){
   sceneCells[0][0][(size_t)step].store(true,std::memory_order_relaxed);
+  sceneCellFx[0][0][(size_t)step].store(1<<5,std::memory_order_relaxed);
+ }
  state.state.setProperty("presetName","Classic Duck",nullptr);
  for(int t=0;t<6;++t){
   duckDepth[(size_t)t].store(1.f,std::memory_order_relaxed);
   duckLength[(size_t)t].store(1.f,std::memory_order_relaxed);
   constexpr float defaultShape[8]={0.f,.02f,.2f,.65f,.9f,1.f,1.f,1.f};
   for(int j=0;j<8;++j)duckCurve[(size_t)t][(size_t)j].store(defaultShape[j],std::memory_order_relaxed);
+  di::DynamicCurve dynamic;
+  for(int scene=0;scene<gridScenes;++scene)
+   for(int step=0;step<gridSteps;++step){
+    duckDynamicCount[(size_t)scene][(size_t)t][(size_t)step].store(dynamic.count,std::memory_order_relaxed);
+    for(int j=0;j<di::DynamicCurve::capacity;++j){
+     duckDynamicX[(size_t)scene][(size_t)t][(size_t)step][(size_t)j].store(dynamic.x[(size_t)j],std::memory_order_relaxed);
+     duckDynamicY[(size_t)scene][(size_t)t][(size_t)step][(size_t)j].store(dynamic.y[(size_t)j],std::memory_order_relaxed);
+    }
+   }
  }
+}
+di::DynamicCurve DISidechainProcessor::getDynamicDuckCurve(int track,int step,int selectedScene) const noexcept {
+ di::DynamicCurve c;
+ if(track<0||track>=gridTracks||step<0||step>=gridSteps)return c;
+ const auto scene=(size_t)(selectedScene<0?getGridScene():juce::jlimit(0,gridScenes-1,selectedScene)),
+  t=(size_t)track,k=(size_t)step;
+ c.count=juce::jlimit(2,di::DynamicCurve::capacity,
+   duckDynamicCount[scene][t][k].load(std::memory_order_acquire));
+ for(int i=0;i<c.count;++i){
+  c.x[(size_t)i]=duckDynamicX[scene][t][k][(size_t)i].load(std::memory_order_relaxed);
+  c.y[(size_t)i]=duckDynamicY[scene][t][k][(size_t)i].load(std::memory_order_relaxed);
+ }
+ return c;
+}
+void DISidechainProcessor::setDynamicDuckCurve(int track,int step,const di::DynamicCurve& c,int selectedScene) noexcept {
+ if(track<0||track>=gridTracks||step<0||step>=gridSteps||
+    c.count<2||c.count>di::DynamicCurve::capacity)return;
+ const auto scene=(size_t)getGridScene(),t=(size_t)track,k=(size_t)step;
+ float previous=0.f;
+ for(int i=0;i<c.count;++i){
+  float time=i==0?0.f:i==c.count-1?1.f:
+    (std::isfinite(c.x[(size_t)i])?c.x[(size_t)i]:(float)i/(c.count-1));
+  if(i>0&&i<c.count-1)
+   time=juce::jlimit(previous+.015f,1.f-(c.count-1-i)*.015f,time);
+  previous=time;
+  const float y=std::isfinite(c.y[(size_t)i])?
+   juce::jlimit(0.f,1.f,c.y[(size_t)i]):1.f;
+  duckDynamicX[scene][t][k][(size_t)i].store(time,std::memory_order_relaxed);
+  duckDynamicY[scene][t][k][(size_t)i].store(y,std::memory_order_relaxed);
+ }
+ duckDynamicCount[scene][t][k].store(c.count,std::memory_order_release);
 }
 void DISidechainProcessor::setDuckTrackDepth(int t,float v) noexcept {
  if(t>=0&&t<6&&std::isfinite(v))duckDepth[(size_t)t].store(juce::jlimit(0.f,1.f,v),std::memory_order_relaxed);
@@ -83,25 +155,27 @@ float DISidechainProcessor::getDuckTrackLength(int t) const noexcept {
  return t>=0&&t<6?duckLength[(size_t)t].load(std::memory_order_relaxed):1.f;
 }
 void DISidechainProcessor::setDuckCurvePoint(int t,int j,float v) noexcept {
- if(t>=0&&t<6&&j>=0&&j<8&&std::isfinite(v))
+ if(t>=0&&t<6&&j>=0&&j<8&&std::isfinite(v)){
   duckCurve[(size_t)t][(size_t)j].store(juce::jlimit(0.f,1.f,v),std::memory_order_relaxed);
+  // Legacy track curve cache; independent step envelopes are untouched.
+ }
 }
 float DISidechainProcessor::getDuckCurvePoint(int t,int j) const noexcept {
- return t>=0&&t<6&&j>=0&&j<8?duckCurve[(size_t)t][(size_t)j].load(std::memory_order_relaxed):1.f;
+ return t>=0&&t<6&&j>=0&&j<8?getDynamicDuckCurve(t,0).evaluate(j/7.f):1.f;
 }
 void DISidechainProcessor::setCellFxFlag(int track,int step,int flag,bool enabled) noexcept {
- if(track<0||track>=6||step<0||step>=gridSteps||flag<0||flag>3)return;
+ if(track<0||track>=6||step<0||step>=gridSteps||flag<0||flag>5)return;
  auto& bits=sceneCellFx[(size_t)getGridScene()][(size_t)track][(size_t)step];
  const int mask=1<<flag;
  if(enabled)bits.fetch_or(mask,std::memory_order_relaxed);
  else bits.fetch_and(~mask,std::memory_order_relaxed);
 }
 bool DISidechainProcessor::getCellFxFlag(int track,int step,int flag) const noexcept {
- return flag>=0&&flag<4&&(getCellFxMask(track,step)&(1<<flag))!=0;
+ return flag>=0&&flag<6&&(getCellFxMask(track,step)&(1<<flag))!=0;
 }
 int DISidechainProcessor::getCellFxMask(int track,int step) const noexcept {
  if(track<0||track>=6||step<0||step>=gridSteps)return 0;
- return sceneCellFx[(size_t)getGridScene()][(size_t)track][(size_t)step].load(std::memory_order_relaxed)&15;
+ return sceneCellFx[(size_t)getGridScene()][(size_t)track][(size_t)step].load(std::memory_order_relaxed)&63;
 }
 void DISidechainProcessor::setGridScene(int scene) noexcept {
  activeGridScene.store(juce::jlimit(0,gridScenes-1,scene),std::memory_order_release);
@@ -120,6 +194,19 @@ void DISidechainProcessor::copyGridScene(int source,int destination) noexcept {
  for(int k=0;k<gridSteps;++k)
   sceneReverseCells[(size_t)destination][(size_t)k].store(
    sceneReverseCells[(size_t)source][(size_t)k].load(std::memory_order_relaxed),std::memory_order_relaxed);
+ // Scene copy must copy the exact envelope in every cell as well as its
+ // on/off flags. Otherwise identical-looking scenes play different shapes.
+ for(int t=0;t<gridTracks;++t)for(int k=0;k<gridSteps;++k){
+  const auto src=(size_t)source,dst=(size_t)destination,track=(size_t)t,step=(size_t)k;
+  const int count=duckDynamicCount[src][track][step].load(std::memory_order_acquire);
+  for(int node=0;node<juce::jlimit(2,di::DynamicCurve::capacity,count);++node){
+   duckDynamicX[dst][track][step][(size_t)node].store(
+    duckDynamicX[src][track][step][(size_t)node].load(std::memory_order_relaxed),std::memory_order_relaxed);
+   duckDynamicY[dst][track][step][(size_t)node].store(
+    duckDynamicY[src][track][step][(size_t)node].load(std::memory_order_relaxed),std::memory_order_relaxed);
+  }
+  duckDynamicCount[dst][track][step].store(count,std::memory_order_release);
+ }
 }
 void DISidechainProcessor::setGridReverse(int step,bool enabled) noexcept {
  if(step>=0&&step<gridSteps)
@@ -147,7 +234,7 @@ float DISidechainProcessor::getModulationPoint(int lane,int step,int node) const
   ?modulationPoints[lane][step][node].load(std::memory_order_relaxed):(lane==1?0.5f:1.f);
 }
 bool DISidechainProcessor::isBusesLayoutSupported(const BusesLayout& b) const {return b.getMainInputChannelSet()==juce::AudioChannelSet::stereo()&&b.getMainOutputChannelSet()==juce::AudioChannelSet::stereo()&&(b.inputBuses.size()<2||b.inputBuses[1].isDisabled()||b.inputBuses[1]==juce::AudioChannelSet::mono()||b.inputBuses[1]==juce::AudioChannelSet::stereo());}
-void DISidechainProcessor::prepareToPlay(double sampleRate,int maxBlock){sr=sampleRate;creativeFx.prepare(sampleRate);duckVoices.reset();setLatencySamples(2*di::OversampledFx2x::latencySamples+di::CreativeDistort2x::latencySamples);for(auto& fx:oversampledFx)fx.reset();for(auto& fx:saturatorFx)fx.reset();for(auto& delay:fxDryDelay)delay.reset();for(auto& delay:saturatorDryDelay)delay.reset();saturatorBlend=state.getRawParameterValue("saturatorEnabled")->load()>0.5f?1.f:0.f;phase=1;sequencer.reset();for(auto& lane:modulationSequencers)lane.reset();activeSequenceStep.store(0);detector=0;armed=true;refractory=0;smoothGain=1;expectedTransportSample=-1;wasTransportPlaying=false;fxBlend=state.getRawParameterValue("fxEnabled")->load()>0.5f?1.f:0.f;const auto safeInitial=[this](const char* id,float low,float high,float fallback){const float value=state.getRawParameterValue(id)->load();return std::isfinite(value)?juce::jlimit(low,high,value):fallback;};smoothedFxDrive=juce::Decibels::decibelsToGain(safeInitial("fxDrive",0.f,24.f,0.f));smoothedFxWet=safeInitial("fxMix",0.f,1.f,1.f);smoothedFxType=safeInitial("fxType",0.f,1.f,0.f);juce::dsp::ProcessSpec spec{sampleRate,(juce::uint32)juce::jmax(1,maxBlock),1};for(auto& c:filters){c.low.prepare(spec);c.high.prepare(spec);c.low.setType(juce::dsp::LinkwitzRileyFilterType::lowpass);c.high.setType(juce::dsp::LinkwitzRileyFilterType::highpass);c.low.reset();c.high.reset();}}
+void DISidechainProcessor::prepareToPlay(double sampleRate,int maxBlock){sr=sampleRate;creativeFx.prepare(sampleRate);duckVoices.reset();setLatencySamples(2*di::OversampledFx2x::latencySamples+di::CreativeDistort2x::latencySamples);for(auto& fx:oversampledFx)fx.reset();for(auto& fx:saturatorFx)fx.reset();for(auto& delay:fxDryDelay)delay.reset();for(auto& delay:saturatorDryDelay)delay.reset();saturatorBlend=state.getRawParameterValue("saturatorEnabled")->load()>0.5f?1.f:0.f;filterFxBlend=0.f;phase=1;sequencer.reset();for(auto& lane:modulationSequencers)lane.reset();activeSequenceStep.store(0);detector=0;armed=true;refractory=0;smoothGain=1;expectedTransportSample=-1;wasTransportPlaying=false;fxBlend=state.getRawParameterValue("fxEnabled")->load()>0.5f?1.f:0.f;const auto safeInitial=[this](const char* id,float low,float high,float fallback){const float value=state.getRawParameterValue(id)->load();return std::isfinite(value)?juce::jlimit(low,high,value):fallback;};smoothedFxDrive=juce::Decibels::decibelsToGain(safeInitial("fxDrive",0.f,24.f,0.f));smoothedFxWet=safeInitial("fxMix",0.f,1.f,1.f);smoothedFxType=safeInitial("fxType",0.f,1.f,0.f);for(auto& filter:envelopeFilters)filter.prepare(sampleRate);for(auto& filter:inputFilters)filter.prepare(sampleRate);}
 float DISidechainProcessor::curve(double t) const {if(!std::isfinite(t))t=0.;t=juce::jlimit(0.0,1.0,t);double x=t*7;int i=juce::jmin(6,(int)x);const auto safePoint=[this](int node){const float value=points[node].load(std::memory_order_relaxed);return std::isfinite(value)?juce::jlimit(0.f,1.f,value):1.f;};float a=safePoint(i),b=safePoint(i+1);float u=(float)(x-i);u=u*u*(3-2*u);return a+(b-a)*u;}
 void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::MidiBuffer& midi){
  juce::ScopedNoDenormals noDenormals;
@@ -155,6 +242,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  auto* sideBus=getBus(true,1);bool hasSide=sideBus&&sideBus->isEnabled();
  // Keep sidechain as a non-owning view; never allocate or copy a buffer on the audio thread.
  juce::AudioBuffer<float> side; if(hasSide){auto view=getBusBuffer(buffer,true,1);side.setDataToReferTo(view.getArrayOfWritePointers(),view.getNumChannels(),view.getNumSamples());}
+ const bool sideReady=hasSide&&side.getNumChannels()>0&&side.getNumSamples()>=n;
  auto get=[&](const char* id){return state.getRawParameterValue(id)->load();};
  // Validate host automation before integer casts, filter coefficients and smoothers.
  auto bounded=[&](const char* id,float low,float high,float fallback){
@@ -162,22 +250,31 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
   return std::isfinite(value)?juce::jlimit(low,high,value):fallback;
  };
  const int mode=(int)bounded("mode",0.f,3.f,0.f);
+ const bool analogFilter=bounded("filterModel",0.f,1.f,0.f)>.5f;
+ const float resonance=bounded("ladderResonance",0.f,.95f,.25f);
  const int trig=(int)bounded("trigger",0.f,2.f,0.f);
  const float depth=bounded("depth",0.f,1.f,1.f);
  const float mix=bounded("mix",0.f,1.f,1.f);
- const float shapeOffset=bounded("shapeOffset",-1.f,1.f,0.f);
+ // No global shape offset: every GRID cell owns its full independent curve.
  const float panMod=bounded("panMod",-1.f,1.f,0.f);
  const float filterMod=bounded("filterMod",0.f,1.f,0.f);
  const float fxDrive=bounded("fxDrive",0.f,24.f,0.f);
  const float fxMix=bounded("fxMix",0.f,1.f,1.f);
  // Keep filter cutoffs below Nyquist at lower host sample rates (e.g. 22.05 kHz).
- const auto cutoffs=di::safeFilterCutoffs(sr,get("low"),get("high"));
- const float lo=cutoffs.low;
- const float hi=cutoffs.high;
+ // The old selective-duck crossover is gone: VOLUME ducks full-band.
+ // LP/HP input cleanup and the sequenced FILTER FX are independent.
  const float filterRange=juce::jlimit(0.f,1.f,filterMod);
+ const float sweepMin=bounded("filterSweepMin",25.f,15000.f,90.f);
+ const float sweepMax=bounded("filterSweepMax",25.f,18000.f,11000.f);
+ const bool inputHpEnabled=bounded("inputHpEnabled",0.f,1.f,0.f)>.5f;
+ const bool inputLpEnabled=bounded("inputLpEnabled",0.f,1.f,0.f)>.5f;
+ const float inputHpHz=bounded("inputHpHz",20.f,2000.f,35.f);
+ const float inputLpHz=bounded("inputLpHz",500.f,18000.f,17000.f);
+ for(auto& f:inputFilters)f.set(inputHpHz,inputLpHz);
  const bool fxEnabled=get("fxEnabled")>0.5f;
  const bool saturatorEnabled=get("saturatorEnabled")>0.5f;
- const bool creativeGrid=get("creativeGridEnabled")>0.5f;
+ // DI SEQFX has one mode: the six-track creative sequencer.
+ const bool creativeGrid=true;
  const bool reverbEnabled=get("reverbEnabled")>0.5f;
  const bool distortEnabled=get("distortEnabled")>0.5f;
  const bool reverseReverb=get("reverbReverse")>0.5f;
@@ -185,11 +282,18 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  const int distortModel=(int)bounded("distortModel",0.f,4.f,0.f);
  const float reverbWet=bounded("reverbWet",0.f,1.f,.3f);
  const float reverbLength=bounded("reverbLength",.1f,8.f,3.f);
- const float reverbDecay=bounded("reverbDecay",0.f,1.f,.6f);
+ const float reverbDecay=bounded("reverbDecay",.2f,12.f,3.f);
  const float distortWet=bounded("distortWet",0.f,1.f,.4f);
  const float distortDrive=bounded("distortDrive",0.f,24.f,8.f);
  const float reverbPreDelay=bounded("reverbPreDelay",0.f,250.f,35.f);
  const float distortTone=bounded("distortTone",0.f,1.f,.7f);
+ const bool delayEnabled=get("delayEnabled")>.5f;
+ const bool delaySync=get("delaySync")>.5f;
+ const bool delayPingpong=get("delayPingpong")>.5f;
+ const int delayDivision=(int)bounded("delayDivision",0.f,7.f,2.f);
+ const float delayTime=bounded("delayTime",5.f,2000.f,375.f);
+ const float delayWet=bounded("delayWet",0.f,1.f,.3f);
+ const float delayFeedback=bounded("delayFeedback",0.f,.95f,.35f);
 
  const int fxType=(int)bounded("fxType",0.f,1.f,0.f);
  int clipperMode=(int)bounded("clipperMode",0.f,2.f,0.f);
@@ -203,7 +307,8 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  const float saturatorTarget=saturatorEnabled?1.f:0.f;
  const float fxSmoothing=std::exp(-1.f/(float)(0.01*sr));
  const float fxParameterSmoothing=std::exp(-1.f/(float)(0.005*sr));
- for(auto& c:filters){c.low.setCutoffFrequency(lo);c.high.setCutoffFrequency(mode==3?hi:lo);}
+ const float filterFxSmoothing=1.f-std::exp(-1.f/(float)(0.004*sr));
+
  double bpm=120;
  double hostPpq=0.;bool hasPlayingPpq=false;
  if(auto* ph=getPlayHead()){
@@ -222,6 +327,11 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
    wasTransportPlaying=playing;
   }
  }
+ // Host BPM is now known. Calculate the delay tap duration once per
+ // processing block, after reading and validating transport metadata.
+ constexpr double delayNotes[8]={.125,.25,.5,.75,1.,1.5,2.,4.};
+ const double delaySeconds=delaySync?60.0/bpm*delayNotes[delayDivision]:
+                                         (double)delayTime*.001;
  const double divisions[]={0.125,0.25,0.5,1,2,4,8};
  const float divisionRaw=get("division");
  const int divisionIndex=std::isfinite(divisionRaw)?juce::jlimit(0,6,(int)divisionRaw):2;
@@ -230,7 +340,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  envelopeLength=get("sync")>0.5?60.0/bpm*divisions[divisionIndex]:lengthSeconds;
  creativeFx.setReverseWindowSeconds(envelopeLength);
  const bool tempoSync=get("sync")>0.5f;
- const bool sequenceOn=get("sequenceEnabled")>0.5f;
+ const bool sequenceOn=true;
  const int sequenceSteps=(int)bounded("sequenceSteps",1.f,16.f,16.f);
  sequencer.setSteps(sequenceSteps);
  for(auto& lane:modulationSequencers)lane.setSteps(sequenceSteps);
@@ -246,18 +356,23 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
   di::ShapeSequencer::Shape shape{};for(int j=0;j<8;++j)shape[j]=getSequencePoint(k,j);sequencer.setShape(k,shape);
   for(int lane=0;lane<2;++lane){di::ShapeSequencer::Shape mod{};for(int j=0;j<8;++j)mod[j]=getModulationPoint(lane,k,j);modulationSequencers[lane].setShape(k,mod);}
  }
- if(creativeGrid){
-  for(int t=0;t<6;++t){
-   di::DuckVoiceEngine::TrackSettings settings;
-   settings.depth=getDuckTrackDepth(t);
-   settings.duration=getDuckTrackLength(t);
-   for(int node=0;node<8;++node)settings.shape[(size_t)node]=getDuckCurvePoint(t,node);
-   duckVoices.setTrack(t,settings);
+ // The active scene owns 96 unique envelopes. Snapshot their shapes
+ // once per audio block; the voice captures the selected cell on step ENTER.
+ for(int t=0;t<6;++t){
+  di::DuckVoiceEngine::TrackSettings settings;
+  settings.depth=getDuckTrackDepth(t);
+  settings.duration=getDuckTrackLength(t);
+  settings.useDynamic=true;
+  for(int k=0;k<gridSteps;++k){
+   settings.dynamicCurve=getDynamicDuckCurve(t,k);
+   duckVoices.setStepTrack(t,k,settings);
   }
  }
  double step=1.0/juce::jmax(1.0,envelopeLength*sr);int holdoff=(int)(bounded("retrigger",1.f,250.f,35.f)*.001*sr);float threshold=juce::Decibels::decibelsToGain(bounded("threshold",-60.f,0.f,-22.f));float coeff=std::exp(-1.f/(float)(bounded("smooth",.1f,20.f,2.f)*.001*sr));
  const double detectorRelease=di::peakReleaseCoefficient(sr);
  juce::MidiBuffer::Iterator it(midi);juce::MidiMessage msg;int midiPos=0;bool hasEvent=it.getNextEvent(msg,midiPos);float peak=0;
+ float minimumDuckGain=1.f;
+ float maximumInputLevel=0.f;
  for(int i=0;i<n;++i){bool midiNoteOn=false,audioPeak=false;
  fxBlend=fxTarget+(fxBlend-fxTarget)*fxSmoothing;
  saturatorBlend=saturatorTarget+(saturatorBlend-saturatorTarget)*fxSmoothing;
@@ -274,22 +389,36 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
    if(sequenceOn&&creativeGrid&&trig!=1){
     const int track=msg.getNoteNumber()-36;
     if(track>=0&&track<di::DuckVoiceEngine::tracks)
-     duckVoices.triggerTrack(track,envelopeLength*sr,msg.getFloatVelocity());
+     duckVoices.triggerTrack(track,envelopeLength*sr,msg.getFloatVelocity(),
+                             activeSequenceStep.load(std::memory_order_relaxed));
    }
   }
   hasEvent=it.getNextEvent(msg,midiPos);
  }
- if(hasSide&&trig!=2&&side.getNumSamples()>=n){const float v=di::sidechainPeak(side.getSample(0,i),side.getNumChannels()>1?side.getSample(1,i):0.f,side.getNumChannels()>1);detector=di::followPeak(detector,(double)v,detectorRelease);if(detector<threshold*.65)armed=true;if(armed&&detector>=threshold)audioPeak=true;}
+ if(trig!=2){
+  // Prefer the external sidechain bus, but the detector also works on the
+  // main audio input if no sidechain is routed in Ableton. Audio triggering
+  // must not silently stop working merely because the bus is unconnected.
+  const float v=di::selectedTriggerPeak(
+    main.getSample(0,i),main.getSample(1,i),
+    sideReady?side.getSample(0,i):0.f,
+    sideReady&&side.getNumChannels()>1?side.getSample(1,i):0.f,
+    sideReady,sideReady&&side.getNumChannels()>1);
+  detector=di::followPeak(detector,(double)v,detectorRelease);
+  if(detector<threshold*.65f)armed=true;
+  if(armed&&detector>=threshold)audioPeak=true;
+ }
  const bool fire=di::shouldFireTrigger(midiNoteOn,audioPeak,armed,refractory,trig);
  // Consume a threshold crossing even during holdoff or a simultaneous MIDI note.
  // Otherwise a sustained kick can fire a delayed ghost trigger after holdoff.
  if(di::shouldConsumeAudioPeak(audioPeak,armed,trig))armed=false;
  if(refractory>0)--refractory;
  if(fire){
-  // External audio sidechain crossings also trigger Track 1 directly.
+  // External OR internal audio threshold crossings trigger Track 1 directly.
   // MIDI notes 36..41 remain independent and do not depend on this detector.
   if(sequenceOn&&creativeGrid&&audioPeak&&trig!=2)
-   duckVoices.triggerTrack(0,envelopeLength*sr,1.f);
+   duckVoices.triggerTrack(0,envelopeLength*sr,1.f,
+                           activeSequenceStep.load(std::memory_order_relaxed));
   phase=0;
   // In tempo-sync mode, incoming kicks/notes trigger the ducking envelope,
   // not the song-position sequencer. Otherwise frequent notes pin it to step 1.
@@ -306,27 +435,52 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
   panEnv=modulationSequencers[1].render(envelopeLength*sr);
   activeSequenceStep.store(sequencer.getCurrentStep(),std::memory_order_relaxed);}
  else {env=phase>=1?1:curve(phase);phase=juce::jmin(1.0,phase+step);}
- if(sequenceOn&&creativeGrid){
-  const int gridStep=activeSequenceStep.load(std::memory_order_relaxed);
-  std::array<bool,di::DuckVoiceEngine::tracks> cells{};
-  for(int t=0;t<di::DuckVoiceEngine::tracks;++t)
-   cells[(size_t)t]=getGridCell(t,gridStep)&&!getCellFxFlag(t,gridStep,3);
-  // Every row has an independent envelope and length, with strongest-duck
-  // overlap; a row triggers once as the transport enters its active step.
-  env=duckVoices.process(gridStep,cells,envelopeLength*sr,sequencer.getStepGeneration());
+ // Read each step once. A pure router then controls duck voices, and all
+ // creative sends from the exact same event/mask snapshot.
+ const int gridStep=activeSequenceStep.load(std::memory_order_relaxed);
+ const bool gatedFx=creativeGrid&&sequenceOn;
+ std::array<bool,6> stepEvents{};
+ std::array<int,6> stepMasks{};
+ if(gatedFx)for(int track=0;track<6;++track){
+  stepEvents[(size_t)track]=getGridCell(track,gridStep);
+  stepMasks[(size_t)track]=getCellFxMask(track,gridStep);
  }
- if(sequenceOn)env=juce::jlimit(0.f,1.f,env+shapeOffset);
- float target=1-depth*(1-env);smoothGain=coeff*smoothGain+(1-coeff)*target;
+ const auto cellRoute=di::routeCellEffects(stepEvents,stepMasks,gatedFx);
+ if(gatedFx){
+  env=duckVoices.process(gridStep,cellRoute.duck,envelopeLength*sr,
+                         sequencer.getStepGeneration());
+ }
+ // Do not add a global offset that changes all per-cell envelopes.
+ const float target=di::duckGainTarget(env,depth);
+ smoothGain=coeff*smoothGain+(1.f-coeff)*target;
+ minimumDuckGain=juce::jmin(minimumDuckGain,smoothGain);
  // Independent, opt-in modulation lanes; neutral defaults preserve legacy patches.
- const float pan=juce::jlimit(-1.f,1.f,panMod*(2.f*panEnv-1.f));
- const float panLeft=pan>0.f?std::cos(pan*juce::MathConstants<float>::halfPi):1.f;
- const float panRight=pan<0.f?std::cos(-pan*juce::MathConstants<float>::halfPi):1.f;
- const float filterLaneGain=1.f-filterRange*(1.f-filterEnv);
- for(int ch=0;ch<2;++ch){float dry=main.getSample(ch,i);if(!std::isfinite(dry))dry=0.f;float wet=dry*smoothGain;
- if(mode!=0){auto& f=filters[ch];float low=f.low.processSample(0,dry),high=f.high.processSample(0,dry);float affected=mode==1?low:mode==2?high:dry-low-high;wet=dry+affected*(smoothGain-1);}
- float out=dry+(wet-dry)*mix;
- // Filter lane affects the selected frequency band, while Full mode remains full-band.
- if(filterRange>0.f&&mode!=0)out=dry+(out-dry)*filterLaneGain;
+ const auto panGain=di::panModulation(panEnv,panMod);
+ const float panLeft=panGain.left,panRight=panGain.right;
+ // FLT is an independent per-cell FX switch. Smooth changes on step edges
+ // to avoid clicks; no allocations or filter-state resets in the audio loop.
+ const float filterTarget=cellRoute.filter?1.f:0.f;
+ filterFxBlend+=filterFxSmoothing*(filterTarget-filterFxBlend);
+ const float effectiveFilterMix=filterRange*filterFxBlend;
+ const float sweepHz=di::EnvelopeFilter::frequency(
+   filterEnv,effectiveFilterMix,sweepMin,sweepMax,(float)sr);
+ for(int ch=0;ch<2;++ch){float dry=main.getSample(ch,i);if(!std::isfinite(dry))dry=0.f;
+ // Keep the level meter pre-EQ; cleanup filters are explicitly at input.
+ const float originalInput=dry;
+ dry=inputFilters[(size_t)ch].process(dry,inputHpEnabled,inputLpEnabled);
+ maximumInputLevel=juce::jmax(maximumInputLevel,std::abs(originalInput));
+ // Volume ducking always acts on the entire cleaned input; the FILTER
+ // modulation envelope below now has its own independent spectral FX.
+ float out=di::applyDuckGain(dry,smoothGain,mix);
+ // Per-step FILTER envelope performs genuine audio filtering. The
+ // dedicated INPUT HP/LP above is unaffected by these rhythm curves.
+ if(effectiveFilterMix>0.0001f){
+  const float shaped=envelopeFilters[(size_t)ch].process(out,sweepHz,mode,resonance,analogFilter);
+  out=out+(shaped-out)*effectiveFilterMix;
+ }else{
+  // Process a neutral state continuously to keep activation click-free.
+  envelopeFilters[(size_t)ch].process(out,sweepHz,mode,resonance,analogFilter);
+ }
  if(panMod!=0.f)out*=ch==0?panLeft:panRight;
  // Run both branches continuously so automation/bypass does not reset FIR history.
  // Fixed 7-sample latency is reported to the host and shared by dry and wet.
@@ -339,26 +493,29 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  const float satProcessed=saturatorFx[ch].process(out,saturatorDrive,0.f);
  out=di::mixAlignedFx(satDry,satProcessed,smoothedFxWet*saturatorBlend);
  if(!std::isfinite(out))out=0.f;main.setSample(ch,i,out);peak=juce::jmax(peak,std::abs(out));}
- // Grid effect lanes: indices 6/7 are REVERB and DISTORT respectively.
- // In legacy mode, the new effects remain opt-in and ignore step cells.
- const int currentStep=activeSequenceStep.load(std::memory_order_relaxed);
- bool verbCell=!creativeGrid,distCell=!creativeGrid,reverseCell=false;
- if(creativeGrid){
-  for(int track=0;track<6;++track){
-   if(!getGridCell(track,currentStep))continue; // BYP skips DUCK only, not independent FX sends
-   verbCell=verbCell||getCellFxFlag(track,currentStep,0);
-   distCell=distCell||getCellFxFlag(track,currentStep,1);
-   reverseCell=reverseCell|| (getCellFxFlag(track,currentStep,0)&&getCellFxFlag(track,currentStep,2));
-  }
- }
+ // One shared step routing decision: FX tails are processed continuously,
+ // bypassing ducking never disables enabled effect sends.
+ const bool verbCell=cellRoute.reverb;
+ const bool distCell=cellRoute.distort;
+ const bool reverseCell=cellRoute.reverse;
+ const bool delayCell=cellRoute.delay;
  float left=main.getSample(0,i),right=main.getSample(1,i);
  creativeFx.process(left,right,distortEnabled&&distCell,reverbEnabled&&verbCell,
                     distortModel,distortDrive,distortWet,
                     reverbModel,reverbEnabled?reverbWet:0.f,reverbLength,reverbDecay,(reverseReverb||reverseCell)&&verbCell,
-                    reverbPreDelay,distortTone);
+                    reverbPreDelay,distortTone,
+                    delayEnabled&&delayCell,delayEnabled?delayWet:0.f,delayFeedback,
+                    delaySeconds,delayPingpong);
  main.setSample(0,i,left);main.setSample(1,i,right);
  peak=juce::jmax(peak,juce::jmax(std::abs(left),std::abs(right)));
  }
+ // A short release hold makes periodic gain reduction readable at 24 Hz
+ // without doing atomic writes inside the sample loop.
+ const float reduction=1.f-juce::jlimit(0.f,1.f,minimumDuckGain);
+ const float previous=duckReduction.load(std::memory_order_relaxed);
+ duckReduction.store(juce::jmax(reduction,previous*.86f),std::memory_order_relaxed);
+ const float previousInput=inputLevel.load(std::memory_order_relaxed);
+ inputLevel.store(juce::jmax(maximumInputLevel,previousInput*.91f),std::memory_order_relaxed);
  meter.store(peak);midi.clear();
 }
 void DISidechainProcessor::getStateInformation(juce::MemoryBlock& dest){auto tree=state.copyState();for(int i=0;i<8;++i)tree.setProperty("point"+juce::String(i),points[i].load(),nullptr);for(int k=0;k<32;++k)for(int j=0;j<8;++j)tree.setProperty("seq_"+juce::String(k)+"_"+juce::String(j),getSequencePoint(k,j),nullptr);for(int lane=0;lane<2;++lane)for(int k=0;k<32;++k)for(int j=0;j<8;++j)tree.setProperty("mod_"+juce::String(lane)+"_"+juce::String(k)+"_"+juce::String(j),getModulationPoint(lane,k,j),nullptr);tree.setProperty("gridScene",getGridScene(),nullptr);
@@ -372,11 +529,23 @@ void DISidechainProcessor::getStateInformation(juce::MemoryBlock& dest){auto tre
   for(int k=0;k<gridSteps;++k)
    tree.setProperty("reverse_"+juce::String(scene)+"_"+juce::String(k),
     sceneReverseCells[(size_t)scene][(size_t)k].load(std::memory_order_relaxed),nullptr);
+  for(int t=0;t<gridTracks;++t)for(int k=0;k<gridSteps;++k){
+   const auto key="duckCell_"+juce::String(scene)+"_"+juce::String(t)+"_"+juce::String(k);
+   const auto sc=(size_t)scene,track=(size_t)t,step=(size_t)k;
+   const int count=juce::jlimit(2,di::DynamicCurve::capacity,
+     duckDynamicCount[sc][track][step].load(std::memory_order_acquire));
+   tree.setProperty(key+"_count",count,nullptr);
+   for(int j=0;j<count;++j){
+    tree.setProperty(key+"_x_"+juce::String(j),
+     duckDynamicX[sc][track][step][(size_t)j].load(std::memory_order_relaxed),nullptr);
+    tree.setProperty(key+"_y_"+juce::String(j),
+     duckDynamicY[sc][track][step][(size_t)j].load(std::memory_order_relaxed),nullptr);
+   }
+  }
  }
- for(int t=0;t<6;++t) {
+ for(int t=0;t<6;++t){
   tree.setProperty("duckDepth_"+juce::String(t),getDuckTrackDepth(t),nullptr);
   tree.setProperty("duckLength_"+juce::String(t),getDuckTrackLength(t),nullptr);
-  for(int j=0;j<8;++j)tree.setProperty("duckCurve_"+juce::String(t)+"_"+juce::String(j),getDuckCurvePoint(t,j),nullptr);
  }
  if(auto xml=tree.createXml())copyXmlToBinary(*xml,dest);}
 void DISidechainProcessor::setStateInformation(const void* data,int bytes){
@@ -404,19 +573,36 @@ void DISidechainProcessor::setStateInformation(const void* data,int bytes){
    }
    for(int t=0;t<6;++t)for(int k=0;k<gridSteps;++k){
     const auto key="cellFx_"+juce::String(scene)+"_"+juce::String(t)+"_"+juce::String(k);
-    sceneCellFx[(size_t)scene][(size_t)t][(size_t)k].store(juce::jlimit(0,15,(int)tree.getProperty(key,0)),std::memory_order_relaxed);
+    sceneCellFx[(size_t)scene][(size_t)t][(size_t)k].store(juce::jlimit(0,63,(int)tree.getProperty(key,0)),std::memory_order_relaxed);
    }
    for(int k=0;k<gridSteps;++k){
     const auto key="reverse_"+juce::String(scene)+"_"+juce::String(k);
     sceneReverseCells[(size_t)scene][(size_t)k].store((bool)tree.getProperty(key,false),std::memory_order_relaxed);
+   }
+   for(int t=0;t<gridTracks;++t)for(int k=0;k<gridSteps;++k){
+    const auto key="duckCell_"+juce::String(scene)+"_"+juce::String(t)+"_"+juce::String(k);
+    di::DynamicCurve dc;
+    // Clean new-format presets store their curves per scene/track/step.
+    // For older files we migrate the former per-track shape to every cell.
+    const bool savedCell=tree.hasProperty(key+"_count");
+    dc.count=juce::jlimit(2,di::DynamicCurve::capacity,
+      (int)tree.getProperty(savedCell?key+"_count":
+       "duckDynCount_"+juce::String(t),8));
+    for(int j=0;j<dc.count;++j){
+     const auto fallbackX=j/(float)(dc.count-1);
+     dc.x[(size_t)j]=(float)tree.getProperty(savedCell?key+"_x_"+juce::String(j):
+       "duckDynX_"+juce::String(t)+"_"+juce::String(j),fallbackX);
+     dc.y[(size_t)j]=(float)tree.getProperty(savedCell?key+"_y_"+juce::String(j):
+       "duckDynY_"+juce::String(t)+"_"+juce::String(j),dc.y[(size_t)j]);
+    }
+    // Setter validates time ordering, finite levels and count for each cell.
+    setDynamicDuckCurve(t,k,dc,scene);
    }
   }
   setGridScene((int)tree.getProperty("gridScene",0));
   for(int t=0;t<6;++t){
    setDuckTrackDepth(t,(float)tree.getProperty("duckDepth_"+juce::String(t),1.f));
    setDuckTrackLength(t,(float)tree.getProperty("duckLength_"+juce::String(t),1.f));
-   constexpr float shape[8]={0.f,.02f,.2f,.65f,.9f,1.f,1.f,1.f};
-   for(int j=0;j<8;++j)setDuckCurvePoint(t,j,(float)tree.getProperty("duckCurve_"+juce::String(t)+"_"+juce::String(j),shape[j]));
   }
   duckVoices.reset();
   state.replaceState(tree);

@@ -1,5 +1,8 @@
 #include "PluginEditor.h"
+#include "CurvePointEditing.h"
+#include "FrequencyDisplay.h"
 #include "CurveSelection.h"
+#include "CurvePresets.h"
 #include <cmath>
 #include <limits>
 
@@ -25,7 +28,7 @@ public:
 DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEditor(&p),proc(p) {
  setLookAndFeel(&theme);
  const char* ids[]={"depth","mix","threshold","length","smooth","low","high","retrigger"};
- const char* names[]={"DEPTH","MIX","SENSITIVITY","LENGTH MS","SMOOTH MS","LOW HZ","HIGH HZ","RETRIGGER MS"};
+ const char* names[]={"DEPTH","MIX","SENSITIVITY","FREE LENGTH MS","SMOOTH MS","LOW HZ","HIGH HZ","TRIGGER HOLDOFF MS"};
  for(int i=0;i<8;++i) {
   auto s=std::make_unique<juce::Slider>();
   s->setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
@@ -50,7 +53,7 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
   sliders.push_back(std::move(s));labels.push_back(std::move(l));
  }
  const char* cids[]={"mode","trigger","division"};
- const juce::StringArray choices[]={{"Full","Low","High","Band"},{"Audio + MIDI","Audio only","MIDI only"},{"1/32","1/16","1/8","1/4","1/2","1 bar","2 bars"}};
+ const juce::StringArray choices[]={{"Lowpass","Highpass","Bandpass","Notch"},{"Audio + MIDI","Audio only","MIDI only"},{"1/32","1/16","1/8","1/4","1/2","1 bar","2 bars"}};
  for(int i=0;i<3;++i) {
   auto c=std::make_unique<juce::ComboBox>();c->addItemList(choices[i],1);
   c->setColour(juce::ComboBox::backgroundColourId,juce::Colour(0xff212b36));
@@ -62,9 +65,7 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  }
  sync=std::make_unique<juce::ToggleButton>("TEMPO SYNC");addAndMakeVisible(*sync);
  ba=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(p.state,"sync",*sync);
- sequenceToggle=std::make_unique<juce::ToggleButton>("SEQUENCER ON");
- addAndMakeVisible(*sequenceToggle);
- sequenceAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(p.state,"sequenceEnabled",*sequenceToggle);
+ // No SIDECHAIN/SEQUENCER toggle: this VST3 is always a sequencer.
  sequenceCount=std::make_unique<juce::Slider>(juce::Slider::IncDecButtons,juce::Slider::TextBoxLeft);
  sequenceCount->setIncDecButtonsMode(juce::Slider::incDecButtonsNotDraggable);
  sequenceCount->setRange(1,16,1);
@@ -84,15 +85,15 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  shapeOffset->setColour(juce::Slider::textBoxOutlineColourId,juce::Colours::transparentBlack);
  addAndMakeVisible(*shapeOffset);
  shapeOffsetAttachment=std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(p.state,"shapeOffset",*shapeOffset);
- const char* laneNames[]={"VOLUME","FILTER","PAN","REVERB","DISTORT"};
- for(int i=0;i<5;++i){
+ const char* laneNames[]={"VOLUME","FILTER","PAN","REVERB","DISTORT","DELAY"};
+ for(int i=0;i<6;++i){
   laneTabs[i]=std::make_unique<juce::TextButton>(laneNames[i]);
   buttonStyle(*laneTabs[i]);
   laneTabs[i]->onClick=[this,i]{
-   if(i>0&&!sequenceToggle->getToggleState())sequenceToggle->setToggleState(true,juce::sendNotificationSync);
+   
    selectedLane=i;
    if(shapeOffset)shapeOffset->setEnabled(selectedLane==0);
-   for(int j=0;j<5;++j)laneTabs[j]->setToggleState(j==selectedLane,juce::dontSendNotification);
+   for(int j=0;j<6;++j)laneTabs[j]->setToggleState(j==selectedLane,juce::dontSendNotification);
    refreshCreativePage();repaint();
   };
   addAndMakeVisible(*laneTabs[i]);
@@ -100,37 +101,46 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  // Per-cell routing: duck volume, reverb send, distortion send, pre-reverb
  // reverse, and an absolute bypass. Unlike global rack switches, these flags
  // belong to one selected track/step in one scene.
- const char* cellLabels[]={"DUCK","RVB","DST","REV <","BYP"};
- for(int i=0;i<5;++i){
+ const char* cellLabels[]={"DUCK","FLT","RVB","DST","DLY","REV","BYP"};
+ constexpr juce::uint32 cellColours[]={0xffa2ed38,0xff2ad3da,0xff579dff,0xffff9b4a,
+                                       0xffef67c9,0xff579dff,0xff87939f};
+ for(int i=0;i<7;++i){
   cellControls[i]=std::make_unique<juce::TextButton>(cellLabels[i]);
   buttonStyle(*cellControls[i]);
   cellControls[i]->setClickingTogglesState(true);
+  cellControls[i]->setColour(juce::TextButton::buttonOnColourId,juce::Colour(cellColours[i]));
+  cellControls[i]->setColour(juce::TextButton::textColourOnId,juce::Colour(0xff08121b));
   addAndMakeVisible(*cellControls[i]);
   cellControls[i]->onClick=[this,i]{
-   if(i==0)proc.setGridCell(selectedTrack,selectedStep,!proc.getGridCell(selectedTrack,selectedStep));
-   else proc.setCellFxFlag(selectedTrack,selectedStep,i==4?3:i-1,
-                           !proc.getCellFxFlag(selectedTrack,selectedStep,i==4?3:i-1));
-   // FX selection turns the step on automatically. Reverse also selects
-   // the reverb send so a whoosh isn't silently configured but inaudible.
-   if(i==3&&proc.getCellFxFlag(selectedTrack,selectedStep,2))
-    proc.setCellFxFlag(selectedTrack,selectedStep,0,true);
-   if(i>=1&&i<=3&&proc.getCellFxFlag(selectedTrack,selectedStep,i==3?2:i-1))
-    proc.setGridCell(selectedTrack,selectedStep,true);
-   if(i==1&&proc.getCellFxFlag(selectedTrack,selectedStep,0)&&reverbOnButton&&!reverbOnButton->getToggleState())
-    reverbOnButton->setToggleState(true,juce::sendNotificationSync);
-   if(i==2&&proc.getCellFxFlag(selectedTrack,selectedStep,1)&&distortOnButton&&!distortOnButton->getToggleState())
-    distortOnButton->setToggleState(true,juce::sendNotificationSync);
-   if(i==3&&proc.getCellFxFlag(selectedTrack,selectedStep,2)&&reverbOnButton&&!reverbOnButton->getToggleState())
-    reverbOnButton->setToggleState(true,juce::sendNotificationSync);
+   constexpr int flags[7]={-1,5,0,1,4,2,3};
+   const int flag=flags[i];
+   if(flag<0){
+    const bool enable=!proc.getGridCell(selectedTrack,selectedStep);
+    proc.setGridCell(selectedTrack,selectedStep,enable);
+    if(enable&&proc.getCellFxMask(selectedTrack,selectedStep)==0)
+     proc.setCellFxFlag(selectedTrack,selectedStep,5,true);
+   }else proc.setCellFxFlag(selectedTrack,selectedStep,flag,
+         !proc.getCellFxFlag(selectedTrack,selectedStep,flag));
+   const bool on=flag>=0&&proc.getCellFxFlag(selectedTrack,selectedStep,flag);
+   if(on&&i==5)proc.setCellFxFlag(selectedTrack,selectedStep,0,true);
+   if(on&&i>=1&&i<=5)proc.setGridCell(selectedTrack,selectedStep,true);
+   const auto enable=[this](juce::TextButton* button){
+    if(button&&!button->getToggleState())button->setToggleState(true,juce::sendNotificationSync);
+   };
+   if(on&&(i==2||i==5))enable(reverbOnButton.get());
+   if(on&&i==3)enable(distortOnButton.get());
+   if(on&&i==4)enable(delayOnButton.get());
    refreshCellControls();repaint();
   };
  }
-
  const char* laneIds[]={"filterMod","panMod"};
  for(int i=0;i<2;++i){
   laneSliders[i]=std::make_unique<juce::Slider>(juce::Slider::LinearHorizontal,juce::Slider::TextBoxRight);
   laneSliders[i]->setTextBoxStyle(juce::Slider::TextBoxRight,false,63,20);
-  laneSliders[i]->textFromValueFunction=[](double v){return juce::String(v,2);};
+  laneSliders[i]->textFromValueFunction=[](double v){
+   return juce::String(juce::roundToInt(v*100.))+"%";
+  };
+  laneSliders[i]->valueFromTextFunction=[](const juce::String& t){return t.getDoubleValue()/100.;};
   laneSliders[i]->setColour(juce::Slider::trackColourId,i==0?juce::Colour(0xff44bbff):juce::Colour(0xffc55bff));
   laneSliders[i]->setColour(juce::Slider::thumbColourId,i==0?juce::Colour(0xff44bbff):juce::Colour(0xffc55bff));
   laneSliders[i]->setColour(juce::Slider::textBoxTextColourId,juce::Colours::white);
@@ -160,8 +170,9 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  saturatorDriveSlider->setRange(0.0,24.0,0.1);
  saturatorDriveSlider->setTextBoxStyle(juce::Slider::NoTextBox,false,0,0);
  saturatorDriveSlider->setTooltip("Saturator drive 0-24 dB");
- saturatorDriveSlider->setTextBoxStyle(juce::Slider::TextBoxRight,false,59,20);
- saturatorDriveSlider->textFromValueFunction=[](double v){return juce::String(v,1);};saturatorDriveSlider->setTextValueSuffix(" dB");
+ saturatorDriveSlider->setTextBoxStyle(juce::Slider::NoTextBox,false,0,0);
+ saturatorDriveSlider->textFromValueFunction=[](double v){return juce::String(juce::roundToInt(v/24.*100.))+"%";};
+ saturatorDriveSlider->valueFromTextFunction=[](const juce::String& value){return value.getDoubleValue()*24./100.;};
  saturatorDriveSlider->setColour(juce::Slider::trackColourId,green);saturatorDriveSlider->setColour(juce::Slider::thumbColourId,green);
  addAndMakeVisible(*saturatorDriveSlider);
  saturatorDriveAttachment=std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(p.state,"saturatorDrive",*saturatorDriveSlider);
@@ -181,9 +192,12 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
   b->setColour(juce::TextButton::textColourOffId,juce::Colours::white);
   b->setColour(juce::TextButton::textColourOnId,bg);
  }
- for(auto* b:{sequenceToggle.get(),sync.get()}){
-  b->setColour(juce::ToggleButton::tickColourId,green);
-  b->setColour(juce::ToggleButton::textColourId,juce::Colours::white);
+ // Only TEMPO SYNC remains: SEQUENCER and GRID mode toggles were removed.
+ // The former loop unconditionally dereferenced a null sequenceToggle,
+ // crashing pluginval when opening the VST3 editor.
+ if(sync){
+  sync->setColour(juce::ToggleButton::tickColourId,green);
+  sync->setColour(juce::ToggleButton::textColourId,juce::Colours::white);
  }
  presetName=p.state.state.getProperty("presetName","Custom").toString();
  presetButton=std::make_unique<juce::TextButton>("PRESETS  -  "+presetName);
@@ -193,7 +207,7 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
   addAndMakeVisible(*abButtons[i]);
   abButtons[i]->onClick=[this,i]{ if(abStored[i]) recallAB(i); else captureAB(i); };
  }
- const char* copyLabels[] = {"A→B","B→A"};
+ const char* copyLabels[] = {"A > B","B > A"};
  for(int i=0;i<2;++i){
   abCopyButtons[i]=std::make_unique<juce::TextButton>(copyLabels[i]);
   buttonStyle(*abCopyButtons[i]); addAndMakeVisible(*abCopyButtons[i]);
@@ -242,24 +256,47 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  undoButton->onClick=[this]{undoEdit();};
  redoButton->onClick=[this]{redoEdit();};
  copyStep->onClick=[this]{
-  const bool seq=sequenceToggle->getToggleState();
-  clipboard=captureShape(currentShapeKey(),seq);
+  const bool seq=true;
+  clipboardDynamic=seq&&selectedLane==0&&selectedTrack<6&&
+    true;
+  if(clipboardDynamic)dynamicClipboard=proc.getDynamicDuckCurve(selectedTrack,selectedStep);
+  else clipboard=captureShape(currentShapeKey(),seq);
   hasClipboard=true;
  };
  pasteStep->onClick=[this]{
   if(!hasClipboard)return;
-  const bool seq=sequenceToggle->getToggleState();
+  const bool seq=true;
   const int key=currentShapeKey();
-  const auto before=captureShape(key,seq);
-  applyShape(key,seq,clipboard);
-  pushEdit(key,seq,before,clipboard);repaint();
+  if(key>=96&&key<102){
+   const auto before=proc.getDynamicDuckCurve(selectedTrack,selectedStep);
+   di::DynamicCurve after;
+   if(clipboardDynamic)after=dynamicClipboard;
+   else for(int n=0;n<8;++n)after.y[(size_t)n]=clipboard[(size_t)n];
+   proc.setDynamicDuckCurve(selectedTrack,selectedStep,after);
+   pushDynamicEdit(selectedTrack,selectedStep,before,after);
+  } else {
+   const auto before=captureShape(key,seq);
+   auto after=clipboard;
+   if(clipboardDynamic)
+    for(int n=0;n<8;++n)after[(size_t)n]=dynamicClipboard.evaluate(n/7.f);
+   applyShape(key,seq,after);
+   pushEdit(key,seq,before,after);
+  }
+  repaint();
  };
  resetStep->onClick=[this]{
-  const bool seq=sequenceToggle->getToggleState();
-  const int key=seq?selectedStep+selectedLane*32:0;
+  const bool seq=true;
+  const int key=currentShapeKey();
+  if(key>=96&&key<102){
+   const auto before=proc.getDynamicDuckCurve(selectedTrack,selectedStep);
+   di::DynamicCurve after;
+   proc.setDynamicDuckCurve(selectedTrack,selectedStep,after);
+   pushDynamicEdit(selectedTrack,selectedStep,before,after);
+   repaint();return;
+  }
   const auto before=captureShape(key,seq);
   constexpr di::ShapeSequencer::Shape volume{1.f,.92f,.08f,.02f,.32f,.75f,.95f,1.f};
-  const bool grid=seq&&proc.state.getRawParameterValue("creativeGridEnabled")->load()>0.5f;
+  const bool grid=seq&&true;
   const di::ShapeSequencer::Shape defaults=grid&&selectedLane==0
     ? di::ShapeSequencer::Shape{0.f,.02f,.2f,.65f,.9f,1.f,1.f,1.f}
     : seq&&selectedLane>0
@@ -270,19 +307,88 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
   applyShape(key,seq,defaults);
   pushEdit(key,seq,before,defaults);repaint();
  };
- const char* filterNames[]={"FULL","LOW","HIGH","BAND"};
+ const char* filterNames[]={"LP","HP","BP","NOTCH"};
  for(int i=0;i<4;++i){filterButtons[i]=std::make_unique<juce::TextButton>(filterNames[i]);filterButtons[i]->onClick=[this,i]{selectFilter(i);};addAndMakeVisible(*filterButtons[i]);}
+ filterModelBox=std::make_unique<juce::ComboBox>();
+ filterModelBox->addItemList({"CLEAN","ANALOG LADDER"},1);
+ addAndMakeVisible(*filterModelBox);
+ filterModelAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+  p.state,"filterModel",*filterModelBox);
+ filterModelBox->onChange=[this]{updateContextualControls();repaint();};
+ filterResonanceSlider=std::make_unique<juce::Slider>(
+  juce::Slider::LinearHorizontal,juce::Slider::TextBoxRight);
+ filterResonanceSlider->setTextBoxStyle(juce::Slider::TextBoxRight,false,58,20);
+ filterResonanceSlider->textFromValueFunction=[](double v){return juce::String(juce::roundToInt(v/.95*100.))+"%";};
+ filterResonanceSlider->setColour(juce::Slider::trackColourId,juce::Colour(0xffe3a15a));
+ filterResonanceSlider->setColour(juce::Slider::thumbColourId,juce::Colour(0xffe3a15a));
+ addAndMakeVisible(*filterResonanceSlider);
+ filterResonanceAttachment=std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+  p.state,"ladderResonance",*filterResonanceSlider);
+ // FILTER sweep frequency range is edited in the modulation lane.
+ for(int i=0;i<2;++i){
+  filterSweepSliders[(size_t)i]=std::make_unique<juce::Slider>(
+   juce::Slider::LinearHorizontal,juce::Slider::TextBoxRight);
+  auto& slider=*filterSweepSliders[(size_t)i];
+  slider.setTextBoxStyle(juce::Slider::TextBoxRight,false,69,21);
+  slider.textFromValueFunction=[](double hz){
+   return juce::String(di::shortFrequency(static_cast<float>(hz)).c_str());
+  };
+  slider.valueFromTextFunction=[](const juce::String& text){
+   const auto value=text.getDoubleValue();
+   return text.containsIgnoreCase("k")?value*1000.:value;
+  };
+  slider.setColour(juce::Slider::trackColourId,juce::Colour(0xff2ad3da));
+  slider.setColour(juce::Slider::thumbColourId,juce::Colour(0xff2ad3da));
+  addAndMakeVisible(slider);
+  filterSweepAttachments[(size_t)i]=std::make_unique<
+   juce::AudioProcessorValueTreeState::SliderAttachment>(
+    p.state,i==0?"filterSweepMin":"filterSweepMax",slider);
+  slider.setNumDecimalPlacesToDisplay(0);
+ }
+ // Static INPUT FILTER is physically and logically independent of FILTER FX.
+ const char* inputIds[]={"inputHpEnabled","inputLpEnabled"};
+ const char* cutoffIds[]={"inputHpHz","inputLpHz"};
+ const char* labels[]={"HP ON","LP ON"};
+ for(int i=0;i<2;++i){
+  inputCutButtons[(size_t)i]=std::make_unique<juce::TextButton>(labels[i]);
+  auto& toggle=*inputCutButtons[(size_t)i];
+  toggle.setClickingTogglesState(true);
+  toggle.setColour(juce::TextButton::buttonColourId,juce::Colour(0xff1a303c));
+  toggle.setColour(juce::TextButton::buttonOnColourId,juce::Colour(0xff28ced8));
+  toggle.setColour(juce::TextButton::textColourOnId,juce::Colour(0xff07141e));
+  addAndMakeVisible(toggle);
+  toggle.onClick=[this]{updateContextualControls();repaint();};
+  inputCutButtonAttachments[(size_t)i]=std::make_unique<
+   juce::AudioProcessorValueTreeState::ButtonAttachment>(p.state,inputIds[i],toggle);
+  inputCutSliders[(size_t)i]=std::make_unique<juce::Slider>(
+   juce::Slider::LinearHorizontal,juce::Slider::TextBoxRight);
+  auto& cutoff=*inputCutSliders[(size_t)i];
+  cutoff.setTextBoxStyle(juce::Slider::TextBoxRight,false,75,22);
+  cutoff.textFromValueFunction=[](double hz){
+   return juce::String(di::shortFrequency(static_cast<float>(hz)).c_str());
+  };
+  cutoff.valueFromTextFunction=[](const juce::String& t){
+   return t.containsIgnoreCase("k")?t.getDoubleValue()*1000.:t.getDoubleValue();
+  };
+  cutoff.setColour(juce::Slider::trackColourId,juce::Colour(0xff2ad3da));
+  cutoff.setColour(juce::Slider::thumbColourId,juce::Colour(0xff2ad3da));
+  addAndMakeVisible(cutoff);
+  inputCutSliderAttachments[(size_t)i]=std::make_unique<
+   juce::AudioProcessorValueTreeState::SliderAttachment>(p.state,cutoffIds[i],cutoff);
+  cutoff.setNumDecimalPlacesToDisplay(0);
+ }
  if(combos.size()>0)combos[0]->setVisible(false);
  refreshFilterButtons();refreshFxButtons();
  // Reverb and distortion settings remain independent of legacy FX controls.
- const char* toggleIds[]={"creativeGridEnabled","reverbEnabled","distortEnabled","reverbReverse"};
+ const char* toggleIds[]={"","reverbEnabled","distortEnabled","reverbReverse"};
  std::unique_ptr<juce::TextButton>* toggleButtons[]={&gridModeButton,&reverbOnButton,&distortOnButton,&reverseButton};
  const char* toggleLabels[]={"GRID ON","REVERB ON","DISTORT ON","REVERSE  <"};
- for(int i=0;i<4;++i){
+ for(int i=1;i<4;++i){
   *toggleButtons[i]=std::make_unique<juce::TextButton>(toggleLabels[i]);
   (*toggleButtons[i])->setClickingTogglesState(true);
   (*toggleButtons[i])->setColour(juce::TextButton::buttonColourId,juce::Colour(0xff172d3b));
-  (*toggleButtons[i])->setColour(juce::TextButton::buttonOnColourId,green);
+  (*toggleButtons[i])->setColour(juce::TextButton::buttonOnColourId,
+   i==1||i==3?juce::Colour(0xff5b9eff):i==2?juce::Colour(0xffffa454):green);
   (*toggleButtons[i])->setColour(juce::TextButton::textColourOffId,juce::Colours::white);
   (*toggleButtons[i])->setColour(juce::TextButton::textColourOnId,bg);
   addAndMakeVisible(**toggleButtons[i]);
@@ -301,14 +407,57 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  for(int i=0;i<7;++i){
   creativeSliders[i]=std::make_unique<juce::Slider>(juce::Slider::LinearHorizontal,juce::Slider::TextBoxRight);
   creativeSliders[i]->setTextBoxStyle(juce::Slider::TextBoxRight,false,68,22);
-  creativeSliders[i]->textFromValueFunction=[i](double v){return juce::String(v,(i==4||i==5)?1:2);};
-  creativeSliders[i]->setColour(juce::Slider::trackColourId,(i<3||i==5)?juce::Colour(0xff24def0):orange);
-  creativeSliders[i]->setColour(juce::Slider::thumbColourId,(i<3||i==5)?juce::Colour(0xff24def0):orange);
+  creativeSliders[i]->textFromValueFunction=[i](double v){
+   if(i==0||i==3||i==6)return juce::String(juce::roundToInt(v*100.))+"%";
+   if(i==2)return juce::String(v,1)+" s";
+   if(i==4)return juce::String(v,1)+" dB";
+   if(i==5)return juce::String(juce::roundToInt(v))+" ms";
+   return juce::String(v,2)+"x";
+  };
+  creativeSliders[i]->valueFromTextFunction=[i](const juce::String& value){
+   const double parsed=value.getDoubleValue();
+   return (i==0||i==3||i==6)?parsed/100.:parsed;
+  };
+  creativeSliders[i]->setColour(juce::Slider::trackColourId,(i<3||i==5)?juce::Colour(0xff5b9eff):juce::Colour(0xffffa454));
+  creativeSliders[i]->setColour(juce::Slider::thumbColourId,(i<3||i==5)?juce::Colour(0xff5b9eff):juce::Colour(0xffffa454));
   creativeSliders[i]->setColour(juce::Slider::textBoxTextColourId,juce::Colours::white);
   creativeSliders[i]->setColour(juce::Slider::textBoxOutlineColourId,juce::Colours::transparentBlack);
   addAndMakeVisible(*creativeSliders[i]);
   creativeSliderAttachments[i]=std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(p.state,sliderIds[i],*creativeSliders[i]);
  }
+ const char* delayToggleIds[]={"delayEnabled","delaySync","delayPingpong"};
+ const char* delayToggleLabels[]={"DELAY ON","SYNC","PING-PONG"};
+ std::unique_ptr<juce::TextButton>* delayToggles[]={&delayOnButton,&delaySyncButton,&delayPingpongButton};
+ for(int i=0;i<3;++i){
+  *delayToggles[i]=std::make_unique<juce::TextButton>(delayToggleLabels[i]);
+  buttonStyle(**delayToggles[i]);
+  (*delayToggles[i])->setClickingTogglesState(true);
+  (*delayToggles[i])->setColour(juce::TextButton::buttonOnColourId,juce::Colour(0xffed6acd));
+  (*delayToggles[i])->setColour(juce::TextButton::textColourOnId,juce::Colour(0xff0b1018));
+  addAndMakeVisible(**delayToggles[i]);
+  delayButtonAttachments[i]=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+   p.state,delayToggleIds[i],**delayToggles[i]);
+ }
+ const char* delayIds[]={"delayWet","delayFeedback","delayTime"};
+ for(int i=0;i<3;++i){
+  delaySliders[i]=std::make_unique<juce::Slider>(juce::Slider::LinearHorizontal,juce::Slider::TextBoxRight);
+  delaySliders[i]->setTextBoxStyle(juce::Slider::TextBoxRight,false,78,24);
+  delaySliders[i]->textFromValueFunction=[i](double v){
+   return i<2?juce::String(juce::roundToInt(v*100.))+"%":
+              juce::String(juce::roundToInt(v))+" ms";
+  };
+  delaySliders[i]->setColour(juce::Slider::trackColourId,juce::Colour(0xffed6acd));
+  delaySliders[i]->setColour(juce::Slider::thumbColourId,juce::Colour(0xffed6acd));
+  delaySliders[i]->setColour(juce::Slider::textBoxTextColourId,juce::Colours::white);
+  addAndMakeVisible(*delaySliders[i]);
+  delaySliderAttachments[i]=std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+   p.state,delayIds[i],*delaySliders[i]);
+ }
+ delayDivisionBox=std::make_unique<juce::ComboBox>();
+ delayDivisionBox->addItemList({"1/32","1/16","1/8","1/8 dotted","1/4","1/4 dotted","1/2","1 bar"},1);
+ addAndMakeVisible(*delayDivisionBox);
+ delayDivisionAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+  p.state,"delayDivision",*delayDivisionBox);
  for(int i=0;i<4;++i){
   sceneButtons[i]=std::make_unique<juce::TextButton>(juce::String("ABCD").substring(i,i+1));
   buttonStyle(*sceneButtons[i]);
@@ -337,7 +486,8 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  duckDepthSlider=std::make_unique<juce::Slider>(juce::Slider::LinearHorizontal,juce::Slider::TextBoxRight);
  duckDepthSlider->setRange(0.,1.,.01);
  duckDepthSlider->setTextBoxStyle(juce::Slider::TextBoxRight,false,60,20);
- duckDepthSlider->textFromValueFunction=[](double v){return juce::String(v,2);};
+ duckDepthSlider->textFromValueFunction=[](double v){return juce::String(juce::roundToInt(v*100.))+"%";};
+ duckDepthSlider->valueFromTextFunction=[](const juce::String& text){return text.getDoubleValue()/100.;};
  duckDepthSlider->setValue(proc.getDuckTrackDepth(0),juce::dontSendNotification);
  duckDepthSlider->setColour(juce::Slider::trackColourId,green);
  duckDepthSlider->setColour(juce::Slider::thumbColourId,green);
@@ -349,7 +499,7 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  duckLengthSlider=std::make_unique<juce::Slider>(juce::Slider::LinearHorizontal,juce::Slider::TextBoxRight);
  duckLengthSlider->setRange(.05,4.,.05);
  duckLengthSlider->setTextBoxStyle(juce::Slider::TextBoxRight,false,60,20);
- duckLengthSlider->textFromValueFunction=[](double v){return juce::String(v,2);};
+ duckLengthSlider->textFromValueFunction=[](double v){return juce::String(v,2)+" st";};
  duckLengthSlider->setValue(proc.getDuckTrackLength(0),juce::dontSendNotification);
  duckLengthSlider->setColour(juce::Slider::trackColourId,orange);
  duckLengthSlider->setColour(juce::Slider::thumbColourId,orange);
@@ -365,14 +515,14 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  startTimerHz(24);
 }
 int DISidechainEditor::currentShapeKey() const {
- const bool seq=sequenceToggle&&sequenceToggle->getToggleState();
- const bool grid=seq&&proc.state.getRawParameterValue("creativeGridEnabled")->load()>0.5f;
+ const bool seq=true;
+ const bool grid=seq&&true;
  return di::resolveCurveKey(seq,grid,selectedLane,selectedTrack,selectedStep);
 }
 di::ShapeSequencer::Shape DISidechainEditor::captureShape(int step,bool sequence) const {
  di::ShapeSequencer::Shape shape{};
  if(sequence&&step>=96&&step<102){
-  for(int i=0;i<8;++i)shape[i]=proc.getDuckCurvePoint(step-96,i);
+  for(int i=0;i<8;++i)shape[i]=proc.getDynamicDuckCurve(step-96,selectedStep).evaluate(i/7.f);
   return shape;
  }
  const int lane=step/32, actualStep=step%32;
@@ -381,11 +531,21 @@ di::ShapeSequencer::Shape DISidechainEditor::captureShape(int step,bool sequence
 }
 void DISidechainEditor::applyShape(int step,bool sequence,const di::ShapeSequencer::Shape& shape) {
  if(sequence&&step>=96){
-  for(int i=0;i<8;++i)proc.setDuckCurvePoint(step-96,i,shape[i]);
+  di::DynamicCurve dc;
+  for(int i=0;i<8;++i)dc.y[(size_t)i]=shape[(size_t)i];
+  proc.setDynamicDuckCurve(step-96,selectedStep,dc);
   return;
  }
  const int lane=step/32, actualStep=step%32;
  for(int i=0;i<8;++i){if(sequence){if(lane==0)proc.setSequencePoint(actualStep,i,shape[i]);else proc.setModulationPoint(lane-1,actualStep,i,shape[i]);}else if(std::isfinite(shape[i]))proc.points[i].store(juce::jlimit(0.f,1.f,shape[i]),std::memory_order_relaxed);}
+}
+void DISidechainEditor::pushDynamicEdit(int track,int step,const di::DynamicCurve& before,const di::DynamicCurve& after) {
+ if(track<0||track>=6||step<0||step>=16)return;
+ if(undoStack.size()>=64)undoStack.erase(undoStack.begin());
+ ShapeEdit e{};e.step=96+track;e.sequence=true;e.dynamic=true;
+ e.cellStep=step;e.scene=proc.getGridScene();
+ e.beforeDynamic=before;e.afterDynamic=after;
+ undoStack.push_back(e);redoStack.clear();
 }
 void DISidechainEditor::pushEdit(int step,bool sequence,const di::ShapeSequencer::Shape& before,const di::ShapeSequencer::Shape& after) {
  if(before==after)return;
@@ -396,13 +556,15 @@ void DISidechainEditor::pushEdit(int step,bool sequence,const di::ShapeSequencer
 void DISidechainEditor::undoEdit(){
  if(undoStack.empty())return;
  const auto edit=undoStack.back();undoStack.pop_back();
- applyShape(edit.step,edit.sequence,edit.before);
+ if(edit.dynamic)proc.setDynamicDuckCurve(edit.step-96,edit.cellStep,edit.beforeDynamic,edit.scene);
+ else applyShape(edit.step,edit.sequence,edit.before);
  redoStack.push_back(edit);repaint();
 }
 void DISidechainEditor::redoEdit(){
  if(redoStack.empty())return;
  const auto edit=redoStack.back();redoStack.pop_back();
- applyShape(edit.step,edit.sequence,edit.after);
+ if(edit.dynamic)proc.setDynamicDuckCurve(edit.step-96,edit.cellStep,edit.afterDynamic,edit.scene);
+ else applyShape(edit.step,edit.sequence,edit.after);
  undoStack.push_back(edit);repaint();
 }
 void DISidechainEditor::selectFilter(int index) {
@@ -413,27 +575,30 @@ void DISidechainEditor::selectFilter(int index) {
  refreshFilterButtons();
 }
 void DISidechainEditor::updateContextualControls(){
- const auto raw=[this](const char* key)->float {
-  const auto* p=proc.state.getRawParameterValue(key);
-  return p?p->load(std::memory_order_relaxed):0.f;
- };
- const int mode=juce::jlimit(0,3,(int)raw("mode"));
- const int trigger=juce::jlimit(0,2,(int)raw("trigger"));
- const bool synced=raw("sync")>.5f;
- // FULL mode has no band cutoff; LOW uses high crossover,
- // HIGH uses low crossover; BAND uses both crossovers.
- const bool lowEnabled=mode!=0;
- const bool highEnabled=mode==3;
+ const auto* triggerParam=proc.state.getRawParameterValue("trigger");
+ const int trigger=triggerParam?juce::jlimit(0,2,(int)triggerParam->load()):0;
  const bool audioTrigger=trigger!=2;
+ const bool analog=proc.state.getRawParameterValue("filterModel")->load()>.5f;
+ if(filterModelBox)filterModelBox->setEnabled(selectedLane==1);
+ if(filterResonanceSlider)filterResonanceSlider->setEnabled(selectedLane==1&&analog);
+ for(auto& b:filterButtons)if(b)b->setEnabled(selectedLane==1);
+ if(delaySliders[2])delaySliders[2]->setEnabled(
+  proc.state.getRawParameterValue("delaySync")->load()<=.5f);
+ if(delayDivisionBox)delayDivisionBox->setEnabled(
+  proc.state.getRawParameterValue("delaySync")->load()>.5f);
  if(sliders.size()>=8){
-  sliders[3]->setEnabled(!synced); // free-running envelope length
-  sliders[5]->setEnabled(lowEnabled);
-  sliders[6]->setEnabled(highEnabled);
+  // Keep host parameters attached, but expose only input threshold and MIDI
+  // holdoff here. Hidden obsolete crossover knobs must never appear active.
   sliders[2]->setEnabled(audioTrigger);
-  sliders[7]->setEnabled(true); // retrigger holdoff also applies to MIDI notes
+  sliders[7]->setEnabled(true);
  }
- if(combos.size()>=3)combos[2]->setEnabled(synced);
- if(sync)sync->setEnabled(true);
+ for(int i=0;i<2;++i){
+  if(inputCutSliders[(size_t)i])
+   inputCutSliders[(size_t)i]->setEnabled(
+    proc.state.getRawParameterValue(i==0?"inputHpEnabled":"inputLpEnabled")->load()>.5f);
+ }
+ if(combos.size()>=3)combos[2]->setEnabled(
+  proc.state.getRawParameterValue("sync")->load()>.5f);
 }
 void DISidechainEditor::refreshFilterButtons(){
  const auto* raw=proc.state.getRawParameterValue("mode");
@@ -489,46 +654,74 @@ void DISidechainEditor::paintFrequencyResponse(juce::Graphics& g,juce::Rectangle
  if(rect.isEmpty())return;
  g.setColour(juce::Colour(0xff091722));g.fillRoundedRectangle(rect.toFloat(),5.f);
  g.setColour(juce::Colour(0xff1c3c4b));
- for(int k=1;k<8;++k)g.drawVerticalLine(rect.getX()+rect.getWidth()*k/8,(float)rect.getY(),(float)rect.getBottom());
- for(int k=1;k<4;++k)g.drawHorizontalLine(rect.getY()+rect.getHeight()*k/4,(float)rect.getX(),(float)rect.getRight());
- const int mode=juce::jlimit(0,3,(int)proc.state.getRawParameterValue("mode")->load());
- const float cutoff=juce::jlimit(25.f,18000.f,proc.state.getRawParameterValue("low")->load());
- const float high=juce::jlimit(60.f,18000.f,proc.state.getRawParameterValue("high")->load());
- const auto position=[](float hz){return juce::jlimit(0.f,1.f,(std::log(hz)-std::log(20.f))/(std::log(20000.f)-std::log(20.f)));};
- juce::Path curve;
+ for(int k=1;k<8;++k)g.drawVerticalLine(rect.getX()+rect.getWidth()*k/8,
+                                        (float)rect.getY(),(float)rect.getBottom());
+ for(int k=1;k<4;++k)g.drawHorizontalLine(rect.getY()+rect.getHeight()*k/4,
+                                          (float)rect.getX(),(float)rect.getRight());
+ const bool hp=proc.state.getRawParameterValue("inputHpEnabled")->load()>.5f;
+ const bool lp=proc.state.getRawParameterValue("inputLpEnabled")->load()>.5f;
+ const float hpCut=juce::jlimit(20.f,2000.f,
+                              proc.state.getRawParameterValue("inputHpHz")->load());
+ const float lpCut=juce::jlimit(500.f,18000.f,
+                              proc.state.getRawParameterValue("inputLpHz")->load());
+ juce::Path p;
  for(int i=0;i<=170;++i){
-  const float x=i/170.f;
-  const float f=20.f*std::pow(1000.f,x);
-  const auto sigmoid=[](float z){return 1.f/(1.f+std::exp(-z));};
-  const float lowpass=1.f-sigmoid((std::log(f)-std::log(cutoff))*9.f);
-  const float highpass=1.f-lowpass;
-  const float band=highpass*(1.f-sigmoid((std::log(f)-std::log(juce::jmax(cutoff+1.f,high)))*9.f));
-  const float value=mode==0?1.f:mode==1?lowpass:mode==2?highpass:band;
-  const float px=rect.getX()+x*rect.getWidth();
-  const float py=rect.getBottom()-5.f-value*(rect.getHeight()-10.f);
-  if(i==0)curve.startNewSubPath(px,py);else curve.lineTo(px,py);
+  const float t=i/170.f;
+  const float hz=20.f*std::pow(1000.f,t);
+  const float low=1.f/(1.f+std::pow(hz/juce::jmax(20.f,lpCut),2.f));
+  const float high=1.f/(1.f+std::pow(hpCut/juce::jmax(20.f,hz),2.f));
+  const float response=(hp?high:1.f)*(lp?low:1.f);
+  const float x=rect.getX()+t*rect.getWidth();
+  const float y=rect.getBottom()-5.f-response*(rect.getHeight()-10.f);
+  if(i==0)p.startNewSubPath(x,y);else p.lineTo(x,y);
  }
- juce::Path fill(curve);fill.lineTo((float)rect.getRight(),(float)rect.getBottom());fill.lineTo((float)rect.getX(),(float)rect.getBottom());fill.closeSubPath();
- g.setColour(juce::Colour(0xffff8b19).withAlpha(.15f));g.fillPath(fill);
- g.setColour(juce::Colour(0xffffa126).withAlpha(.20f));g.strokePath(curve,juce::PathStrokeType(6.f));
- g.setColour(juce::Colour(0xffff981b));g.strokePath(curve,juce::PathStrokeType(2.5f));
- const float knobX=rect.getX()+position(cutoff)*rect.getWidth();
- g.setColour(juce::Colours::white);g.fillEllipse(knobX-4.f,rect.getY()+4.f,8.f,8.f);
- const juce::StringArray ticks{"20","50","100","200","500","1k","2k","5k","10k","20k"};
- for(int i=0;i<ticks.size();++i)text(g,ticks[i],{rect.getX()+i*rect.getWidth()/10,rect.getBottom()+2,35,14},10,juce::Colour(0xff8bafc1));
+ g.setColour(juce::Colour(0xff2ad3da).withAlpha(.12f));
+ auto fill=p;fill.lineTo((float)rect.getRight(),(float)rect.getBottom());
+ fill.lineTo((float)rect.getX(),(float)rect.getBottom());fill.closeSubPath();
+ g.fillPath(fill);
+ g.setColour(juce::Colour(0xff2ad3da));g.strokePath(p,juce::PathStrokeType(2.f));
+ const juce::StringArray ticks{"20","100","500","1k","5k","20k"};
+ for(int i=0;i<ticks.size();++i)
+  text(g,ticks[i],{rect.getX()+i*(rect.getWidth()-30)/5,rect.getBottom()-14,36,13},
+       9,juce::Colour(0xff8bafc1));
 }
+
 void DISidechainEditor::paintShape(juce::Graphics& g,juce::Rectangle<int> r,int step,bool drawNodes) {
  if(r.isEmpty())return;
  g.setColour(juce::Colour(0xff111820));g.fillRoundedRectangle(r.toFloat(),5.f);
  g.setColour(juce::Colour(0xff2c3844));
  for(int i=1;i<8;++i){const int x=r.getX()+r.getWidth()*i/8;g.drawVerticalLine(x,(float)r.getY(),(float)r.getBottom());}
  for(int i=1;i<4;++i){const int y=r.getY()+r.getHeight()*i/4;g.drawHorizontalLine(y,(float)r.getX(),(float)r.getRight());}
- const bool seq=sequenceToggle->getToggleState();
- const auto laneColour=selectedLane==0?orange:selectedLane==1?juce::Colour(0xff44bbff):juce::Colour(0xffc55bff);
+ const bool seq=true;
+ if(seq&&selectedLane==0&&selectedTrack>=0&&selectedTrack<6&&
+    true){
+  const auto dc=proc.getDynamicDuckCurve(selectedTrack,selectedStep);
+  const auto colour=DITheme::lime();
+  juce::Path curve;
+  const int n=renderQuality==2?360:renderQuality==0?65:170;
+  for(int j=0;j<=n;++j){
+   const float t=(float)j/n;
+   const float px=r.getX()+r.getWidth()*t;
+   const float py=r.getBottom()-dc.evaluate(t)*r.getHeight();
+   if(j==0)curve.startNewSubPath(px,py);else curve.lineTo(px,py);
+  }
+  juce::Path fill=curve;fill.lineTo((float)r.getRight(),(float)r.getBottom());
+  fill.lineTo((float)r.getX(),(float)r.getBottom());fill.closeSubPath();
+  g.setColour(colour.withAlpha(.15f));g.fillPath(fill);
+  g.setColour(colour);g.strokePath(curve,juce::PathStrokeType(drawNodes?2.5f:1.5f));
+  if(drawNodes)for(int i=0;i<dc.count;++i){
+   const float x=r.getX()+r.getWidth()*dc.x[(size_t)i];
+   const float y=r.getBottom()-r.getHeight()*dc.y[(size_t)i];
+   g.setColour(juce::Colour(0xff0b151a));g.fillEllipse(x-7.f,y-7.f,14.f,14.f);
+   g.setColour(colour);g.drawEllipse(x-6.f,y-6.f,12.f,12.f,2.f);
+  }
+  return;
+ }
+ const auto laneColour=selectedLane==0?DITheme::lime():selectedLane==1?juce::Colour(0xff44bbff):juce::Colour(0xffc55bff);
  const float offset=seq&&selectedLane==0&&shapeOffset? (float)shapeOffset->getValue():0.f;
  auto value=[&](int i){
-  if(seq&&selectedLane==0&&selectedTrack<6&&proc.state.getRawParameterValue("creativeGridEnabled")->load()>0.5f)
-   return proc.getDuckCurvePoint(selectedTrack,i);
+  if(seq&&selectedLane==0&&selectedTrack<6&&true)
+   return proc.getDynamicDuckCurve(selectedTrack,selectedStep).evaluate(i/7.f);
   return seq?(selectedLane==0?proc.getSequencePoint(step,i):proc.getModulationPoint(selectedLane-1,step,i)):proc.points[i].load();
  };
  juce::Path p;
@@ -570,8 +763,8 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  }
  g.setColour(cyan.withAlpha(.23f));g.strokePath(logo,juce::PathStrokeType(6.f));
  g.setColour(cyan);g.strokePath(logo,juce::PathStrokeType(2.5f));
- text(g,"DI SIDEFX", {117,30,280,39},32,white,true);
- text(g,"5.3",{365,30,100,39},27,orange,true);
+ text(g,"DI SEQFX", {117,30,280,39},32,white,true);
+ text(g,"5.4",{365,30,100,39},27,orange,true);
  text(g,"D I G I T A L   I L L U S I O N",{120,72,310,16},12,faint);
  g.setColour(juce::Colour(0xff2d5668));g.drawVerticalLine(435,30.f,80.f);
  text(g,"PRESET",{450,43,80,21},12,faint,true);
@@ -590,23 +783,21 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  const auto nav=juce::Rectangle<float>(12,108,1512,62);
  g.setColour(juce::Colour(0xff102a37));g.fillRoundedRectangle(nav,11.f);
  g.setColour(juce::Colour(0xff24546a));g.drawRoundedRectangle(nav,11.f,1.f);
- const bool enabled=sequenceToggle&&sequenceToggle->getToggleState();
- g.setColour(enabled?juce::Colour(0xff0a2533):lime);
- g.fillRoundedRectangle(juce::Rectangle<float>(24,117,153,43),8.f);
- text(g,"SIDECHAIN",{40,122,136,30},16,enabled?white:DITheme::dark(),true);
- g.setColour(enabled?lime:juce::Colour(0xff102d3c));
- g.fillRoundedRectangle(juce::Rectangle<float>(183,117,155,43),8.f);
- if(enabled){g.setColour(lime.withAlpha(.25f));g.drawRoundedRectangle(juce::Rectangle<float>(184,118,153,41),8.f,3.f);}
- text(g,"SEQUENCER",{199,122,137,30},16,enabled?DITheme::dark():white,true);
+ g.setColour(lime);
+ g.fillRoundedRectangle(juce::Rectangle<float>(24,117,299,43),8.f);
+ text(g,"SEQUENCER ONLY",{42,122,273,30},16,DITheme::dark(),true);
  text(g,"STEPS",{503,110,70,14},11,faint);
  text(g,"LENGTH / RATE",{630,110,135,14},11,faint);
- text(g,"DRIVE",{1283,110,72,14},11,faint);
- text(g,"WET",{1415,110,60,14},11,faint);
+ text(g,"DRIVE "+juce::String(juce::roundToInt(
+  proc.state.getRawParameterValue("saturatorDrive")->load()/24.f*100.f))+"%",
+  {1283,110,115,14},11,faint);
+ text(g,"WET "+juce::String(juce::roundToInt(
+  proc.state.getRawParameterValue("fxMix")->load()*100.f))+"%",{1405,110,102,14},11,faint);
  text(g,"SCENES",{784,180,83,20},12,faint,true);
  // Shape overview.
  paintPanel(g,{12,177,1512,269},"");
  text(g,"EVENTS",{19,203,59,18},10,faint,true);
- const bool sequenced=sequenceToggle->getToggleState();
+ const bool sequenced=true;
  const int count=juce::jlimit(1,16,(int)sequenceCount->getValue());
  if(sequenced) {
   // Only six musical trigger tracks. All effects live in the modulation rack,
@@ -616,7 +807,7 @@ void DISidechainEditor::paint(juce::Graphics& g) {
   const int left=graph.getX()+labelWidth;
   const int available=graph.getRight()-left;
   const int top=graph.getY()+23;
-  const float rowHeight=(graph.getBottom()-top)/6.f;
+  const float rowHeight=(graph.getBottom()-top-32.f)/6.f;
   for(int step=0;step<count;++step){
    const int x0=left+step*available/count,x1=left+(step+1)*available/count;
    text(g,juce::String(step+1),{x0+5,graph.getY()+1,x1-x0-10,18},11,
@@ -631,6 +822,7 @@ void DISidechainEditor::paint(juce::Graphics& g) {
    g.fillRoundedRectangle(juce::Rectangle<float>((float)graph.getX(),(float)y,(float)labelWidth-4,(float)h),3.f);
    text(g,"TRACK "+juce::String(track+1),{graph.getX()+7,y,labelWidth-12,h},12,
         track==selectedTrack?lime:white,track==selectedTrack);
+   
    for(int step=0;step<count;++step){
     const int x0=left+step*available/count,x1=left+(step+1)*available/count;
     const auto cell=juce::Rectangle<float>((float)x0+2,(float)y+1,
@@ -640,6 +832,7 @@ void DISidechainEditor::paint(juce::Graphics& g) {
     const bool rvb=proc.getCellFxFlag(track,step,0);
     const bool dist=proc.getCellFxFlag(track,step,1);
     const bool reverse=proc.getCellFxFlag(track,step,2);
+    const bool delayOn=proc.getCellFxFlag(track,step,4);
     g.setColour(!on?juce::Colour(0xff26303b):
         bypass?juce::Colour(0xff324350):lime);
     g.fillRoundedRectangle(cell,3.f);
@@ -647,17 +840,21 @@ void DISidechainEditor::paint(juce::Graphics& g) {
      g.setColour(orange.withAlpha(.85f));
      g.drawLine(cell.getX()+3,cell.getBottom()-3,cell.getRight()-3,cell.getY()+3,1.5f);
     }
-    if(on&&!bypass){
+    // Each cell previews its OWN stored shape, including when disabled.
+    // Dim means OFF; a muted line means duck bypassed but shape retained.
+    {
      juce::Path miniature;
+     const auto cellCurve=proc.getDynamicDuckCurve(track,step);
      for(int node=0;node<8;++node){
-      const float v=proc.getDuckCurvePoint(track,node);
+      const float v=cellCurve.evaluate(node/7.f);
       const float px=cell.getX()+5.f+(cell.getWidth()-10.f)*node/7.f;
       const float py=cell.getBottom()-2.f-v*(cell.getHeight()*.32f);
       if(node==0)miniature.startNewSubPath(px,py);
       else miniature.lineTo(px,py);
      }
-     g.setColour(juce::Colour(0xff06121b).withAlpha(.8f));
-     g.strokePath(miniature,juce::PathStrokeType(1.f));
+     g.setColour(on?(bypass?orange.withAlpha(.38f):juce::Colour(0xff06121b).withAlpha(.85f)):
+                  juce::Colour(0xff78bfa3).withAlpha(.38f));
+     g.strokePath(miniature,juce::PathStrokeType(1.1f));
     }
     if(track==selectedTrack&&step==selectedStep){
      g.setColour(orange);g.drawRoundedRectangle(cell,3.f,1.8f);
@@ -666,147 +863,140 @@ void DISidechainEditor::paint(juce::Graphics& g) {
     int flagX=(int)cell.getRight()-5;
     const auto flag=[&](bool enabled,const juce::String& caption,juce::Colour colour){
      if(!enabled)return;
-     flagX-=16;
+     flagX-=12;
      g.setColour(colour);
-     g.fillRoundedRectangle(juce::Rectangle<float>((float)flagX,(float)cell.getY()+3,14.f,14.f),2.f);
-     text(g,caption,{flagX+2,(int)cell.getY()+3,12,14},9,DITheme::dark(),true);
+     g.fillRoundedRectangle(juce::Rectangle<float>((float)flagX,(float)cell.getY()+3,11.f,12.f),2.f);
+     text(g,caption,{flagX+1,(int)cell.getY()+3,10,12},8.5f,DITheme::dark(),true);
     };
-    flag(reverse&&rvb,"<",orange);
-    flag(dist,"D",juce::Colour(0xffff9554));
-    flag(rvb,"R",cyan);
-    if(bypass)flag(true,"X",orange);
+    flag(proc.getCellFxFlag(track,step,5),"F",cyan);
+    flag(reverse&&rvb,"<",juce::Colour(0xff579dff));
+    flag(dist,"D",juce::Colour(0xffffa454));
+    flag(delayOn,"L",juce::Colour(0xffed6acd));
+    flag(rvb,"R",juce::Colour(0xff579dff));
+    if(bypass)flag(true,"X",juce::Colour(0xff87939f));
    }
+  }
+  // The transport is row seven of exactly the SAME column geometry.
+  const int sequenceY=top+juce::roundToInt(6.f*rowHeight)+2;
+  const int sequenceH=juce::jmax(18,graph.getBottom()-sequenceY);
+  g.setColour(juce::Colour(0xff182c36));
+  g.fillRoundedRectangle(juce::Rectangle<float>((float)graph.getX(),(float)sequenceY,
+    (float)labelWidth-4,(float)sequenceH-1),3.f);
+  text(g,"SEQUENCE",{graph.getX()+7,sequenceY,labelWidth-12,sequenceH-1},11,cyan,true);
+  for(int step=0;step<count;++step){
+   const int x0=left+step*available/count,x1=left+(step+1)*available/count;
+   const auto cell=juce::Rectangle<float>((float)x0+2,(float)sequenceY+1,
+    (float)juce::jmax(1,x1-x0-4),(float)sequenceH-3);
+   g.setColour(step==active?lime:juce::Colour(0xff213b4a));
+   g.fillRoundedRectangle(cell,3.f);
+   if(step==active){
+    g.setColour(juce::Colour(0xff0b181c).withAlpha(.65f));
+    g.fillRoundedRectangle(cell.reduced(4.f,5.f),2.f);
+   }
+   if(step==selectedStep){g.setColour(orange);g.drawRoundedRectangle(cell,3.f,1.7f);}
   }
  } else paintShape(g,graph,selectedStep,false);
- const auto laneColour=selectedLane==0?orange:selectedLane==1?cyan:juce::Colour(0xffd36afb);
- const int playing=proc.activeSequenceStep.load(std::memory_order_relaxed);
- // One visible row, never more than sixteen steps.
- for(int i=0;i<count;++i){
-  const float width=(float)stepStrip.getWidth()/count;
-  const auto r=juce::Rectangle<float>(stepStrip.getX()+i*width+1,stepStrip.getY(),width-3,stepStrip.getHeight());
-  const bool selected=i==selectedStep;
-  juce::ColourGradient tile(selected?juce::Colour(0xffa24d0d):juce::Colour(0xff153447),r.getX(),r.getY(),
-                            selected?juce::Colour(0xff3b230f):juce::Colour(0xff091b27),r.getX(),r.getBottom(),false);
-  g.setGradientFill(tile);g.fillRoundedRectangle(r,6.f);
-  g.setColour(selected?orange: i==playing&&sequenced?lime:juce::Colour(0xff28546a));
-  g.drawRoundedRectangle(r,6.f,selected?2.f:1.f);
-  text(g,juce::String(i+1),r.toNearestInt().reduced(5,3).withHeight(16),12,white,true);
-  if(sequenced) {
-   const bool event=proc.getGridCell(selectedTrack,i);
-   const auto colour=lime;
-   g.setColour(event?colour:juce::Colour(0xff223744));
-   g.fillRoundedRectangle(juce::Rectangle<float>(r.getX()+5.f,r.getY()+22.f,
-                                                  r.getWidth()-10.f,19.f),3.f);
-   if(event){
-    juce::String tags;
-    if(proc.getCellFxFlag(selectedTrack,i,0))tags+="R ";
-    if(proc.getCellFxFlag(selectedTrack,i,1))tags+="D ";
-    if(proc.getCellFxFlag(selectedTrack,i,2))tags+="< ";
-    if(proc.getCellFxFlag(selectedTrack,i,3))tags+="OFF";
-    if(tags.isNotEmpty())text(g,tags,r.toNearestInt().reduced(6,3).withTrimmedTop(20),10,DITheme::dark(),true);
-   }
-  } else {
-   juce::Path miniature;
-   for(int node=0;node<8;++node) {
-    const float value=selectedLane==0?proc.getSequencePoint(i,node):proc.getModulationPoint(selectedLane-1,i,node);
-    const float px=r.getX()+5.f+(r.getWidth()-10.f)*node/7.f;
-    const float py=r.getBottom()-5.f-value*(r.getHeight()-25.f);
-    if(node==0)miniature.startNewSubPath(px,py);else miniature.lineTo(px,py);
-   }
-   g.setColour(laneColour);g.strokePath(miniature,juce::PathStrokeType(1.8f));
-  }
- }
- // STEP EDIT (left), five modulation lanes (middle), CELL / TRACK (right).
- paintPanel(g,sequencerPanel,selectedLane==3?"REVERB":selectedLane==4?"DISTORTION":"STEP ENVELOPE");
- paintPanel(g,{897,456,305,240},"MODULATION LANES");
- paintPanel(g,{1212,456,312,240},"CELL / TRACK");
- const juce::Colour lanes[]={lime,cyan,juce::Colour(0xffd16afb),cyan,orange};
- for(int i=0;i<5;++i){
-  const int y=497+i*36;
-  auto r=juce::Rectangle<float>(910.f,(float)y,278.f,31.f);
-  g.setColour(selectedLane==i?juce::Colour(0xff1b4251):juce::Colour(0xff101a25));
-  g.fillRoundedRectangle(r,5.f);
-  g.setColour(lanes[i].withAlpha(selectedLane==i?1.f:.48f));
-  g.drawRoundedRectangle(r,5.f,selectedLane==i?1.6f:.7f);
-  juce::Path wave;
-  for(int j=0;j<=24;++j){
-   const float t=j/24.f;
-   const float modulation=i==3?std::exp(-3.f*t):
-                          i==4?std::sin(12.f*t)*std::exp(-2.f*t):
-                          std::sin(t*juce::MathConstants<float>::twoPi*(i+1));
-   const float py=y+16.f-8.f*modulation;
-   if(j==0)wave.startNewSubPath(1029.f,py);
-   else wave.lineTo(1029.f+125.f*t,py);
-  }
-  g.setColour(lanes[i]);g.strokePath(wave,juce::PathStrokeType(1.65f));
- }
- const bool fxPage=sequenced&&selectedLane>=3;
- if(!fxPage){
-  const juce::String laneName=selectedLane==0?"DUCK ENVELOPE":selectedLane==1?"FILTER":"PAN";
-  text(g,juce::String("TRACK ")+juce::String(selectedTrack+1)+"  /  "+laneName,
-       {28,477,460,18},13,white,true);
-  text(g,juce::String(selectedStep+1)+" / "+juce::String(count),{32,523,150,29},21,orange,true);
-  text(g,"CURVE",{34,590,76,18},11,faint);
+ // The SEQUENCE row is now part of EVENTS, sharing exact track columns.
+ // No duplicate step thumbnails are drawn below the six musical tracks.
+ // STEP EDIT (left), six concise modulation selectors, wide CELL / TRACK.
+ const bool isFX=sequenced&&selectedLane>=3;
+ paintPanel(g,sequencerPanel,selectedLane==3?"REVERB":selectedLane==4?"DISTORTION":
+                      selectedLane==5?"DELAY":"ENVELOPE EDITOR");
+ paintPanel(g,{897,456,222,240},"MODULATION");
+ paintPanel(g,{1129,456,395,240},"CELL / TRACK");
+ // Lane controls themselves provide the full-width, color-filled indicators.
+ // No decorative curves: those implied modulation shapes that do not exist.
+ if(!isFX){
+  const juce::String laneName=selectedLane==0?"VOLUME":selectedLane==1?"FILTER":"PAN";
+  const auto colour=selectedLane==0?lime:selectedLane==1?cyan:juce::Colour(0xffae7cf2);
+  text(g,"TRACK "+juce::String(selectedTrack+1)+"  /  "+laneName,
+       {29,497,510,20},13,colour,true);
+  text(g,juce::String(selectedStep+1)+" / "+juce::String(count),
+       {38,536,150,27},19,colour,true);
   paintShape(g,detailGraph,selectedStep,true);
-  text(g,"Drag points to edit. Shape presets apply to the visible curve.",
-       {232,665,460,18},11,faint);
+  text(g,selectedLane==0?
+     "Drag: move  ·  Double-click: add  ·  Right-click / Alt+click: remove":
+     "Drag a point to edit the selected modulation curve",
+       {229,667,625,15},11,faint);
   for(int i=0;i<9;++i){
    const int x=734+(i%3)*48,y=552+(i/3)*42;
    const auto r=juce::Rectangle<float>((float)x,(float)y,42.f,37.f);
-   g.setColour(juce::Colour(0xff122c3b));g.fillRoundedRectangle(r,5.f);
-   g.setColour(juce::Colour(0xff35667b));g.drawRoundedRectangle(r,5.f,1.f);
+   g.setColour(juce::Colour(0xff121c27));g.fillRoundedRectangle(r,4.f);
+   g.setColour(juce::Colour(0xff405363));g.drawRoundedRectangle(r,4.f,1.f);
    juce::Path shape;
-   for(int j=0;j<=24;++j){
-    const float t=j/24.f;
-    const float v=i==0?t*t*(3.f-2.f*t):i==1?t:i==2?std::sqrt(t):i==3?(t>.5f?1.f:0.f):
-      i==4?1.f-t:i==5?std::abs(std::sin(t*juce::MathConstants<float>::pi)):
-      i==6?1.f-t*t:i==7?(j%8<4?.9f:.1f):t*t*(3.f-2.f*t);
-    if(j==0)shape.startNewSubPath(x+7.f,y+30.f-23.f*v);
-    else shape.lineTo(x+7.f+28.f*t,y+30.f-23.f*v);
+   for(int j=0;j<=28;++j){
+    const float t=j/28.f;
+    const float v=di::sampleCurvePreset(i,t);
+    if(j==0)shape.startNewSubPath(x+6.f,y+31.f-24.f*v);
+    else shape.lineTo(x+6.f+30.f*t,y+31.f-24.f*v);
    }
-   g.setColour(i==0?orange:cyan);
-   g.strokePath(shape,juce::PathStrokeType(1.8f));
+   g.setColour(colour);g.strokePath(shape,juce::PathStrokeType(1.7f));
   }
+ }else if(selectedLane==3){
+  const auto rv=juce::Colour(0xff5b9eff);
+  text(g,"REVERB  ·  REVERSE / PREDELAY / TAIL",{32,486,810,22},13,rv,true);
+  text(g,"MIX",{39,549,200,18},12,rv,true);
+  text(g,"ROOM SIZE",{324,549,210,18},12,rv,true);
+  text(g,"DECAY (s, approx.)",{609,549,220,18},12,rv,true);
+  text(g,"PREDELAY (ms)",{39,610,225,17},11,rv,true);
+  text(g,"Use REV on a cell for a pre-reverb whoosh.",{323,649,492,19},11,faint);
+ }else if(selectedLane==4){
+  text(g,"DISTORT  ·  2x OVERSAMPLING",{32,486,700,21},13,orange,true);
+  text(g,"MIX",{39,549,210,18},12,orange,true);
+  text(g,"DRIVE (dB)",{324,549,210,18},12,orange,true);
+  text(g,"TONE",{39,610,210,17},11,orange,true);
+  text(g,"5 characters: Warm / Acid / Clip / Fold / Modern",
+       {322,649,500,19},11,faint);
  }else{
-  const bool verb=selectedLane==3;
-  text(g,verb?"REVERB · SEND / TAIL / REVERSE":"DISTORT · 2x OVERSAMPLING",
-       {30,479,480,22},14,verb?cyan:orange,true);
-  text(g,verb?"MODEL":"WAVESHAPER MODEL",{326,499,215,18},11,faint);
-  if(verb){
-   text(g,"DRY / WET",{39,549,210,18},12,cyan,true);
-   text(g,"LENGTH",{324,549,210,18},12,cyan,true);
-   text(g,"DECAY",{610,549,190,18},12,cyan,true);
-   text(g,"PREDELAY ms",{39,610,225,17},11,cyan,true);
-   text(g,"The selected cell can reverse its captured input before reverb.",
-        {39,648,800,18},11,faint);
-  }else{
-   text(g,"DRY / WET",{39,549,210,18},12,orange,true);
-   text(g,"DRIVE dB",{327,549,210,18},12,orange,true);
-   text(g,"TONE",{39,610,210,17},11,orange,true);
-   text(g,"5 drive types: Warm / Acid / Clip / Fold / Modern",
-        {39,648,780,18},11,faint);
-  }
+  const auto pink=juce::Colour(0xffed6acd);
+  text(g,"DELAY  ·  SYNC / FREE / PING-PONG",{32,486,740,21},13,pink,true);
+  text(g,"MIX",{39,549,210,18},12,pink,true);
+  text(g,"FEEDBACK",{324,549,210,18},12,pink,true);
+  text(g,"TIME (ms, active in FREE)",{610,549,245,18},12,pink,true);
+  text(g,"SYNC follows host BPM and the selected musical division.",
+       {39,649,740,19},11,faint);
  }
- text(g,"TRACK "+juce::String(selectedTrack+1)+"  ·  STEP "+juce::String(selectedStep+1),
-      {1225,480,278,21},12,white,true);
- text(g,"CELL ROUTING  ·  DUCK / FX / BYPASS",{1226,499,279,17},10,faint);
- text(g,"DUCK DEPTH",{1226,567,225,16},11,lime,true);
- text(g,"ENVELOPE LENGTH (STEPS)",{1226,619,264,16},11,orange,true);
- text(g,"BYP skips ducking; R/D remain active.",
-      {1226,671,284,15},10,faint);
- // Always visible frequency controls and output meters.
- paintPanel(g,filterPanel,"FILTER");
+ text(g,"TRACK "+juce::String(selectedTrack+1)+"  /  STEP "+juce::String(selectedStep+1),
+      {1143,485,357,20},13,white,true);
+ text(g,"CELL EFFECT ROUTING",{1143,505,333,16},11,faint);
+ if(selectedLane==0){
+  text(g,"DUCK DEPTH",{1143,566,280,17},11,lime,true);
+  text(g,"ENVELOPE LENGTH (STEPS)",{1143,616,349,17},11,orange,true);
+ }else if(selectedLane==1){
+  text(g,"FILTER FX  /  CUTOFF SHAPE",{1143,553,340,15},11,cyan,true);
+  text(g,"SWEEP DEPTH",{1143,599,340,15},11,cyan,true);
+  text(g,"MODEL",{32,560,165,14},10,cyan,true);
+  text(g,"RESONANCE",{32,609,176,14},10,cyan,true);
+  text(g,"MINIMUM Hz",{1143,647,175,14},10,faint,true);
+  text(g,"MAXIMUM Hz",{1328,647,175,14},10,faint,true);
+ }else if(selectedLane==2){
+  text(g,"PAN MODULATION AMOUNT",{1143,566,340,17},11,juce::Colour(0xffa57dff),true);
+  text(g,"Positive = pan envelope, negative = inverted.",{1143,616,350,18},11,faint);
+ }
+ if(selectedLane!=1)
+  text(g,"BYP skips volume duck; effects stay available.",{1143,670,353,16},10,faint);
+ // Input EQ is independent of rhythm modulation; this section has NO
+ // FILTER-lane character, envelopes or crossover-duck controls.
+ paintPanel(g,filterPanel,"INPUT FILTER  /  PRE-FX");
  paintPanel(g,outputPanel,"OUTPUT / SIDECHAIN");
- text(g,"MODE",{30,747,70,18},11,faint);
- text(g,"TRIGGER SOURCE",{375,747,170,18},11,faint);
- text(g,"BEAT DIVISION",{594,747,150,18},11,faint);
- text(g,"LOW / HIGH FREQUENCY RESPONSE",{756,745,330,18},11,faint);
- const char* knobs[]={"SENSITIVITY","LENGTH","SMOOTH","LOW HZ","HIGH HZ","RETRIGGER"};
- for(int i=0;i<6;++i){
-  const bool enabled=sliders.size()>static_cast<size_t>(i+2)&&sliders[(size_t)(i+2)]->isEnabled();
-  text(g,knobs[i],{29+i*116,805,112,19},11,enabled?faint:faint.withAlpha(.32f));
- }
- paintFrequencyResponse(g,{755,790,348,106});
+ text(g,"HIGH PASS",{32,743,185,17},11,cyan,true);
+ text(g,"LOW PASS",{260,743,185,17},11,cyan,true);
+ text(g,"TRIGGER SOURCE",{497,743,205,17},11,faint,true);
+ text(g,"HP CUTOFF",{32,795,185,17},11,faint,true);
+ text(g,"LP CUTOFF",{260,795,185,17},11,faint,true);
+ text(g,"SENSITIVITY",{500,801,125,17},11,faint,true);
+ text(g,"RETRIGGER",{623,801,125,17},11,faint,true);
+ text(g,"Independent input cleanup • FILTER lane controls rhythmic sweeps",
+      {758,768,346,28},10,faint);
+ paintFrequencyResponse(g,{755,813,348,90});
+ const float duckGr=juce::jlimit(0.f,1.f,
+  proc.duckReduction.load(std::memory_order_relaxed));
+ const float grDb=duckGr>0.f?-20.f*std::log10(juce::jmax(.001f,1.f-duckGr)):0.f;
+ text(g,"DUCK "+juce::String(grDb,1)+" dB",
+      {1162,737,215,21},12,duckGr>.01f?lime:faint,true);
+ const float preFxInput=juce::jmax(0.f,proc.inputLevel.load(std::memory_order_relaxed));
+ text(g,preFxInput<.001f?"NO AUDIO INPUT":"INPUT SIGNAL OK",
+      {1358,737,148,21},11,preFxInput<.001f?orange:cyan,true);
  text(g,"DEPTH",{1170,766,110,20},13,white,true);
  text(g,"MIX",{1320,766,110,20},13,white,true);
  text(g,"OUT",{1459,752,57,21},13,white,true);
@@ -820,11 +1010,12 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  for(int i=0;i<db.size();++i)text(g,db[i],{1496,781+i*20,39,16},10,faint);
 }
 void DISidechainEditor::refreshCellControls(){
- const bool seq=sequenceToggle&&sequenceToggle->getToggleState();
- for(int i=0;i<5;++i)if(cellControls[i]){
+ const bool seq=true;
+ constexpr int flags[7]={-1,5,0,1,4,2,3};
+ for(int i=0;i<7;++i)if(cellControls[i]){
   cellControls[i]->setVisible(seq&&selectedTrack<6);
   const bool active=i==0?proc.getGridCell(selectedTrack,selectedStep):
-    proc.getCellFxFlag(selectedTrack,selectedStep,i==4?3:i-1);
+    proc.getCellFxFlag(selectedTrack,selectedStep,flags[i]);
   cellControls[i]->setToggleState(active,juce::dontSendNotification);
  }
 }
@@ -835,14 +1026,15 @@ void DISidechainEditor::refreshDuckControls(){
 }
 void DISidechainEditor::refreshCreativePage(){
  refreshCellControls();
- const bool sceneActive=sequenceToggle&&sequenceToggle->getToggleState();
+ const bool sceneActive=true;
  if(copySceneButton)copySceneButton->setVisible(sceneActive);
  for(int j=0;j<4;++j)if(sceneButtons[j]){
   sceneButtons[j]->setVisible(sceneActive);
   sceneButtons[j]->setToggleState(proc.getGridScene()==j,juce::dontSendNotification);
  }
- const bool active=sequenceToggle&&sequenceToggle->getToggleState();
- const bool fxPage=active&&selectedLane>=3;
+ const bool active=true;
+ const bool fxPage=active&&selectedLane>=3&&selectedLane<=4;
+ const bool delayPage=active&&selectedLane==5;
  const bool duckPage=active&&selectedTrack<6;
  if(duckDepthSlider)duckDepthSlider->setVisible(duckPage);
  if(duckLengthSlider)duckLengthSlider->setVisible(duckPage);
@@ -852,19 +1044,54 @@ void DISidechainEditor::refreshCreativePage(){
  if(reverseButton)reverseButton->setVisible(fxPage&&verb);
  for(int i=0;i<2;++i)if(creativeModelBoxes[i])creativeModelBoxes[i]->setVisible(fxPage&&i==(verb?0:1));
  for(int i=0;i<7;++i)if(creativeSliders[i])creativeSliders[i]->setVisible(fxPage&&(verb?(i<3||i==5):(i==3||i==4||i==6)));
+ for(auto& item:delaySliders)if(item)item->setVisible(delayPage);
+ if(delayOnButton)delayOnButton->setVisible(delayPage);
+ if(delaySyncButton)delaySyncButton->setVisible(delayPage);
+ if(delayPingpongButton)delayPingpongButton->setVisible(delayPage);
+ if(delayDivisionBox)delayDivisionBox->setVisible(delayPage);
+ if(delaySliders[2])delaySliders[2]->setEnabled(!delaySyncButton||!delaySyncButton->getToggleState());
+ if(delayDivisionBox)delayDivisionBox->setEnabled(delaySyncButton&&delaySyncButton->getToggleState());
  // Legacy step shape controls are hidden only while editing an FX track.
  for(auto* b:{copyStep.get(),pasteStep.get(),resetStep.get(),undoButton.get(),redoButton.get(),
               snapButton.get(),shapePresetButton.get(),sequencePrev.get(),sequenceNext.get()})
-  if(b)b->setVisible(!fxPage);
+  if(b)b->setVisible(!fxPage&&!delayPage);
  if(shapeOffset)shapeOffset->setVisible(!active);
- for(auto& slider:laneSliders)if(slider)slider->setVisible(!active);
- for(auto& b:laneTabs)if(b)b->setVisible(true);
+ // FILTER and PAN amount were previously hidden whenever GRID was on;
+ // consequently the user could edit the envelope but hear no change.
+ if(laneSliders[0])laneSliders[0]->setVisible(active&&selectedLane==1);
+ if(laneSliders[1])laneSliders[1]->setVisible(active&&selectedLane==2);
+ // Creative filter settings live ONLY beneath the FILTER modulation lane.
+ const bool filterLane=selectedLane==1;
+ for(auto& b:filterButtons)if(b)b->setVisible(filterLane);
+ if(filterModelBox)filterModelBox->setVisible(filterLane);
+ if(filterResonanceSlider)filterResonanceSlider->setVisible(filterLane);
+ for(auto& slider:filterSweepSliders)if(slider)slider->setVisible(filterLane);
+ // Separate, always-visible input cleanup rack.
+ for(auto& button:inputCutButtons)if(button)button->setVisible(true);
+ for(auto& slider:inputCutSliders)if(slider)slider->setVisible(true);
+
+ if(duckDepthSlider)duckDepthSlider->setVisible(duckPage&&selectedLane==0);
+ if(duckLengthSlider)duckLengthSlider->setVisible(duckPage&&selectedLane==0);
+ const juce::Colour laneColours[]={juce::Colour(0xffa4ed38),juce::Colour(0xff2ad3da),
+  juce::Colour(0xffa57dff),juce::Colour(0xff5b9eff),juce::Colour(0xffffa454),
+  juce::Colour(0xffed6acd)};
+ for(int i=0;i<6;++i)if(laneTabs[i]){
+  auto& button=*laneTabs[i];
+  button.setVisible(active);
+  button.setClickingTogglesState(true);
+  button.setToggleState(i==selectedLane,juce::dontSendNotification);
+  button.setColour(juce::TextButton::buttonOnColourId,laneColours[i]);
+  button.setColour(juce::TextButton::textColourOnId,juce::Colour(0xff071018));
+  button.setColour(juce::TextButton::buttonColourId,juce::Colour(0xff152331));
+  button.setColour(juce::TextButton::textColourOffId,laneColours[i]);
+ }
+ updateContextualControls();
 }
 void DISidechainEditor::resized() {
  // All child component bounds use design pixels. The parent editor, graph
  // renderer and pointer handling use the same scale to avoid mismatched hitboxes.
- graph={79,201,1428,176};
- stepStrip={78,392,1430,42};
+ graph={79,201,1428,220};
+ stepStrip={195,390,1312,30};
  detailGraph={230,549,488,110};
  sequencerPanel={12,456,873,240};
  filterPanel={12,706,1110,232};
@@ -875,12 +1102,19 @@ void DISidechainEditor::resized() {
  if(abCopyButtons[0])abCopyButtons[0]->setBounds(1020,36,52,32);
  if(abCopyButtons[1])abCopyButtons[1]->setBounds(1076,36,52,32);
  if(setupButton)setupButton->setBounds(setupBounds);
- if(gridModeButton)gridModeButton->setBounds(917,124,124,30);
+
  for(int i=0;i<4;++i)if(sceneButtons[i])sceneButtons[i]->setBounds(873+i*62,179,57,22);
  if(copySceneButton)copySceneButton->setBounds(1124,179,113,22);
- if(duckDepthSlider)duckDepthSlider->setBounds(1224,586,284,30);
- if(duckLengthSlider)duckLengthSlider->setBounds(1224,638,284,30);
+ if(duckDepthSlider)duckDepthSlider->setBounds(1144,584,358,30);
+ if(duckLengthSlider)duckLengthSlider->setBounds(1144,635,358,30);
  if(reverbOnButton)reverbOnButton->setBounds(32,505,125,31);
+ if(delayOnButton)delayOnButton->setBounds(35,507,121,29);
+ if(delaySyncButton)delaySyncButton->setBounds(163,507,100,29);
+ if(delayPingpongButton)delayPingpongButton->setBounds(270,507,131,29);
+ if(delayDivisionBox)delayDivisionBox->setBounds(433,507,156,29);
+ if(delaySliders[0])delaySliders[0]->setBounds(36,576,253,33);
+ if(delaySliders[1])delaySliders[1]->setBounds(319,576,253,33);
+ if(delaySliders[2])delaySliders[2]->setBounds(602,576,253,33);
  if(distortOnButton)distortOnButton->setBounds(32,505,125,31);
  if(reverseButton)reverseButton->setBounds(163,505,132,31);
  if(creativeModelBoxes[0])creativeModelBoxes[0]->setBounds(324,505,220,31);
@@ -890,10 +1124,14 @@ void DISidechainEditor::resized() {
   const int yy=i>=5?630:576;
   creativeSliders[i]->setBounds(36+col*283,yy,253,33);
  }
- for(int i=0;i<5;++i)if(cellControls[i])cellControls[i]->setBounds(1223+i*58,522,55,31);
+ for(int i=0;i<7;++i)if(cellControls[i])cellControls[i]->setBounds(1139+i*53,524,51,31);
  refreshCreativePage();
- if(sequenceToggle)sequenceToggle->setBounds(360,124,137,32);
+ // Single-mode DI SEQFX: no alternate mode controls are instantiated.
+ if(sequenceToggle){sequenceToggle->setVisible(false);sequenceToggle->setBounds(0,0,0,0);}
+ if(gridModeButton){gridModeButton->setVisible(false);gridModeButton->setBounds(0,0,0,0);}
  if(sequenceCount)sequenceCount->setBounds(501,124,118,30);
+ if(filterModelBox)filterModelBox->setBounds(756,767,169,28);
+ if(filterResonanceSlider)filterResonanceSlider->setBounds(938,767,171,28);
  if(combos.size()==3){
   combos[0]->setBounds(0,0,0,0); // filter mode uses premium segment buttons
   combos[1]->setBounds(376,769,204,30);
@@ -917,19 +1155,42 @@ void DISidechainEditor::resized() {
  if(snapButton)snapButton->setBounds(630,499,85,32);
  if(shapePresetButton)shapePresetButton->setBounds(727,499,151,32);
  if(shapeOffset){shapeOffset->setBounds(1320,543,184,31);shapeOffset->setEnabled(selectedLane==0);}
- if(laneSliders[0])laneSliders[0]->setBounds(1320,593,184,31);
- if(laneSliders[1])laneSliders[1]->setBounds(1320,640,184,31);
- for(int i=0;i<5;++i)if(laneTabs[i]){
-  laneTabs[i]->setBounds(920,500+i*36,99,27);
+ if(laneSliders[0])laneSliders[0]->setBounds(1144,584,358,31);
+ if(laneSliders[1])laneSliders[1]->setBounds(1144,584,358,31);
+ for(int i=0;i<6;++i)if(laneTabs[i]){
+  laneTabs[i]->setBounds(908,498+i*31,200,27);
   laneTabs[i]->setToggleState(i==selectedLane,juce::dontSendNotification);
  }
- for(int i=0;i<4;++i)if(filterButtons[i])filterButtons[i]->setBounds(31+i*78,768,73,30);
- if(sliders.size()==8 && labels.size()==8){
-  const int xs[]={1163,1290,28,144,260,376,492,608};
+ for(int i=0;i<4;++i)if(filterButtons[i])
+  filterButtons[i]->setBounds(1143+i*91,570,85,25);
+ if(filterModelBox)filterModelBox->setBounds(32,577,177,29);
+ if(filterResonanceSlider)filterResonanceSlider->setBounds(32,627,177,27);
+ if(laneSliders[0])laneSliders[0]->setBounds(1143,614,359,26);
+ for(int i=0;i<2;++i){
+  if(filterSweepSliders[(size_t)i])
+   filterSweepSliders[(size_t)i]->setBounds(1143+i*184,666,176,25);
+  if(inputCutButtons[(size_t)i])
+   inputCutButtons[(size_t)i]->setBounds(32+i*228,763,102,27);
+  if(inputCutSliders[(size_t)i])
+   inputCutSliders[(size_t)i]->setBounds(32+i*228,817,202,30);
+ }
+ if(sliders.size()==8&&labels.size()==8){
   for(int i=0;i<8;++i){
-   labels[i]->setVisible(false); // titles are painted in the aligned premium panel
-   sliders[i]->setBounds(xs[i],i<2?791:825,111,102);
+   labels[(size_t)i]->setVisible(false);
+   // Retain the two OUTPUT rotary knobs; only the old crossover knobs
+   // are replaced by the static INPUT HP/LP controls.
+   const bool visible=i==0||i==1||i==2||i==7;
+   sliders[(size_t)i]->setVisible(visible);
+   if(i==0)sliders[(size_t)i]->setBounds(1163,791,111,102);
+   if(i==1)sliders[(size_t)i]->setBounds(1290,791,111,102);
+   if(i==2)sliders[(size_t)i]->setBounds(500,826,95,89);
+   if(i==7)sliders[(size_t)i]->setBounds(623,826,95,89);
   }
+ }
+ if(combos.size()>=3){
+  // Original mode combo is hidden in favor of the four FILTER-lane buttons.
+  combos[1]->setBounds(495,766,211,28);
+  combos[2]->setBounds(639,124,109,29);
  }
  // Scale actual child bounds (including origin), not component-local transforms.
  // A local transform scales each button about its own position and would leave
@@ -946,19 +1207,37 @@ void DISidechainEditor::resized() {
  }
 }
 void DISidechainEditor::updatePoint(const juce::MouseEvent& e) {
- if(selectedLane>=3&&sequenceToggle&&sequenceToggle->getToggleState())return;
+ const bool gridShape=true&&selectedLane==0&&selectedTrack<6&&
+  true;
+ if(gridShape){
+  if(!draggingShape||dragNode<0)return;
+  const auto point=e.position/uiScale;
+  auto c=proc.getDynamicDuckCurve(dragStep-96,dragCellStep,dragScene);
+  c.move(dragNode,(point.x-detailGraph.getX())/juce::jmax(1,detailGraph.getWidth()),
+   (detailGraph.getBottom()-point.y)/(float)juce::jmax(1,detailGraph.getHeight()));
+  if(snapButton&&snapButton->getToggleState()){
+   const int k=dragNode;
+   if(k>0&&k<c.count-1)c.x[(size_t)k]=juce::jlimit(
+    c.x[(size_t)(k-1)]+.015f,c.x[(size_t)(k+1)]-.015f,
+    std::round(c.x[(size_t)k]*16.f)/16.f);
+   c.y[(size_t)k]=std::round(c.y[(size_t)k]*16.f)/16.f;
+  }
+  proc.setDynamicDuckCurve(dragStep-96,dragCellStep,c,dragScene);
+  repaint();return;
+ }
+ if(selectedLane>=3&&true)return;
  // Continue editing the captured node beyond the graph edges; the vertical
  // value is clamped below. Starting a drag outside the graph remains ignored.
- if(!draggingShape&&!detailGraph.contains((e.position/uiScale).toInt()))return;
+ if(!draggingShape&&!detailGraph.expanded(12,12).contains((e.position/uiScale).toInt()))return;
  const auto r=detailGraph;
  const auto point=e.position/uiScale;
  const int i=draggingShape&&dragNode>=0?dragNode:juce::jlimit(0,7,juce::roundToInt((point.x-r.getX())/juce::jmax(1,r.getWidth())*7.f));
  float v=juce::jlimit(0.f,1.f,(r.getBottom()-point.y)/(float)juce::jmax(1,r.getHeight()));
- if(sequenceToggle->getToggleState()&&selectedLane==0&&shapeOffset)
+ if(true&&selectedLane==0&&shapeOffset)
   v=juce::jlimit(0.f,1.f,v-(float)shapeOffset->getValue());
  if(snapButton&&snapButton->getToggleState())v=juce::jlimit(0.f,1.f,std::round(v*16.f)/16.f);
- if(sequenceToggle->getToggleState()){
-  if(selectedLane==0&&selectedTrack<6&&proc.state.getRawParameterValue("creativeGridEnabled")->load()>0.5f)
+ if(true){
+  if(selectedLane==0&&selectedTrack<6&&true)
    proc.setDuckCurvePoint(selectedTrack,i,v);
   else if(selectedLane==0)proc.setSequencePoint(selectedStep,i,v);
   else proc.setModulationPoint(selectedLane-1,selectedStep,i,v);
@@ -972,19 +1251,28 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
  for(int i=0;i<9&&selectedLane<3;++i)if(juce::Rectangle<int>(734+(i%3)*48,552+(i/3)*42,42,36).contains(pos)){
   applyShapePreset(i);return;
  }
- if(juce::Rectangle<int>(24,117,153,43).contains(pos)){sequenceToggle->setToggleState(false,juce::sendNotificationSync);selectedLane=0;refreshCreativePage();repaint();return;}
- if(juce::Rectangle<int>(183,117,155,43).contains(pos)){sequenceToggle->setToggleState(true,juce::sendNotificationSync);refreshCreativePage();repaint();return;}
+ // DI SEQFX has no alternate SIDECHAIN mode or transport mode switch.
  // Each track cell is independently routed through the five cell switches.
- if(sequenceToggle->getToggleState()&&graph.contains(pos)){
+ if(true&&graph.contains(pos)){
   constexpr int labelWidth=116;
   const int left=graph.getX()+labelWidth,top=graph.getY()+23;
   if(pos.x>=left&&pos.y>=top){
    const int count=juce::jlimit(1,16,(int)sequenceCount->getValue());
    selectedStep=juce::jlimit(0,count-1,(pos.x-left)*count/juce::jmax(1,graph.getRight()-left));
-   selectedTrack=juce::jlimit(0,5,(pos.y-top)*6/juce::jmax(1,graph.getBottom()-top));
-   proc.setGridCell(selectedTrack,selectedStep,!proc.getGridCell(selectedTrack,selectedStep));
-   if(gridModeButton&&!gridModeButton->getToggleState())
-    gridModeButton->setToggleState(true,juce::sendNotificationSync);
+   const int playableHeight=juce::jmax(1,graph.getBottom()-top-32);
+   if(pos.y<top+playableHeight){
+    selectedTrack=juce::jlimit(0,5,(pos.y-top)*6/playableHeight);
+    // Editing is non-destructive: a single click selects that cell's
+    // unique envelope. Right-click or double-click toggles event enable.
+    if(e.mods.isRightButtonDown()||e.getNumberOfClicks()>1){
+     const bool enabled=!proc.getGridCell(selectedTrack,selectedStep);
+     proc.setGridCell(selectedTrack,selectedStep,enabled);
+     if(enabled&&proc.getCellFxMask(selectedTrack,selectedStep)==0)
+      proc.setCellFxFlag(selectedTrack,selectedStep,5,true);
+    }
+    // Preserve the selected modulation lane; clicking a FILTER cell should
+    // display its FILTER envelope, not silently jump back to VOLUME.
+   } // SEQUENCE row selects a column, never toggles a musical event.
    refreshDuckControls();
    refreshCreativePage();
    repaint();
@@ -996,11 +1284,43 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e){
   selectedStep=juce::jlimit(0,count-1,(pos.x-stepStrip.getX())*count/juce::jmax(1,stepStrip.getWidth()));
   refreshCellControls();repaint();return;
  }
- if(selectedLane<3&&detailGraph.contains(pos)){
+ if(selectedLane==0&&detailGraph.expanded(juce::roundToInt(32.f/juce::jmax(.25f,uiScale))).contains(pos)){
+  auto c=proc.getDynamicDuckCurve(selectedTrack,selectedStep);
+  const float mx=e.position.x/uiScale-detailGraph.getX();
+  const float my=e.position.y/uiScale-detailGraph.getY();
+  const float tx=juce::jlimit(0.f,1.f,mx/(float)juce::jmax(1,detailGraph.getWidth()));
+  const float ty=juce::jlimit(0.f,1.f,1.f-my/(float)juce::jmax(1,detailGraph.getHeight()));
+  const bool removing=e.mods.isRightButtonDown()||e.mods.isAltDown();
+  const int nearest=di::CurveHit::nearest(c,mx,my,(float)detailGraph.getWidth(),
+      (float)detailGraph.getHeight(),uiScale,removing);
+  if(removing){
+   // Right click OR Alt+click removes a visible interior point;
+   // endpoints remain anchored. Ignore clicks not targeting a handle.
+   auto before=c;
+   if(nearest>=0&&c.erase(nearest)){
+    proc.setDynamicDuckCurve(selectedTrack,selectedStep,c);
+    pushDynamicEdit(selectedTrack,selectedStep,before,c);
+    repaint();
+   }
+   return;
+  }
+  if(e.getNumberOfClicks()>=2){
+   auto before=c;
+   if(c.insert(tx,ty)){proc.setDynamicDuckCurve(selectedTrack,selectedStep,c);pushDynamicEdit(selectedTrack,selectedStep,before,c);repaint();}
+   return;
+  }
+  if(nearest>=0){
+   draggingShape=true;dragNode=nearest;dragStep=96+selectedTrack;
+   dragCellStep=selectedStep;dragScene=proc.getGridScene();
+   dragSequence=true;dragDynamicBefore=c;
+  }
+  return;
+ }
+ if(selectedLane<3&&detailGraph.expanded(10,10).contains(pos)){
   draggingShape=true;
   dragNode=juce::jlimit(0,7,juce::roundToInt((pos.x-detailGraph.getX())*7.f/juce::jmax(1,detailGraph.getWidth())));
   dragStep=currentShapeKey();
-  dragSequence=sequenceToggle->getToggleState();
+  dragSequence=true;
   dragBefore=captureShape(dragStep,dragSequence);
  }
  updatePoint(e);
@@ -1010,80 +1330,117 @@ void DISidechainEditor::mouseUp(const juce::MouseEvent&) {
  if(!draggingShape)return;
  draggingShape=false;
  dragNode=-1;
- pushEdit(dragStep,dragSequence,dragBefore,captureShape(dragStep,dragSequence));
+ if(dragSequence&&dragStep>=96&&dragStep<102){
+  const auto after=proc.getDynamicDuckCurve(dragStep-96,dragCellStep,dragScene);
+  pushDynamicEdit(dragStep-96,dragCellStep,dragDynamicBefore,after);
+ } else pushEdit(dragStep,dragSequence,dragBefore,captureShape(dragStep,dragSequence));
 }
 
 void DISidechainEditor::applyFactoryPreset(int index) {
- // SIDEFX factory programs drive the independent trigger grid, not the
- // legacy single-envelope bank inherited during development.
- index=juce::jlimit(0,5,index);
- const char* names[]={"Classic Duck","Deep Pump","Sidechain 4/4",
-                      "Breakbeat Pump","Pump Rise","Wobble"};
- for(int track=0;track<8;++track)
-  for(int step=0;step<16;++step)proc.setGridCell(track,step,false);
- constexpr float classic[8]={0.f,.05f,.22f,.55f,.83f,1.f,1.f,1.f};
- constexpr float deep[8]={0.f,0.f,.05f,.12f,.35f,.65f,.9f,1.f};
- constexpr float rise[8]={1.f,.9f,.7f,.5f,.3f,.12f,.02f,0.f};
- constexpr float wobble[8]={0.f,1.f,.1f,.9f,.2f,.8f,.15f,1.f};
- for(int track=0;track<6;++track){
-  proc.setDuckTrackDepth(track,track==0?1.f:.55f);
-  proc.setDuckTrackLength(track,1.f);
-  for(int node=0;node<8;++node)
-   proc.setDuckCurvePoint(track,node,index==1?deep[node]:index==4?rise[node]:index==5?wobble[node]:classic[node]);
- }
- for(int step=0;step<16;++step){
-  bool kick=false,snare=false,ghost=false,extra=false;
-  switch(index){
-   case 0: kick=step%4==0;break;
-   case 1: kick=step%2==0;break;
-   case 2: kick=step%4==0;snare=step%8==4;break;
-   case 3: kick=step%4==0;snare=step%8==4;ghost=step%8==3||step%8==7;extra=step==10||step==14;break;
-   case 4: kick=step%4==0;break;
-   default: kick=step%2==0;ghost=step%4==3;break;
+ constexpr const char* names[]={
+  "Classic Duck","Deep Pump","Breakbeat Ghost","Half-time Swing",
+  "Melodic Techno","Wobble Bass","Techno Stutter","Reverse Whoosh",
+  "Dubstep Drive","Ping-Pong Echo"
+ };
+ constexpr int lengths[]={16,8,16,8,16,8,12,8,8,12};
+ index=juce::jlimit(0,9,index);
+ const auto setParameter=[this](const char* key,float value){
+  if(auto* p=proc.state.getParameter(key)){
+   p->beginChangeGesture();p->setValueNotifyingHost(p->convertTo0to1(value));p->endChangeGesture();
   }
-  proc.setGridCell(0,step,kick);
-  proc.setGridCell(1,step,snare);
-  proc.setGridCell(2,step,ghost);
-  proc.setGridCell(3,step,extra);
+ };
+ // Global programs initialize all scenes consistently, including effects.
+ for(int scene=0;scene<4;++scene){
+  proc.setGridScene(scene);
+  for(int track=0;track<6;++track)for(int step=0;step<16;++step){
+   proc.setGridCell(track,step,false);
+   for(int flag=0;flag<6;++flag)proc.setCellFxFlag(track,step,flag,false);
+  }
  }
+ proc.setGridScene(0);
+ constexpr float classic[8]={0.f,.04f,.15f,.45f,.78f,1.f,1.f,1.f};
+ constexpr float deep[8]={0.f,0.f,.04f,.12f,.35f,.67f,.92f,1.f};
+ constexpr float rise[8]={1.f,.9f,.72f,.55f,.34f,.16f,.04f,0.f};
+ constexpr float wobble[8]={0.f,1.f,.08f,.93f,.15f,.86f,.2f,1.f};
+ for(int track=0;track<6;++track){
+  proc.setDuckTrackDepth(track,track==0?1.f:.65f);
+  proc.setDuckTrackLength(track,index==3?.8f:1.f);
+  di::DynamicCurve dc;
+  for(int j=0;j<8;++j)dc.y[(size_t)j]=index==1?deep[j]:index==7?rise[j]:
+                                        index==5||index==8?wobble[j]:classic[j];
+  for(int scene=0;scene<4;++scene)
+   for(int step=0;step<16;++step)
+    proc.setDynamicDuckCurve(track,step,dc,scene);
+ }
+ const auto event=[this](int track,int step){
+  proc.setGridCell(track,step,true);
+  proc.setCellFxFlag(track,step,5,true);
+ };
+ for(int step=0;step<lengths[index];++step){
+  switch(index){
+   case 0: if(step%4==0)event(0,step);break;
+   case 1: if(step%2==0)event(0,step);break;
+   case 2:
+    if(step==0||step==3||step==8||step==11)event(0,step);
+    if(step==4||step==12)event(1,step);
+    if(step==6||step==14)event(2,step);
+    break;
+   case 3: if(step==0||step==4)event(0,step);if(step==6)event(1,step);break;
+   case 4: if(step%4==0)event(0,step);if(step==7||step==15)event(2,step);break;
+   case 5: if(step%2==0)event(0,step);if(step==3||step==7)event(1,step);break;
+   case 6: if(step%3==0)event(0,step);if(step==2||step==10)event(2,step);break;
+   case 7:
+    if(step==6){event(0,step);proc.setCellFxFlag(0,step,0,true);
+     proc.setCellFxFlag(0,step,2,true);proc.setCellFxFlag(0,step,3,true);}
+    break;
+   case 8:
+    if(step==0||step==3||step==6){
+     event(0,step);proc.setCellFxFlag(0,step,1,true);
+    }
+    break;
+   case 9:
+    if(step%3==0){event(0,step);proc.setCellFxFlag(0,step,4,true);}
+    break;
+  }
+ }
+ setParameter("sequenceSteps",(float)lengths[index]);
+ setParameter("reverbEnabled",index==7?1.f:0.f);
+ setParameter("distortEnabled",index==8?1.f:0.f);
+ setParameter("delayEnabled",index==9?1.f:0.f);
+ setParameter("delaySync",1.f);
+ setParameter("delayPingpong",index==9?1.f:0.f);
+ setParameter("delayWet",index==9?.42f:.3f);
+ setParameter("delayFeedback",index==9?.55f:.35f);
+ setParameter("reverbWet",index==7?.73f:.3f);
+ setParameter("reverbDecay",index==7?5.f:3.f);
+ selectedStep=0;selectedTrack=0;selectedLane=0;
  presetName=names[index];
  proc.state.state.setProperty("presetName",presetName,nullptr);
  if(presetButton)presetButton->setButtonText("PRESETS  -  "+presetName);
- if(auto* p=proc.state.getParameter("sequenceEnabled")){
-  p->beginChangeGesture();p->setValueNotifyingHost(1.f);p->endChangeGesture();
- }
- if(auto* p=proc.state.getParameter("creativeGridEnabled")){
-  p->beginChangeGesture();p->setValueNotifyingHost(1.f);p->endChangeGesture();
- }
- selectedTrack=0;selectedStep=0;
  refreshDuckControls();refreshCreativePage();repaint();
- return;
 }
 void DISidechainEditor::applyShapePreset(int index) {
- const float shapes[][8]={
-  {1.f,.82f,.4f,.05f,.13f,.42f,.79f,1.f},
-  {0.f,.04f,.14f,.32f,.68f,.92f,1.f,1.f},
-  {1.f,1.f,.98f,.9f,.7f,.42f,.15f,0.f},
-  {0.f,0.f,0.f,0.f,1.f,1.f,1.f,1.f},
-  {1.f,.8f,.4f,.1f,.1f,.4f,.8f,1.f},
-  {0.f,.14f,.28f,.43f,.57f,.72f,.86f,1.f},
-  {1.f,.75f,.25f,.05f,.05f,.25f,.75f,1.f},
-  {1.f,.2f,.8f,.15f,.85f,.2f,.8f,1.f},
-  {0.f,.1f,.35f,.7f,.9f,.9f,.98f,1.f}
- };
  index=juce::jlimit(0,8,index);
- const bool seq=sequenceToggle->getToggleState();
+ const bool seq=true;
  // A preset must edit the SAME curve that the visible editor renders.
  // Volume in GRID mode is the track's own duck envelope (96+track),
  // while Filter/Pan retain independent per-step modulation curves.
  const int key=currentShapeKey();
  auto before=captureShape(key,seq),after=before;
- for(int i=0;i<8;++i)after[i]=shapes[index][i];
- applyShape(key,seq,after);pushEdit(key,seq,before,after);
+ for(int i=0;i<8;++i)after[i]=di::curvePresets[(size_t)index][(size_t)i];
+ if(key>=96&&key<102){
+  const auto original=proc.getDynamicDuckCurve(selectedTrack,selectedStep);
+  di::DynamicCurve dc;
+  for(int i=0;i<8;++i)dc.y[(size_t)i]=after[(size_t)i];
+  proc.setDynamicDuckCurve(selectedTrack,selectedStep,dc);
+  pushDynamicEdit(selectedTrack,selectedStep,original,dc);
+ } else {
+  applyShape(key,seq,after);pushEdit(key,seq,before,after);
+ }
  repaint();
 }
 void DISidechainEditor::showPresetMenu() {
- juce::PopupMenu menu;const juce::StringArray names{"Classic Duck","Deep Pump","Sidechain 4/4","Breakbeat Pump","Pump Rise","Wobble"};
+ juce::PopupMenu menu;const juce::StringArray names{"Classic Duck","Deep Pump","Breakbeat Ghost","Half-time Swing","Melodic Techno","Wobble Bass","Techno Stutter","Reverse Whoosh","Dubstep Drive","Ping-Pong Echo"};
  for(int i=0;i<names.size();++i)menu.addItem(i+1,names[i]);
  menu.addSeparator();menu.addItem(100,"Save user preset...");menu.addItem(101,"Load user preset...");
  juce::Component::SafePointer<DISidechainEditor> safe(this);
@@ -1183,8 +1540,8 @@ void DISidechainEditor::showSetupMenu() {
   });
 }
 void DISidechainEditor::saveUserPreset() {
- const auto destination=juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("DI-Sidefx.disidefx");
- presetChooser=std::make_unique<juce::FileChooser>("Save DI SIDEFX preset",destination,"*.disidefx");
+ const auto destination=juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("DI-Seqfx.diseqfx");
+ presetChooser=std::make_unique<juce::FileChooser>("Save DI SEQFX preset",destination,"*.diseqfx");
  juce::Component::SafePointer<DISidechainEditor> safe(this);
  presetChooser->launchAsync(juce::FileBrowserComponent::saveMode|juce::FileBrowserComponent::canSelectFiles,
   [safe](const juce::FileChooser& chooser){
@@ -1201,13 +1558,13 @@ void DISidechainEditor::saveUserPreset() {
    } else {
     safe->proc.state.state.setProperty("presetName",oldName,nullptr);
     juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon,
-      "DI SIDEFX", "Could not save the preset file. Check folder permissions.");
+      "DI SEQFX", "Could not save the preset file. Check folder permissions.");
    }
   });
 }
 void DISidechainEditor::loadUserPreset() {
  const auto folder=juce::File::getSpecialLocation(juce::File::userDocumentsDirectory);
- presetChooser=std::make_unique<juce::FileChooser>("Load DI SIDEFX preset",folder,"*.disidefx");
+ presetChooser=std::make_unique<juce::FileChooser>("Load DI SEQFX preset",folder,"*.diseqfx");
  juce::Component::SafePointer<DISidechainEditor> safe(this);
  presetChooser->launchAsync(juce::FileBrowserComponent::openMode|juce::FileBrowserComponent::canSelectFiles,
   [safe](const juce::FileChooser& chooser){
@@ -1234,7 +1591,7 @@ void DISidechainEditor::loadUserPreset() {
     safe->repaint();
    } else {
     juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon,
-      "DI SIDEFX", "Could not read this preset file.");
+      "DI SEQFX", "Could not read this preset file.");
    }
   });
 }

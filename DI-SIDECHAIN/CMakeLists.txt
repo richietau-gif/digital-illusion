@@ -1,14 +1,14 @@
 cmake_minimum_required(VERSION 3.22)
-project(DI_SIDEFX VERSION 5.3.0)
+project(DI_SEQFX VERSION 5.4.0)
 set(CMAKE_CXX_STANDARD 17)
 include(FetchContent)
 FetchContent_Declare(juce GIT_REPOSITORY https://github.com/juce-framework/JUCE.git GIT_TAG 8.0.10 GIT_SHALLOW TRUE)
 FetchContent_MakeAvailable(juce)
-juce_add_plugin(DISidefx COMPANY_NAME "Digital Illusion" BUNDLE_ID "com.digitalillusion.disidefx" PLUGIN_MANUFACTURER_CODE DIll PLUGIN_CODE DiFx FORMATS VST3 PRODUCT_NAME "DI SIDEFX" IS_SYNTH FALSE NEEDS_MIDI_INPUT TRUE IS_MIDI_EFFECT FALSE COPY_PLUGIN_AFTER_BUILD FALSE)
-juce_generate_juce_header(DISidefx)
-target_sources(DISidefx PRIVATE Source/PluginProcessor.cpp Source/PluginEditor.cpp)
-target_compile_definitions(DISidefx PUBLIC JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_VST3_CAN_REPLACE_VST2=0)
-target_link_libraries(DISidefx PRIVATE juce::juce_audio_utils juce::juce_dsp juce::juce_audio_processors juce::juce_gui_extra)
+juce_add_plugin(DISeqfx COMPANY_NAME "Digital Illusion" BUNDLE_ID "com.digitalillusion.diseqfx" PLUGIN_MANUFACTURER_CODE DIll PLUGIN_CODE DiSq FORMATS VST3 PRODUCT_NAME "DI SEQFX" IS_SYNTH FALSE NEEDS_MIDI_INPUT TRUE IS_MIDI_EFFECT FALSE COPY_PLUGIN_AFTER_BUILD FALSE)
+juce_generate_juce_header(DISeqfx)
+target_sources(DISeqfx PRIVATE Source/PluginProcessor.cpp Source/PluginEditor.cpp)
+target_compile_definitions(DISeqfx PUBLIC JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_VST3_CAN_REPLACE_VST2=0)
+target_link_libraries(DISeqfx PRIVATE juce::juce_audio_utils juce::juce_dsp juce::juce_audio_processors juce::juce_gui_extra)
 
 include(CTest)
 if(BUILD_TESTING)
@@ -49,6 +49,40 @@ if(BUILD_TESTING)
  add_executable(di_curve_selection_smoke Tests/CurveSelectionSmoke.cpp)
  target_compile_features(di_curve_selection_smoke PRIVATE cxx_std_17)
  add_test(NAME di_curve_selection_smoke COMMAND di_curve_selection_smoke)
+ add_executable(di_dynamic_curve_smoke Tests/DynamicCurveSmoke.cpp)
+ target_compile_features(di_dynamic_curve_smoke PRIVATE cxx_std_17)
+ add_test(NAME di_dynamic_curve_smoke COMMAND di_dynamic_curve_smoke)
+ add_executable(di_creative_delay_smoke Tests/CreativeDelaySmoke.cpp)
+ target_compile_features(di_creative_delay_smoke PRIVATE cxx_std_17)
+ add_test(NAME di_creative_delay_smoke COMMAND di_creative_delay_smoke)
+ add_executable(di_analog_ladder_smoke Tests/AnalogLadderSmoke.cpp)
+ target_compile_features(di_analog_ladder_smoke PRIVATE cxx_std_17)
+ add_test(NAME di_analog_ladder_smoke COMMAND di_analog_ladder_smoke)
+ add_executable(di_seqfx_layout_smoke Tests/SeqfxLayoutSmoke.cpp)
+ target_compile_features(di_seqfx_layout_smoke PRIVATE cxx_std_17)
+ add_test(NAME di_seqfx_layout_smoke COMMAND di_seqfx_layout_smoke)
+ add_executable(di_seqfx_cell_fx_smoke Tests/CellFxRoutingSmoke.cpp)
+ target_compile_features(di_seqfx_cell_fx_smoke PRIVATE cxx_std_17)
+ add_test(NAME di_seqfx_cell_fx_smoke COMMAND di_seqfx_cell_fx_smoke)
+ add_executable(di_duck_audio_signal_smoke Tests/DuckAudioSignalSmoke.cpp)
+ target_compile_features(di_duck_audio_signal_smoke PRIVATE cxx_std_17)
+ add_test(NAME di_duck_audio_signal_smoke COMMAND di_duck_audio_signal_smoke)
+ add_executable(di_sound_modulation_smoke Tests/SoundModulationSmoke.cpp)
+ target_compile_features(di_sound_modulation_smoke PRIVATE cxx_std_17)
+ add_test(NAME di_sound_modulation_smoke COMMAND di_sound_modulation_smoke)
+ add_executable(di_creative_signal_smoke Tests/CreativeSignalSmoke.cpp)
+ target_compile_features(di_creative_signal_smoke PRIVATE cxx_std_17)
+ target_link_libraries(di_creative_signal_smoke PRIVATE juce::juce_audio_basics)
+ add_test(NAME di_creative_signal_smoke COMMAND di_creative_signal_smoke)
+ add_executable(di_per_cell_envelope_smoke Tests/PerCellEnvelopeSmoke.cpp)
+ target_compile_features(di_per_cell_envelope_smoke PRIVATE cxx_std_17)
+ add_test(NAME di_per_cell_envelope_smoke COMMAND di_per_cell_envelope_smoke)
+ add_executable(di_envelope_filter_audio_smoke Tests/EnvelopeFilterAudioSmoke.cpp)
+ target_compile_features(di_envelope_filter_audio_smoke PRIVATE cxx_std_17)
+ add_test(NAME di_envelope_filter_audio_smoke COMMAND di_envelope_filter_audio_smoke)
+ add_executable(di_curve_hit_frequency_smoke Tests/CurveHitAndFrequencySmoke.cpp)
+ target_compile_features(di_curve_hit_frequency_smoke PRIVATE cxx_std_17)
+ add_test(NAME di_curve_hit_frequency_smoke COMMAND di_curve_hit_frequency_smoke)
  # Treat warnings as errors for all standalone DSP regression executables,
  # matching the standalone Tests/CMakeLists.txt configuration.
  foreach(smoke_target IN ITEMS
@@ -63,7 +97,18 @@ if(BUILD_TESTING)
    di_creative_fx_smoke
    di_duck_voice_smoke
    di_creative_distort_2x_smoke
-   di_curve_selection_smoke)
+   di_curve_selection_smoke
+   di_dynamic_curve_smoke
+   di_creative_delay_smoke
+   di_analog_ladder_smoke
+   di_seqfx_layout_smoke
+   di_seqfx_cell_fx_smoke
+   di_duck_audio_signal_smoke
+   di_sound_modulation_smoke
+   di_creative_signal_smoke
+   di_per_cell_envelope_smoke
+   di_envelope_filter_audio_smoke
+   di_curve_hit_frequency_smoke)
   if(MSVC)
    target_compile_options(${smoke_target} PRIVATE /W4 /WX)
   else()

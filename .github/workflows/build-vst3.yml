@@ -1,13 +1,19 @@
-name: Build DI SIDEFX 5.3 Windows VST3
+name: Build DI SEQFX 5.4 Windows VST3
 
 on:
   push:
     branches:
-      - feature/di-sidechain-v5.2b-grid
+      - feature/di-sidefx-5.4-editor-delay
   workflow_dispatch:
 
 permissions:
   contents: read
+
+# Keep only the newest commit building on a feature branch. Older builds are
+# automatically cancelled to reduce Actions minutes and prevent stale ZIPs.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   windows-vst3:
@@ -17,23 +23,23 @@ jobs:
       - uses: actions/checkout@v4
       - name: Configure JUCE and CTest
         shell: pwsh
-        run: cmake -S DI-SIDECHAIN -B build/sidefx -G "Visual Studio 17 2022" -A x64 -DBUILD_TESTING=ON
+        run: cmake -S DI-SIDECHAIN -B build/seqfx -G "Visual Studio 17 2022" -A x64 -DBUILD_TESTING=ON
       - name: Compile Windows x64 Release
         id: build
         shell: pwsh
-        run: cmake --build build/sidefx --config Release --parallel 2
+        run: cmake --build build/seqfx --config Release --parallel 2
       - name: Run DSP and sequencer tests
         id: ctest
         shell: pwsh
-        run: ctest --test-dir build/sidefx -C Release --output-on-failure --no-tests=error
+        run: ctest --test-dir build/seqfx -C Release --output-on-failure --no-tests=error
       - name: Validate VST3 using pluginval
         id: pluginval
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          $vstPath = "build/sidefx/DISidefx_artefacts/Release/VST3"
+          $vstPath = "build/seqfx/DISeqfx_artefacts/Release/VST3"
           $vst = Get-ChildItem -LiteralPath $vstPath -Filter "*.vst3" -Directory | Select-Object -First 1
-          if (-not $vst) { throw "DI SIDEFX VST3 bundle not found at $vstPath" }
+          if (-not $vst) { throw "DI SEQFX VST3 bundle not found at $vstPath" }
           Invoke-WebRequest -Uri "https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_Windows.zip" -OutFile "pluginval.zip"
           Expand-Archive "pluginval.zip" -DestinationPath "pluginval" -Force
           $exe = Get-ChildItem pluginval -Recurse -Filter pluginval.exe -File | Select-Object -First 1 -ExpandProperty FullName
@@ -43,29 +49,29 @@ jobs:
           if (Test-Path pluginval-stdout.log) { Get-Content pluginval-stdout.log }
           if (Test-Path pluginval-stderr.log) { Get-Content pluginval-stderr.log }
           if ($p.ExitCode -ne 0) { throw "pluginval exited with code $($p.ExitCode)" }
-      - name: Package DI SIDEFX 5.3
+      - name: Package DI SEQFX 5.4
         id: package
         if: ${{ success() && steps.build.outcome == 'success' && steps.ctest.outcome == 'success' && steps.pluginval.outcome == 'success' }}
         shell: pwsh
         run: |
-          $vstPath = "build/sidefx/DISidefx_artefacts/Release/VST3"
+          $vstPath = "build/seqfx/DISeqfx_artefacts/Release/VST3"
           $vst = Get-ChildItem -LiteralPath $vstPath -Filter "*.vst3" -Directory | Select-Object -First 1
           if (-not $vst) { throw "Missing VST3 bundle" }
-          Compress-Archive -LiteralPath $vst.FullName -DestinationPath "DI-SIDEFX-5.3-Windows-x64.zip" -CompressionLevel Optimal -Force
-          if (-not (Test-Path "DI-SIDEFX-5.3-Windows-x64.zip")) { throw "ZIP not created" }
+          Compress-Archive -LiteralPath $vst.FullName -DestinationPath "DI-SEQFX-5.4-Windows-x64.zip" -CompressionLevel Optimal -Force
+          if (-not (Test-Path "DI-SEQFX-5.4-Windows-x64.zip")) { throw "ZIP not created" }
       - name: Upload Windows VST3 ZIP
         if: ${{ always() && steps.package.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
-          name: DI-SIDEFX-5.3-Windows-x64
-          path: DI-SIDEFX-5.3-Windows-x64.zip
+          name: DI-SEQFX-5.4-Windows-x64
+          path: DI-SEQFX-5.4-Windows-x64.zip
           if-no-files-found: error
           retention-days: 14
       - name: Upload pluginval logs
         if: ${{ always() && steps.pluginval.outcome == 'failure' }}
         uses: actions/upload-artifact@v4
         with:
-          name: DI-SIDEFX-pluginval-logs
+          name: DI-SEQFX-pluginval-logs
           path: |
             pluginval-stdout.log
             pluginval-stderr.log

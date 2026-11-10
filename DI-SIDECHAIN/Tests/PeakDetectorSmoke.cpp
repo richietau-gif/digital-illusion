@@ -22,5 +22,11 @@ int main(){
  check(di::sidechainPeak(std::numeric_limits<float>::quiet_NaN(),0.6f,true)==0.6f,"NaN left ignored");
  check(di::sidechainPeak(0.3f,std::numeric_limits<float>::infinity(),true)==0.3f,"Inf right ignored");
  check(di::sidechainPeak(std::numeric_limits<float>::quiet_NaN(),std::numeric_limits<float>::infinity(),true)==0.f,"Invalid stereo silence");
+ check(di::selectedTriggerPeak(.8f,.3f,.1f,.2f,false,true)==.8f,
+       "No external bus: trigger from main audio instead of staying silent");
+ check(di::selectedTriggerPeak(.8f,.3f,.1f,.2f,true,true)==.2f,
+       "External bus has priority over main audio");
+ check(di::selectedTriggerPeak(.8f,.3f,.7f,.2f,true,false)==.7f,
+       "Mono external sidechain uses only its valid channel");
  return 0;
 }

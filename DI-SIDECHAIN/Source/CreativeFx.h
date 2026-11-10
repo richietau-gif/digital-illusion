@@ -1,6 +1,7 @@
 #pragma once
 #include <juce_audio_basics/juce_audio_basics.h>
 #include "CreativeDistort2x.h"
+#include "CreativeDelay.h"
 #include "FixedDelay.h"
 #include <array>
 #include <vector>
@@ -90,6 +91,7 @@ public:
   sampleRate=std::isfinite(sr)?std::clamp(sr,8000.,192000.):44100.;
   reverse.prepare(sampleRate);
   predelay.prepare(sampleRate);
+  delay.prepare(sampleRate);
   fadeCoeff=1.f-std::exp(-1.f/(float)(sampleRate*0.005));
   reverb.setSampleRate(sampleRate);
   for(auto& d:distortion)d.reset();
@@ -105,6 +107,7 @@ public:
   reverb.reset();
   reverse.reset();
   predelay.reset();
+  delay.reset();
   toneMemory.fill(0.f);
   for(auto& d:distortion)d.reset();
   for(auto& d:distortionDry)d.reset();
@@ -113,6 +116,7 @@ public:
   lastDecay=-1.f;
   lastDistDriveDb=-1.f;distGain=1.f;
   lastTone=-1.f;toneCoeff=.5f;
+  lastPreDelayMs=-1.f;preDelaySamples=0;
   dryReverbGain=1.f;
   distBlend=verbBlend=verbSend=0.f;
  }
@@ -121,7 +125,9 @@ public:
  void process(float& left,float& right,bool distActive,bool verbActive,
               int distModel,float distDrive,float distWet,
               int verbModel,float verbWet,float verbLength,float verbDecay,bool reversed,
-              float verbPreDelayMs=0.f,float distortTone=1.f) noexcept {
+              float verbPreDelayMs=0.f,float distortTone=1.f,
+              bool delayActive=false,float delayWet=0.f,float delayFeedback=0.f,
+              double delaySeconds=.25,bool delayPingpong=false) noexcept {
   if(!std::isfinite(left))left=0.f;
   if(!std::isfinite(right))right=0.f;
   const float dryL=left,dryR=right;
@@ -156,16 +162,26 @@ public:
   // Do not reset the reverb on inactive steps: the tail must ring out.
   // Reverb processes continuously, but receives no new input on inactive steps.
   sendL*=verbSend;sendR*=verbSend;
-  const int delaySamples=static_cast<int>(std::round(
-   std::clamp(verbPreDelayMs,0.f,250.f)*.001*sampleRate));
-  predelay.process(sendL,sendR,delaySamples);
+  // Predelay time is an APVTS block parameter. Cache the tap count;
+  // avoid repeated float-to-int conversion on every audio sample.
+  const float preDelay=std::isfinite(verbPreDelayMs)?
+    std::clamp(verbPreDelayMs,0.f,250.f):0.f;
+  if(preDelay!=lastPreDelayMs){
+   lastPreDelayMs=preDelay;
+   preDelaySamples=static_cast<int>(std::round(preDelay*.001*sampleRate));
+  }
+  predelay.process(sendL,sendR,preDelaySamples);
   const int model=std::clamp(verbModel,0,4);
   constexpr float sizes[5]={.2f,.45f,.7f,.88f,.98f};
   constexpr float damp[5]={.75f,.60f,.45f,.27f,.12f};
   if(model!=lastModel||verbLength!=lastLength||verbDecay!=lastDecay){
    juce::Reverb::Parameters p;
-   p.roomSize=std::clamp(sizes[model]*(.55f+.45f*std::clamp(verbLength,.1f,8.f)/8.f)*(1.f-.5f*std::clamp(verbDecay,0.f,1.f)),0.f,1.f);
-   p.damping=std::clamp(damp[model]*(1.f-.65f*std::clamp(verbDecay,0.f,1.f)),0.f,1.f);
+   const float seconds=std::clamp(verbDecay,.2f,12.f);
+   const float normalized=(seconds-.2f)/11.8f;
+   p.roomSize=std::clamp((.2f+.7f*(1.f-std::exp(-seconds/3.f)))*
+                        (.68f+.32f*std::clamp(verbLength,.1f,8.f)/8.f)
+                        +.08f*(sizes[model]-.5f),.02f,.98f);
+   p.damping=std::clamp(damp[model]*(.85f-.2f*normalized),0.f,1.f);
    p.width=1.f;p.freezeMode=0.f;p.wetLevel=.33f;p.dryLevel=0.f;
    reverb.setParameters(p);
    lastModel=model;lastLength=verbLength;lastDecay=verbDecay;
@@ -178,6 +194,9 @@ public:
   dryReverbGain+=fadeCoeff*(dryTarget-dryReverbGain);
   left=originalL*dryReverbGain+rw*sendL;
   right=originalR*dryReverbGain+rw*sendR;
+  // Delay is downstream of REVERB. Inactive steps stop new input while
+  // existing feedback continues to decay naturally.
+  delay.process(left,right,delayActive,delayWet,delayFeedback,delaySeconds,delayPingpong);
   if(!std::isfinite(left))left=0.f;
   if(!std::isfinite(right))right=0.f;
  }
@@ -185,6 +204,7 @@ private:
  double sampleRate=44100.;
  ReverseSend reverse;
  StereoPredelay predelay;
+ CreativeDelay delay;
  std::array<float,2> toneMemory{};
  std::array<CreativeDistort2x,2> distortion;
  std::array<FixedDelay<CreativeDistort2x::latencySamples>,2> distortionDry;
@@ -193,6 +213,8 @@ private:
  float lastLength=-1.f,lastDecay=-1.f;
  float lastDistDriveDb=-1.f,distGain=1.f;
  float lastTone=-1.f,toneCoeff=.5f,dryReverbGain=1.f;
+ float lastPreDelayMs=-1.f;
+ int preDelaySamples=0;
  float distBlend=0.f,verbBlend=0.f,verbSend=0.f,fadeCoeff=.001f;
 };
 } // namespace di

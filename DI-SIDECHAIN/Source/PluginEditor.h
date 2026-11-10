@@ -24,6 +24,16 @@ private:
  DITheme theme;
  DISidechainProcessor& proc;
  std::array<std::unique_ptr<juce::TextButton>,4> filterButtons;
+ std::unique_ptr<juce::ComboBox> filterModelBox;
+ std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> filterModelAttachment;
+ std::array<std::unique_ptr<juce::Slider>,2> filterSweepSliders;
+ std::array<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>,2> filterSweepAttachments;
+ std::array<std::unique_ptr<juce::TextButton>,2> inputCutButtons;
+ std::array<std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>,2> inputCutButtonAttachments;
+ std::array<std::unique_ptr<juce::Slider>,2> inputCutSliders;
+ std::array<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>,2> inputCutSliderAttachments;
+ std::unique_ptr<juce::Slider> filterResonanceSlider;
+ std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> filterResonanceAttachment;
  void refreshFilterButtons();
  void refreshFxButtons();
  void updateContextualControls();
@@ -34,9 +44,14 @@ private:
  float uiScale=1.f;
  int renderQuality=1;
  std::unique_ptr<juce::TextButton> copyStep, pasteStep, resetStep, undoButton, redoButton, snapButton;
- struct ShapeEdit {int step;bool sequence;di::ShapeSequencer::Shape before,after;};
+ struct ShapeEdit {int step;bool sequence;di::ShapeSequencer::Shape before,after;
+  bool dynamic=false;int cellStep=0,scene=0;di::DynamicCurve beforeDynamic{},afterDynamic{};};
  std::vector<ShapeEdit> undoStack, redoStack;
  di::ShapeSequencer::Shape dragBefore{};
+ di::DynamicCurve dragDynamicBefore{};
+ void pushDynamicEdit(int track,int step,const di::DynamicCurve& before,const di::DynamicCurve& after);
+ int dragCellStep=0;
+ int dragScene=0;
  bool draggingShape=false;
  int dragStep=0;
  int dragNode=-1;
@@ -47,6 +62,8 @@ private:
  void undoEdit();
  void redoEdit();
  di::ShapeSequencer::Shape clipboard{};
+ di::DynamicCurve dynamicClipboard{};
+ bool clipboardDynamic=false;
  bool hasClipboard=false;
  void paintShape(juce::Graphics&, juce::Rectangle<int>, int, bool);
  void paintPanel(juce::Graphics&, juce::Rectangle<int>, const juce::String&);
@@ -77,9 +94,15 @@ private:
  std::array<std::unique_ptr<juce::ComboBox>,2> creativeModelBoxes;
  std::array<std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>,2> creativeModelAttachments;
  std::array<std::unique_ptr<juce::Slider>,7> creativeSliders;
+ std::array<std::unique_ptr<juce::Slider>,3> delaySliders;
+ std::array<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>,3> delaySliderAttachments;
+ std::unique_ptr<juce::TextButton> delayOnButton, delaySyncButton, delayPingpongButton;
+ std::array<std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>,3> delayButtonAttachments;
+ std::unique_ptr<juce::ComboBox> delayDivisionBox;
+ std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> delayDivisionAttachment;
  std::array<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>,7> creativeSliderAttachments;
- std::array<std::unique_ptr<juce::TextButton>,5> laneTabs;
- std::array<std::unique_ptr<juce::TextButton>,5> cellControls; // D, RVB, DST, REV, BYPASS
+ std::array<std::unique_ptr<juce::TextButton>,6> laneTabs;
+ std::array<std::unique_ptr<juce::TextButton>,7> cellControls; // D, RVB, DST, REV, BYPASS
  void refreshCellControls();
  std::unique_ptr<juce::ToggleButton> sequenceToggle;
  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> sequenceAttachment;
