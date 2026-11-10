@@ -235,7 +235,9 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  const float filterRange=juce::jlimit(0.f,1.f,filterMod);
  const bool fxEnabled=get("fxEnabled")>0.5f;
  const bool saturatorEnabled=get("saturatorEnabled")>0.5f;
- const bool creativeGrid=get("creativeGridEnabled")>0.5f;
+ // DI SEQFX is exclusively a GRID sequencer. Legacy mode automation
+ // remains loadable but cannot disable the sequencer/audio processing.
+ const bool creativeGrid=true;
  const bool reverbEnabled=get("reverbEnabled")>0.5f;
  const bool distortEnabled=get("distortEnabled")>0.5f;
  const bool reverseReverb=get("reverbReverse")>0.5f;
@@ -305,7 +307,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  envelopeLength=get("sync")>0.5?60.0/bpm*divisions[divisionIndex]:lengthSeconds;
  creativeFx.setReverseWindowSeconds(envelopeLength);
  const bool tempoSync=get("sync")>0.5f;
- const bool sequenceOn=get("sequenceEnabled")>0.5f;
+ const bool sequenceOn=true;
  const int sequenceSteps=(int)bounded("sequenceSteps",1.f,16.f,16.f);
  sequencer.setSteps(sequenceSteps);
  for(auto& lane:modulationSequencers)lane.setSteps(sequenceSteps);
@@ -321,15 +323,16 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
   di::ShapeSequencer::Shape shape{};for(int j=0;j<8;++j)shape[j]=getSequencePoint(k,j);sequencer.setShape(k,shape);
   for(int lane=0;lane<2;++lane){di::ShapeSequencer::Shape mod{};for(int j=0;j<8;++j)mod[j]=getModulationPoint(lane,k,j);modulationSequencers[lane].setShape(k,mod);}
  }
- if(creativeGrid){
-  for(int t=0;t<6;++t){
-   di::DuckVoiceEngine::TrackSettings settings;
-   settings.depth=getDuckTrackDepth(t);
-   settings.duration=getDuckTrackLength(t);
-   settings.dynamicCurve=getDynamicDuckCurve(t);
-   settings.useDynamic=true;
-   for(int node=0;node<8;++node)settings.shape[(size_t)node]=getDuckCurvePoint(t,node);
-   duckVoices.setTrack(t,settings);
+ // The active scene owns 96 unique envelopes. Snapshot their shapes
+ // once per audio block; the voice captures the selected cell on step ENTER.
+ for(int t=0;t<6;++t){
+  di::DuckVoiceEngine::TrackSettings settings;
+  settings.depth=getDuckTrackDepth(t);
+  settings.duration=getDuckTrackLength(t);
+  settings.useDynamic=true;
+  for(int k=0;k<gridSteps;++k){
+   settings.dynamicCurve=getDynamicDuckCurve(t,k);
+   duckVoices.setStepTrack(t,k,settings);
   }
  }
  double step=1.0/juce::jmax(1.0,envelopeLength*sr);int holdoff=(int)(bounded("retrigger",1.f,250.f,35.f)*.001*sr);float threshold=juce::Decibels::decibelsToGain(bounded("threshold",-60.f,0.f,-22.f));float coeff=std::exp(-1.f/(float)(bounded("smooth",.1f,20.f,2.f)*.001*sr));
@@ -353,7 +356,8 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
    if(sequenceOn&&creativeGrid&&trig!=1){
     const int track=msg.getNoteNumber()-36;
     if(track>=0&&track<di::DuckVoiceEngine::tracks)
-     duckVoices.triggerTrack(track,envelopeLength*sr,msg.getFloatVelocity());
+     duckVoices.triggerTrack(track,envelopeLength*sr,msg.getFloatVelocity(),
+                             activeSequenceStep.load(std::memory_order_relaxed));
    }
   }
   hasEvent=it.getNextEvent(msg,midiPos);
@@ -380,7 +384,8 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
   // External OR internal audio threshold crossings trigger Track 1 directly.
   // MIDI notes 36..41 remain independent and do not depend on this detector.
   if(sequenceOn&&creativeGrid&&audioPeak&&trig!=2)
-   duckVoices.triggerTrack(0,envelopeLength*sr,1.f);
+   duckVoices.triggerTrack(0,envelopeLength*sr,1.f,
+                           activeSequenceStep.load(std::memory_order_relaxed));
   phase=0;
   // In tempo-sync mode, incoming kicks/notes trigger the ducking envelope,
   // not the song-position sequencer. Otherwise frequent notes pin it to step 1.
