@@ -473,11 +473,8 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e) {
  if(nearest<0&&editTool==EditTool::select&&curve.count<maxNodes) {
   const auto bounds=scaled((int)gx0,(int)gy0,(int)(gx1-gx0),(int)(gy1-gy0));
   float x=clamp((p.x-bounds.getX())/(float)bounds.getWidth());
-  const int grid=(int)proc.state.getRawParameterValue("editGrid")->load();
-  if(grid>0&&!e.mods.isAltDown()) {
-   const int divisions=4<<(grid-1);
-   x=std::round(x*(float)divisions)/(float)divisions;
-  }
+  // Points follow the cursor freely. When a grid is selected, snap on
+  // mouse release rather than jumping to the next division during drag.
   const float y=clamp(1.f-(p.y-bounds.getY())/(float)bounds.getHeight());
   if(x<=.015f||x>=.985f)return;
   for(int i=0;i<curve.count;++i)
@@ -508,11 +505,6 @@ void DISidechainEditor::mouseDrag(const juce::MouseEvent& e) {
  } else {
   const auto bounds=scaled((int)gx0,(int)gy0,(int)(gx1-gx0),(int)(gy1-gy0));
   float x=clamp(((float)e.x-dragGrabOffset.x-(float)bounds.getX())/(float)bounds.getWidth());
-  const int grid=(int)proc.state.getRawParameterValue("editGrid")->load();
-  if(grid>0&&!e.mods.isAltDown()){
-   const int divisions=4<<(grid-1);
-   x=std::round(x*(float)divisions)/(float)divisions;
-  }
   if(draggedNode==0)x=0.f;
   else if(draggedNode==curve.count-1)x=1.f;
   else {
@@ -525,7 +517,25 @@ void DISidechainEditor::mouseDrag(const juce::MouseEvent& e) {
  }
  pushNodes();
 }
-void DISidechainEditor::mouseUp(const juce::MouseEvent&) {draggedNode=-1;changeCurve=false;dragGrabOffset={0.f,0.f};}
+void DISidechainEditor::mouseUp(const juce::MouseEvent& e) {
+ if(draggedNode>0 && draggedNode<curve.count-1 && !changeCurve && !e.mods.isAltDown()){
+  const int grid=(int)proc.state.getRawParameterValue("editGrid")->load();
+  if(grid>0){
+   const int divisions=4<<(grid-1);
+   const float snapped=juce::jlimit(0.f,1.f,
+      std::round(curve.nodes[(size_t)draggedNode].x*(float)divisions)/(float)divisions);
+   const float left=curve.nodes[(size_t)draggedNode-1].x+.015f;
+   const float right=curve.nodes[(size_t)draggedNode+1].x-.015f;
+   if(snapped>=left && snapped<=right){
+    curve.nodes[(size_t)draggedNode].x=snapped;
+    pushNodes();
+   }
+  }
+ }
+ draggedNode=-1;
+ changeCurve=false;
+ dragGrabOffset={0.f,0.f};
+}
 void DISidechainEditor::selectEditTool(EditTool tool){
  editTool=tool;
  selectTool->setToggleState(tool==EditTool::select,juce::dontSendNotification);
