@@ -63,9 +63,7 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  }
  sync=std::make_unique<juce::ToggleButton>("TEMPO SYNC");addAndMakeVisible(*sync);
  ba=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(p.state,"sync",*sync);
- sequenceToggle=std::make_unique<juce::ToggleButton>("SEQUENCER ON");
- addAndMakeVisible(*sequenceToggle);
- sequenceAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(p.state,"sequenceEnabled",*sequenceToggle);
+ // No SIDECHAIN/SEQUENCER toggle: this VST3 is always a sequencer.
  sequenceCount=std::make_unique<juce::Slider>(juce::Slider::IncDecButtons,juce::Slider::TextBoxLeft);
  sequenceCount->setIncDecButtonsMode(juce::Slider::incDecButtonsNotDraggable);
  sequenceCount->setRange(1,16,1);
@@ -318,10 +316,10 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  if(combos.size()>0)combos[0]->setVisible(false);
  refreshFilterButtons();refreshFxButtons();
  // Reverb and distortion settings remain independent of legacy FX controls.
- const char* toggleIds[]={"creativeGridEnabled","reverbEnabled","distortEnabled","reverbReverse"};
+ const char* toggleIds[]={"","reverbEnabled","distortEnabled","reverbReverse"};
  std::unique_ptr<juce::TextButton>* toggleButtons[]={&gridModeButton,&reverbOnButton,&distortOnButton,&reverseButton};
  const char* toggleLabels[]={"GRID ON","REVERB ON","DISTORT ON","REVERSE  <"};
- for(int i=0;i<4;++i){
+ for(int i=1;i<4;++i){
   *toggleButtons[i]=std::make_unique<juce::TextButton>(toggleLabels[i]);
   (*toggleButtons[i])->setClickingTogglesState(true);
   (*toggleButtons[i])->setColour(juce::TextButton::buttonColourId,juce::Colour(0xff172d3b));
@@ -1055,8 +1053,7 @@ void DISidechainEditor::resized() {
  }
  for(int i=0;i<6;++i)if(cellControls[i])cellControls[i]->setBounds(1139+i*62,524,58,32);
  refreshCreativePage();
- // Single-mode DI SEQFX: keep legacy parameter attachments intact for
- // project loading, but expose NO switch that can leave sequencer mode.
+ // Single-mode DI SEQFX: no alternate mode controls are instantiated.
  if(sequenceToggle){sequenceToggle->setVisible(false);sequenceToggle->setBounds(0,0,0,0);}
  if(gridModeButton){gridModeButton->setVisible(false);gridModeButton->setBounds(0,0,0,0);}
  if(sequenceCount)sequenceCount->setBounds(501,124,118,30);
@@ -1301,8 +1298,6 @@ void DISidechainEditor::applyFactoryPreset(int index) {
     break;
   }
  }
- setParameter("sequenceEnabled",1.f);
- setParameter("creativeGridEnabled",1.f);
  setParameter("sequenceSteps",(float)lengths[index]);
  setParameter("reverbEnabled",index==7?1.f:0.f);
  setParameter("distortEnabled",index==8?1.f:0.f);
