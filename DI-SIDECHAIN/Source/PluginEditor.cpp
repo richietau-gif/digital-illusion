@@ -786,8 +786,9 @@ void DISidechainEditor::paint(juce::Graphics& g) {
     }
     if(on&&!bypass){
      juce::Path miniature;
-     for(int node=0;node<8;++node){
-      const float v=proc.getDynamicDuckCurve(track,step).evaluate(node/7.f);
+     const auto cellCurve=proc.getDynamicDuckCurve(track,step);
+    for(int node=0;node<8;++node){
+      const float v=cellCurve.evaluate(node/7.f);
       const float px=cell.getX()+5.f+(cell.getWidth()-10.f)*node/7.f;
       const float py=cell.getBottom()-2.f-v*(cell.getHeight()*.32f);
       if(node==0)miniature.startNewSubPath(px,py);
@@ -1025,7 +1026,7 @@ void DISidechainEditor::resized() {
  if(abCopyButtons[0])abCopyButtons[0]->setBounds(1020,36,52,32);
  if(abCopyButtons[1])abCopyButtons[1]->setBounds(1076,36,52,32);
  if(setupButton)setupButton->setBounds(setupBounds);
- if(gridModeButton)gridModeButton->setBounds(917,124,124,30);
+
  for(int i=0;i<4;++i)if(sceneButtons[i])sceneButtons[i]->setBounds(873+i*62,179,57,22);
  if(copySceneButton)copySceneButton->setBounds(1124,179,113,22);
  if(duckDepthSlider)duckDepthSlider->setBounds(1144,584,358,30);
@@ -1049,7 +1050,10 @@ void DISidechainEditor::resized() {
  }
  for(int i=0;i<6;++i)if(cellControls[i])cellControls[i]->setBounds(1139+i*62,524,58,32);
  refreshCreativePage();
- if(sequenceToggle)sequenceToggle->setBounds(360,124,137,32);
+ // Single-mode DI SEQFX: keep legacy parameter attachments intact for
+ // project loading, but expose NO switch that can leave sequencer mode.
+ if(sequenceToggle){sequenceToggle->setVisible(false);sequenceToggle->setBounds(0,0,0,0);}
+ if(gridModeButton){gridModeButton->setVisible(false);gridModeButton->setBounds(0,0,0,0);}
  if(sequenceCount)sequenceCount->setBounds(501,124,118,30);
  if(filterModelBox)filterModelBox->setBounds(756,767,169,28);
  if(filterResonanceSlider)filterResonanceSlider->setBounds(938,767,171,28);
@@ -1110,7 +1114,7 @@ void DISidechainEditor::updatePoint(const juce::MouseEvent& e) {
  if(gridShape){
   if(!draggingShape||dragNode<0)return;
   const auto point=e.position/uiScale;
-  auto c=proc.getDynamicDuckCurve(selectedTrack,selectedStep);
+  auto c=proc.getDynamicDuckCurve(dragStep-96,dragCellStep,dragScene);
   c.move(dragNode,(point.x-detailGraph.getX())/juce::jmax(1,detailGraph.getWidth()),
    (detailGraph.getBottom()-point.y)/(float)juce::jmax(1,detailGraph.getHeight()));
   if(snapButton&&snapButton->getToggleState()){
