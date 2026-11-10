@@ -131,12 +131,41 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& b,juce::MidiBu
  }
  out*=outputGain;}if(!std::isfinite(out))out=0;main.setSample(ch,i,out);peak=std::max(peak,std::abs(out));}delayWrite=(delayWrite+1)%192001;}meter.store(peak);midi.clear();}
 void DISidechainProcessor::setCurrentProgram(int p){currentPreset=juce::jlimit(0,31,p);applyPreset(currentPreset);}const juce::String DISidechainProcessor::getProgramName(int p){static const char* n[]={"Clean Kick Duck","Tight Drum Duck","Deep Wobble","Talking Bass","Growl Filter","Metallic Sweep","Aggressive Formant","Liquid Movement","Elastic Bass","Vowel Bounce","Glassy Growl","Warm Harsh","Digital Motion","Rhythmic Resonance","Reese Movement","Jungle Duck","Neuro Sweep","Rolling Pulse","Reverse Swell","Filter Drop","Resonant Impact","Distorted Pulse","Stereo Motion","Sub Safe Duck","Fast Breakbeat","Half Time Growl","Razor Resonance","Dark Movement","Formant Pulse","Precision Pump","Gate Bass","Future Duck"};return p>=0&&p<32?n[p]:"Custom";}
-void DISidechainProcessor::applyPreset(int p){ auto set=[&](const char* id,float v){ if(auto* x=state.getParameter(id)) x->setValueNotifyingHost(x->convertTo0to1(v)); }; const int g=p/8; set("depth",0.35f+0.15f*(p%5)); set("mix",0.7f+0.05f*(p%5)); set("length",80.f+40.f*(p%10)); set("timeOffset",-1.f+0.5f*(p%5)); set("lookahead",5.f+5.f*(p%8)); set("attackProtection",(p%4)*0.25f); set("cutoff",120.f+220.f*(p%12)); set("resonance",0.05f+0.07f*(p%8)); set("filterDrive",(p%6)*3.f); set("filterMod",-0.8f+0.2f*(p%9)); set("filterMix",0.55f+0.08f*(p%5)); set("colorDrive",(p%7)*3.f); set("colorMix",(p%4)*0.2f); set("output",-3.f+g); set("filterModel",(float)(p%13)); set("colorModel",(float)(p%6)); set("triggerMode",(float)(p%3)); set("division",(float)(p%7)); }
+void DISidechainProcessor::applyPreset(int p){ auto set=[&](const char* id,float v){ if(auto* x=state.getParameter(id)) x->setValueNotifyingHost(x->convertTo0to1(v)); }; const int g=p/8; set("depth",0.35f+0.15f*(p%5)); set("mix",0.7f+0.05f*(p%5)); set("length",80.f+40.f*(p%10)); set("timeOffset",-1.f+0.5f*(p%5)); set("lookahead",5.f+5.f*(p%8)); set("attackProtection",(p%4)*0.25f); set("cutoff",120.f+220.f*(p%12)); set("resonance",0.05f+0.07f*(p%8)); set("filterDrive",(p%6)*3.f); set("filterMod",-0.8f+0.2f*(p%9)); set("filterMix",0.55f+0.08f*(p%5)); set("colorDrive",(p%7)*3.f); set("colorMix",(p%4)*0.2f); set("output",-3.f+g); set("filterModel",(float)(p%13)); set("colorModel",(float)(p%6)); set("triggerMode",(float)(p%3)); set("division",(float)(p%7));
+ std::array<EnvelopeNode,maxEnvelopeNodes> points{};
+ const int shape=p%6;
+ int count=5;
+ if(shape==0){ // Classic precision duck: immediate attenuation, smooth return.
+  points[0]={0.f,0.f,0.f};points[1]={.12f,0.f,0.f};points[2]={.35f,.15f,.35f};
+  points[3]={.74f,.96f,-.2f};points[4]={1.f,1.f,0.f};
+ } else if(shape==1){ // Hard rhythmic gate.
+  points[0]={0.f,0.f,0.f};points[1]={.24f,0.f,0.f};points[2]={.28f,1.f,0.f};
+  points[3]={.79f,1.f,0.f};points[4]={1.f,1.f,0.f};
+ } else if(shape==2){ // Single-cycle dubstep wobble, without step sequencer.
+  count=7;
+  points[0]={0.f,1.f,0.f};points[1]={.14f,.04f,.4f};points[2]={.29f,.98f,-.3f};
+  points[3]={.46f,.08f,.3f};points[4]={.63f,.86f,-.3f};points[5]={.82f,.20f,.3f};
+  points[6]={1.f,1.f,0.f};
+ } else if(shape==3){ // Reverse swell.
+  points[0]={0.f,1.f,0.f};points[1]={.20f,.85f,0.f};points[2]={.50f,.24f,.35f};
+  points[3]={.78f,.03f,0.f};points[4]={1.f,1.f,0.f};
+ } else if(shape==4){ // Double pump.
+  count=7;
+  points[0]={0.f,0.f,0.f};points[1]={.18f,.06f,0.f};points[2]={.35f,1.f,0.f};
+  points[3]={.48f,.08f,0.f};points[4]={.64f,.09f,0.f};points[5]={.83f,.88f,0.f};
+  points[6]={1.f,1.f,0.f};
+ } else { // S-curve rise with protected attack.
+  points[0]={0.f,0.f,0.f};points[1]={.15f,.03f,-.5f};points[2]={.43f,.38f,-.2f};
+  points[3]={.80f,.95f,.5f};points[4]={1.f,1.f,0.f};
+ }
+ setEnvelopeNodes(points,count);
+ }
 void DISidechainProcessor::getStateInformation(juce::MemoryBlock& d)
 {
  if(auto xml=state.copyState().createXml()){
   std::array<EnvelopeNode,maxEnvelopeNodes> nodes{};
   const int count=getEnvelopeNodes(nodes);
+  xml->setAttribute("currentPreset",currentPreset);
   auto* envelopeXml=xml->createNewChildElement("PRECISION_ENVELOPE");
   envelopeXml->setAttribute("count",count);
   for(int i=0;i<count;++i){
@@ -151,6 +180,8 @@ void DISidechainProcessor::getStateInformation(juce::MemoryBlock& d)
 void DISidechainProcessor::setStateInformation(const void* data,int size)
 {
  if(auto xml=getXmlFromBinary(data,size)){
+  currentPreset=juce::jlimit(0,31,xml->getIntAttribute("currentPreset",0));
+  xml->removeAttribute("currentPreset");
   if(auto* envelopeXml=xml->getChildByName("PRECISION_ENVELOPE")){
    std::array<EnvelopeNode,maxEnvelopeNodes> nodes{};
    int count=0;
