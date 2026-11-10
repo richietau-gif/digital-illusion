@@ -1,218 +1,257 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#include "FxWaveshaper.h"
-#include "FxWetMix.h"
-#include "FilterCutoff.h"
-#include "PeakDetector.h"
-#include "SidechainPeak.h"
-#include "TransportContinuity.h"
-#include "TriggerLogic.h"
 #include <cmath>
-static juce::AudioProcessorValueTreeState::ParameterLayout layoutParams(){
+#include <algorithm>
+namespace { juce::StringArray filterNames(){ return {"LP12","LP24","LP48","HP12","HP24","HP48","Band Pass","Notch","Analog Ladder","SVF Morph","Comb","Formant/Vowel","Aggressive Bass"}; } }
+juce::AudioProcessorValueTreeState::ParameterLayout DISidechainProcessor::makeParams(){
  std::vector<std::unique_ptr<juce::RangedAudioParameter>> p;
- auto f=[&](const char* id,const char* name,float lo,float hi,float def){p.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{id,1},name,juce::NormalisableRange<float>(lo,hi),def));};
- f("depth","Depth",0,1,1); f("mix","Mix",0,1,1);f("threshold","Trigger threshold dB",-60,0,-22);f("length","Envelope milliseconds",10,2000,250);f("smooth","Smoothing milliseconds",0.1,20,2);f("low","Low cutoff",25,1500,120);f("high","High cutoff",60,18000,400);f("retrigger","Trigger holdoff milliseconds",1,250,35);f("shapeOffset","Shape vertical offset",-1,1,0);f("panMod","Pan modulation amount",-1,1,0);f("filterMod","Filter modulation amount",0,1,0);f("fxDrive","Legacy FX drive dB",0,24,0);f("saturatorDrive","Saturator drive dB",0,24,0);f("fxMix","FX wet mix",0,1,1);
- p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"mode",1},"Frequency mode",juce::StringArray{"Full","Low","High","Band"},0));
- p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"trigger",1},"Trigger mode",juce::StringArray{"Audio + MIDI","Audio only","MIDI only"},0));
- p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"sequenceEnabled",1},"Shape sequencer enabled",false));
- p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"fxEnabled",1},"FX enabled",false));
- p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"saturatorEnabled",1},"Independent saturator enabled",false));
- p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"clipperMode",1},"Clipper mode",juce::StringArray{"Off","Soft","Hard"},0));
- p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"fxType",1},"FX type",juce::StringArray{"Saturator","Soft Clipper"},0));
- p.push_back(std::make_unique<juce::AudioParameterInt>(juce::ParameterID{"sequenceSteps",1},"Sequence steps",1,16,16));
- p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"sync",1},"Tempo sync",true));
- p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"division",1},"Beat division",juce::StringArray{"1/32","1/16","1/8","1/4","1/2","1 bar","2 bars"},2));
- // Editor-only settings persist in the host project and user .dipreset files.
- // New instances start at the compact 75% layout; restored host state still
- // overrides this default and therefore preserves existing projects.
- p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"uiScale",1},"UI scale",juce::StringArray{"50%","75%","100%"},1));
- p.push_back(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"renderQuality",1},"Curve render quality",juce::StringArray{"Economy","Standard","High"},1));
- return {p.begin(),p.end()};
-}
-juce::AudioProcessorValueTreeState::ParameterLayout DISidechainProcessor::makeParams(){return layoutParams();}
+ auto f=[&](const char* id,const char* n,float lo,float hi,float d){p.push_back(std::make_unique<juce::AudioParameterFloat>(id,n,juce::NormalisableRange<float>(lo,hi),d));};
+ f("depth","Depth",0,1,1); f("mix","Dry/Wet",0,1,1); f("threshold","Trigger Threshold",-60,0,-24); f("length","Envelope Length ms",10,2000,250); f("timeOffset","Time Offset",-1,1,0); f("curveAmount","Curve Tension",0,1,.5f); f("lookahead","Lookahead ms",0,200,20); f("attackProtection","Attack Protection",0,1,0); f("retrigger","Retrigger Holdoff ms",1,250,35); f("attackMs","Gain Attack ms",0.1f,100.f,2.f); f("releaseMs","Gain Release ms",0.1f,500.f,20.f); f("cutoff","Cutoff Hz",20,20000,800); f("resonance","Resonance",0,1,0.15f); f("filterDrive","Filter Drive",0,24,0); f("filterMod","Filter Envelope",-1,1,0); f("filterMix","Filter Mix",0,1,1); f("colorDrive","Color Drive",0,24,0); f("colorTone","Color Tone",-1,1,0); f("colorMix","Color Mix",0,1,0); f("output","Output dB",-24,12,0);
+ p.push_back(std::make_unique<juce::AudioParameterChoice>("triggerMode","Trigger",juce::StringArray{"Audio","MIDI","Audio + MIDI"},0)); p.push_back(std::make_unique<juce::AudioParameterChoice>("detector","Detector",juce::StringArray{"Peak","RMS","Transient"},0)); p.push_back(std::make_unique<juce::AudioParameterChoice>("detectorSource","Detector Source",juce::StringArray{"Auto","Internal","External"},0)); p.push_back(std::make_unique<juce::AudioParameterChoice>("division","Sync Division",juce::StringArray{"1/16","1/8T","1/8","1/4T","1/4","1/2","1 bar"},2)); p.push_back(std::make_unique<juce::AudioParameterChoice>("editGrid","Editor Snap Grid",juce::StringArray{"Off","1/4","1/8","1/16"},0)); p.push_back(std::make_unique<juce::AudioParameterChoice>("filterModel","Filter Model",filterNames(),0)); p.push_back(std::make_unique<juce::AudioParameterChoice>("colorModel","Color",juce::StringArray{"Warm Saturation","Soft Clip","Hard Clip","Asymmetric Drive","Wavefold","Digital Crush"},0)); p.push_back(std::make_unique<juce::AudioParameterBool>("sync","BPM Sync",true)); p.push_back(std::make_unique<juce::AudioParameterBool>("filterEnabled","Filter Enabled",true));
+ p.push_back(std::make_unique<juce::AudioParameterBool>("filterEnvelopeEnabled","Filter Envelope Enabled",true));
+ p.push_back(std::make_unique<juce::AudioParameterBool>("colorEnabled","Color Enabled",true));
+ p.push_back(std::make_unique<juce::AudioParameterBool>("bypass","Bypass",false)); p.push_back(std::make_unique<juce::AudioParameterChoice>("uiScale","UI Scale",juce::StringArray{"50%","75%","100%"},1)); return {p.begin(),p.end()}; }
 DISidechainProcessor::DISidechainProcessor():AudioProcessor(BusesProperties().withInput("Input",juce::AudioChannelSet::stereo(),true).withInput("Sidechain",juce::AudioChannelSet::stereo(),false).withOutput("Output",juce::AudioChannelSet::stereo(),true)),state(*this,nullptr,"PARAMS",makeParams()){
- const float defaults[8]={1,0.92f,0.08f,0.02f,0.32f,0.75f,0.95f,1};for(int i=0;i<8;++i)points[i]=defaults[i];
- for(auto& shape:sequencePoints)for(int i=0;i<8;++i)shape[i].store(defaults[i]);
- for(int lane=0;lane<2;++lane)for(auto& shape:modulationPoints[lane])for(int i=0;i<8;++i)shape[i].store(lane==0?1.f:0.5f);
+ std::array<EnvelopeNode,maxEnvelopeNodes> initial{};
+ initial[0]={0.f,0.f,0.f}; initial[1]={.15f,.03f,.25f};
+ initial[2]={.35f,.26f,-.15f}; initial[3]={.55f,.60f,.3f};
+ initial[4]={.75f,.93f,.1f}; initial[5]={1.f,1.f,0.f};
+ setEnvelopeNodes(initial,6);
+ applyPreset(0);
 }
-void DISidechainProcessor::setSequencePoint(int step,int node,float value) noexcept {if(step>=0&&step<32&&node>=0&&node<8&&std::isfinite(value))sequencePoints[step][node].store(juce::jlimit(0.f,1.f,value),std::memory_order_relaxed);}
-float DISidechainProcessor::getSequencePoint(int step,int node) const noexcept {return step>=0&&step<32&&node>=0&&node<8?sequencePoints[step][node].load(std::memory_order_relaxed):1.f;}
-void DISidechainProcessor::setModulationPoint(int lane,int step,int node,float value) noexcept {
- if(lane>=0&&lane<2&&step>=0&&step<32&&node>=0&&node<8&&std::isfinite(value))
-  modulationPoints[lane][step][node].store(juce::jlimit(0.f,1.f,value),std::memory_order_relaxed);
+bool DISidechainProcessor::isBusesLayoutSupported(const BusesLayout& b) const{return b.getMainInputChannelSet()==juce::AudioChannelSet::stereo()&&b.getMainOutputChannelSet()==juce::AudioChannelSet::stereo();}
+void DISidechainProcessor::prepareToPlay(double s,int n){sr=s;maxBlock=n; delaySamples=(int)std::ceil(state.getRawParameterValue("lookahead")->load()*0.001f*sr); delaySamples=juce::jlimit(0,192000,delaySamples);previousDelaySamples=delaySamples;delayTransitionSamples=0;pendingLatencySamples.store(delaySamples);setLatencySamples(delaySamples);appliedLatencySamples.store(delaySamples,std::memory_order_release);delayWrite=0;transportPlaying.store(false);colorToneLow={0.f,0.f};phase=1;gain=1;detector=0;rmsEnergy=0;transientFast=0;transientSlow=0;holdoff=0;for(auto& f:filters){juce::dsp::ProcessSpec sp{s,(juce::uint32)n,1};f.prepare(sp);f.reset();for(auto* a:{&f.animated,&f.animated2,&f.animated3,&f.animated4}){a->setResonance(.707f);a->setCutoffFrequency(800.f);}}}
+int DISidechainProcessor::getEnvelopeNodes(std::array<EnvelopeNode,maxEnvelopeNodes>& target) const noexcept
+{
+ const int count=juce::jlimit(2,maxEnvelopeNodes,envelopeNodeCount.load(std::memory_order_acquire));
+ for(int i=0;i<count;++i)
+  target[(size_t)i]={envelopeXs[(size_t)i].load(),envelopeYs[(size_t)i].load(),envelopeCurves[(size_t)i].load()};
+ return count;
 }
-float DISidechainProcessor::getModulationPoint(int lane,int step,int node) const noexcept {
- return lane>=0&&lane<2&&step>=0&&step<32&&node>=0&&node<8
-  ?modulationPoints[lane][step][node].load(std::memory_order_relaxed):(lane==1?0.5f:1.f);
+void DISidechainProcessor::setEnvelopeNodes(const std::array<EnvelopeNode,maxEnvelopeNodes>& source,int count) noexcept
+{
+ count=juce::jlimit(2,maxEnvelopeNodes,count);
+ float previousX=-0.0001f;
+ for(int i=0;i<count;++i) {
+  const auto& v=source[(size_t)i];
+  const float safeX=std::isfinite(v.x)?v.x:(float)i/(float)(count-1);
+  const float safeY=std::isfinite(v.y)?v.y:1.f;
+  const float safeCurve=std::isfinite(v.curve)?v.curve:0.f;
+  // Ignore corrupted or unordered coordinates from malformed state/presets.
+  const float x=juce::jlimit(0.f,1.f,juce::jmax(previousX,safeX));
+  envelopeXs[(size_t)i].store(x,std::memory_order_relaxed);
+  envelopeYs[(size_t)i].store(juce::jlimit(0.f,1.f,safeY),std::memory_order_relaxed);
+  envelopeCurves[(size_t)i].store(juce::jlimit(-1.f,1.f,safeCurve),std::memory_order_relaxed);
+  previousX=x;
+ }
+ envelopeNodeCount.store(count,std::memory_order_release);
+ envelopeRevision.fetch_add(1,std::memory_order_relaxed);
 }
-bool DISidechainProcessor::isBusesLayoutSupported(const BusesLayout& b) const {return b.getMainInputChannelSet()==juce::AudioChannelSet::stereo()&&b.getMainOutputChannelSet()==juce::AudioChannelSet::stereo()&&(b.inputBuses.size()<2||b.inputBuses[1].isDisabled()||b.inputBuses[1]==juce::AudioChannelSet::mono()||b.inputBuses[1]==juce::AudioChannelSet::stereo());}
-void DISidechainProcessor::prepareToPlay(double sampleRate,int maxBlock){sr=sampleRate;setLatencySamples(2*di::OversampledFx2x::latencySamples);for(auto& fx:oversampledFx)fx.reset();for(auto& fx:saturatorFx)fx.reset();for(auto& delay:fxDryDelay)delay.reset();for(auto& delay:saturatorDryDelay)delay.reset();saturatorBlend=state.getRawParameterValue("saturatorEnabled")->load()>0.5f?1.f:0.f;phase=1;sequencer.reset();for(auto& lane:modulationSequencers)lane.reset();activeSequenceStep.store(0);detector=0;armed=true;refractory=0;smoothGain=1;expectedTransportSample=-1;wasTransportPlaying=false;fxBlend=state.getRawParameterValue("fxEnabled")->load()>0.5f?1.f:0.f;const auto safeInitial=[this](const char* id,float low,float high,float fallback){const float value=state.getRawParameterValue(id)->load();return std::isfinite(value)?juce::jlimit(low,high,value):fallback;};smoothedFxDrive=juce::Decibels::decibelsToGain(safeInitial("fxDrive",0.f,24.f,0.f));smoothedFxWet=safeInitial("fxMix",0.f,1.f,1.f);smoothedFxType=safeInitial("fxType",0.f,1.f,0.f);juce::dsp::ProcessSpec spec{sampleRate,(juce::uint32)juce::jmax(1,maxBlock),1};for(auto& c:filters){c.low.prepare(spec);c.high.prepare(spec);c.low.setType(juce::dsp::LinkwitzRileyFilterType::lowpass);c.high.setType(juce::dsp::LinkwitzRileyFilterType::highpass);c.low.reset();c.high.reset();}}
-float DISidechainProcessor::curve(double t) const {if(!std::isfinite(t))t=0.;t=juce::jlimit(0.0,1.0,t);double x=t*7;int i=juce::jmin(6,(int)x);const auto safePoint=[this](int node){const float value=points[node].load(std::memory_order_relaxed);return std::isfinite(value)?juce::jlimit(0.f,1.f,value):1.f;};float a=safePoint(i),b=safePoint(i+1);float u=(float)(x-i);u=u*u*(3-2*u);return a+(b-a)*u;}
-void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::MidiBuffer& midi){
- juce::ScopedNoDenormals noDenormals;
- auto main=getBusBuffer(buffer,true,0);int n=main.getNumSamples();if(n<=0||main.getNumChannels()<2||!std::isfinite(sr)||sr<=0)return;
- auto* sideBus=getBus(true,1);bool hasSide=sideBus&&sideBus->isEnabled();
- // Keep sidechain as a non-owning view; never allocate or copy a buffer on the audio thread.
- juce::AudioBuffer<float> side; if(hasSide){auto view=getBusBuffer(buffer,true,1);side.setDataToReferTo(view.getArrayOfWritePointers(),view.getNumChannels(),view.getNumSamples());}
- auto get=[&](const char* id){return state.getRawParameterValue(id)->load();};
- // Validate host automation before integer casts, filter coefficients and smoothers.
- auto bounded=[&](const char* id,float low,float high,float fallback){
-  const float value=get(id);
-  return std::isfinite(value)?juce::jlimit(low,high,value):fallback;
- };
- const int mode=(int)bounded("mode",0.f,3.f,0.f);
- const int trig=(int)bounded("trigger",0.f,2.f,0.f);
- const float depth=bounded("depth",0.f,1.f,1.f);
- const float mix=bounded("mix",0.f,1.f,1.f);
- const float shapeOffset=bounded("shapeOffset",-1.f,1.f,0.f);
- const float panMod=bounded("panMod",-1.f,1.f,0.f);
- const float filterMod=bounded("filterMod",0.f,1.f,0.f);
- const float fxDrive=bounded("fxDrive",0.f,24.f,0.f);
- const float fxMix=bounded("fxMix",0.f,1.f,1.f);
- // Keep filter cutoffs below Nyquist at lower host sample rates (e.g. 22.05 kHz).
- const auto cutoffs=di::safeFilterCutoffs(sr,get("low"),get("high"));
- const float lo=cutoffs.low;
- const float hi=cutoffs.high;
- const float filterRange=juce::jlimit(0.f,1.f,filterMod);
- const bool fxEnabled=get("fxEnabled")>0.5f;
- const bool saturatorEnabled=get("saturatorEnabled")>0.5f;
- const int fxType=(int)bounded("fxType",0.f,1.f,0.f);
- int clipperMode=(int)bounded("clipperMode",0.f,2.f,0.f);
- if(clipperMode==0 && fxEnabled) clipperMode=fxType>0?1:2;
- // Guard automation and restored host state before values enter persistent smoothers.
- const float drive=juce::Decibels::decibelsToGain(std::isfinite(fxDrive)?juce::jlimit(0.f,24.f,fxDrive):0.f);
- const float saturatorDriveDb=bounded("saturatorDrive",0.f,24.f,fxDrive);
- const float saturatorDrive=juce::Decibels::decibelsToGain(saturatorDriveDb);
- const float fxWet=std::isfinite(fxMix)?juce::jlimit(0.f,1.f,fxMix):0.f;
- const float fxTarget=clipperMode>0?1.f:0.f;
- const float saturatorTarget=saturatorEnabled?1.f:0.f;
- const float fxSmoothing=std::exp(-1.f/(float)(0.01*sr));
- const float fxParameterSmoothing=std::exp(-1.f/(float)(0.005*sr));
- for(auto& c:filters){c.low.setCutoffFrequency(lo);c.high.setCutoffFrequency(mode==3?hi:lo);}
- double bpm=120;
- double hostPpq=0.;bool hasPlayingPpq=false;
- if(auto* ph=getPlayHead()){
-  if(auto pos=ph->getPosition()){
-   if(auto b=pos->getBpm())if(std::isfinite(*b)&&*b>0.)bpm=*b;
-   const bool playing=pos->getIsPlaying();
-   if(playing){if(auto ppq=pos->getPpqPosition()){hostPpq=*ppq;hasPlayingPpq=std::isfinite(hostPpq);}}
-   bool discontinuity=playing&&!wasTransportPlaying;
-   if(playing){
-    if(auto sample=pos->getTimeInSamples()){
-     if(di::transportDiscontinuity(expectedTransportSample,*sample))discontinuity=true;
-     expectedTransportSample=di::nextTransportSample(*sample,n);
-    }else expectedTransportSample=-1;
-   }else expectedTransportSample=-1;
-   if(discontinuity){sequencer.reset();for(auto& lane:modulationSequencers)lane.reset();activeSequenceStep.store(0,std::memory_order_relaxed);phase=0;}
-   wasTransportPlaying=playing;
+float DISidechainProcessor::getEnvelopeAt(float t) const noexcept
+{
+ const int count=juce::jlimit(2,maxEnvelopeNodes,envelopeNodeCount.load(std::memory_order_acquire));
+ t=juce::jlimit(0.f,1.f,std::isfinite(t)?t:0.f);
+ float prevX=envelopeXs[0].load(std::memory_order_relaxed);
+ float prevY=envelopeYs[0].load(std::memory_order_relaxed);
+ if(t<=prevX)return prevY;
+ for(int i=1;i<count;++i) {
+  const float x=envelopeXs[(size_t)i].load(std::memory_order_relaxed);
+  const float y=envelopeYs[(size_t)i].load(std::memory_order_relaxed);
+  if(t<=x||i==count-1) {
+   const float span=juce::jmax(0.0001f,x-prevX);
+   float u=juce::jlimit(0.f,1.f,(t-prevX)/span);
+   const float globalCurve=state.getRawParameterValue("curveAmount")->load();
+   const float tension=juce::jlimit(-1.f,1.f,envelopeCurves[(size_t)i-1].load(std::memory_order_relaxed)+(globalCurve-.5f)*1.4f);
+   if(tension>=0.f) u=std::pow(u,1.f+3.f*tension);
+   else u=1.f-std::pow(1.f-u,1.f-3.f*tension);
+   return juce::jlimit(0.f,1.f,prevY+(y-prevY)*u);
   }
+  prevX=x;prevY=y;
  }
- const double divisions[]={0.125,0.25,0.5,1,2,4,8};
- const float divisionRaw=get("division");
- const int divisionIndex=std::isfinite(divisionRaw)?juce::jlimit(0,6,(int)divisionRaw):2;
- const float lengthRaw=get("length");
- const double lengthSeconds=std::isfinite(lengthRaw)?juce::jlimit(10.f,2000.f,lengthRaw)/1000.0:0.25;
- envelopeLength=get("sync")>0.5?60.0/bpm*divisions[divisionIndex]:lengthSeconds;
- const bool tempoSync=get("sync")>0.5f;
- const bool sequenceOn=get("sequenceEnabled")>0.5f;
- const int sequenceSteps=(int)bounded("sequenceSteps",1.f,16.f,16.f);
- sequencer.setSteps(sequenceSteps);
- for(auto& lane:modulationSequencers)lane.setSteps(sequenceSteps);
- // Re-anchor each audio block to the DAW's PPQ timeline when tempo sync is enabled.
- // This corrects accumulated drift and aligns loop restarts to musical bars.
- if(sequenceOn&&tempoSync&&hasPlayingPpq){
-  const double beatsPerStep=divisions[divisionIndex];
-  const double position=hostPpq/beatsPerStep;
-  sequencer.seekToStepPosition(position);
-  for(auto& lane:modulationSequencers)lane.seekToStepPosition(position);
+ return prevY;
+}
+float DISidechainProcessor::envelope(float t) const noexcept {return getEnvelopeAt(t);}
+float DISidechainProcessor::colour(float x,int m,float d) const noexcept {const float k=1.f+juce::Decibels::decibelsToGain(d)*4.f; switch(m){case 1:return std::tanh(x*k);case 2:return juce::jlimit(-1.f,1.f,x*k);case 3:return std::tanh((x>=0?x*k:x*k*0.65f));case 4:{float y=x*k;return 2.f*std::abs(y-std::round(y))-1.f;}case 5:return std::round(x*k*8.f)/8.f;default:return std::tanh(x*k*0.7f);}}
+void DISidechainProcessor::handleAsyncUpdate() {
+ // Never ask the host to rebuild latency/PDC while its transport is running.
+ // JUCE hosts may reconfigure processing graph while UI/audio events are active.
+ if(transportPlaying.load(std::memory_order_acquire))return;
+ const int wanted=pendingLatencySamples.load(std::memory_order_acquire);
+ if(appliedLatencySamples.load(std::memory_order_acquire)!=wanted){setLatencySamples(wanted);appliedLatencySamples.store(wanted,std::memory_order_release);}
+}
+void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& b,juce::MidiBuffer& midi){juce::ScopedNoDenormals nd;auto main=getBusBuffer(b,true,0);auto side=getBusBuffer(b,true,1);const int n=main.getNumSamples();if(n==0)return;bool playing=false;
+ if(auto* playhead=getPlayHead())
+  if(auto info=playhead->getPosition())
+   playing=info->getIsPlaying();
+ transportPlaying.store(playing,std::memory_order_release);
+ const float wantedMs=state.getRawParameterValue("lookahead")->load();
+ const int requestedDelay=juce::jlimit(0,192000,(int)std::ceil(
+  juce::jlimit(0.f,200.f,std::isfinite(wantedMs)?wantedMs:0.f)*.001f*(float)sr));
+ if(requestedDelay!=delaySamples&&!playing){
+  previousDelaySamples=delaySamples;
+  delaySamples=requestedDelay;
+  delayTransitionSamples=delayTransitionLength;
+  pendingLatencySamples.store(delaySamples,std::memory_order_release);
+  triggerAsyncUpdate();
+ } else if(!playing && pendingLatencySamples.load(std::memory_order_acquire)!=appliedLatencySamples.load(std::memory_order_acquire)) {
+  triggerAsyncUpdate();
+ }auto val=[&](const char* id){return state.getRawParameterValue(id)->load();};const float depth=juce::jlimit(0.f,1.f,val("depth")),mix=juce::jlimit(0.f,1.f,val("mix")); const bool bypass=val("bypass")>0.5f;const int trig=(int)val("triggerMode");const float threshold=juce::Decibels::decibelsToGain(val("threshold"));const int hold=(int)(val("retrigger")*.001f*sr);float lengthSeconds=val("length")*.001f; if(val("sync")>0.5f){ double bpm=120.0; if(auto* ph=getPlayHead()) if(auto pos=ph->getPosition()) if(auto b=pos->getBpm()) if(std::isfinite(*b)&&*b>1.0) bpm=*b; static constexpr double beats[]={0.25,0.333333,0.5,0.666667,1.0,2.0,4.0}; lengthSeconds=(float)(60.0/bpm*beats[juce::jlimit(0,6,(int)val("division"))]); } const float len=juce::jmax(1.f,lengthSeconds*float(sr));const float offset=val("timeOffset");const float attack=val("attackProtection");const int model=(int)val("filterModel"), color=(int)val("colorModel");juce::MidiMessage mm;int mp=0;juce::MidiBuffer::Iterator mi(midi);bool has=mi.getNextEvent(mm,mp);float peak=0, peakL=0, peakR=0, reduction=0;const float blockCut=juce::jlimit(20.f,(float)(sr*.45),val("cutoff")); const float q=juce::jmax(.1f,1.f-val("resonance")*.9f);
+ const bool filterOn=val("filterEnabled")>0.5f;
+ const bool envOn=val("filterEnvelopeEnabled")>0.5f;
+ const bool colorOn=val("colorEnabled")>0.5f;
+ const float filterDepth=juce::jlimit(-1.f,1.f,val("filterMod"));
+ const float filterMix=juce::jlimit(0.f,1.f,val("filterMix"));
+ const float colorMix=juce::jlimit(0.f,1.f,val("colorMix"));
+ const float filterDrive=juce::Decibels::decibelsToGain(val("filterDrive"));
+ const float outputGain=juce::Decibels::decibelsToGain(val("output"));
+ auto blockLp=juce::dsp::IIR::Coefficients<float>::makeLowPass(sr,blockCut,q); auto blockHp=juce::dsp::IIR::Coefficients<float>::makeHighPass(sr,blockCut,q); for(auto& f:filters){
+ f.a.coefficients=(model==5?blockHp:blockLp);
+ f.b.coefficients=(model==2?blockLp:blockHp);
+ f.c.coefficients=(model==4||model==5?blockHp:blockLp);
+ f.d.coefficients=(model==5?blockHp:blockLp);
+} for(int i=0;i<n;++i){bool note=false;while(has&&mp<=i){
+ note=note||(mm.isNoteOn()&&mm.getVelocity()>0);
+ has=mi.getNextEvent(mm,mp);
+}
+float sv=0;
+const int source=juce::jlimit(0,2,(int)val("detectorSource"));
+const bool hasExternal=side.getNumChannels()>0;
+if((source==2||source==0&&hasExternal)&&hasExternal)
+ sv=std::max(std::abs(side.getSample(0,i)),side.getNumChannels()>1?std::abs(side.getSample(1,i)):0.f);
+else if(source!=2)
+ sv=std::max(std::abs(main.getSample(0,i)),std::abs(main.getSample(1,i)));
+const int mode=juce::jlimit(0,2,(int)val("detector"));
+if(mode==1) {
+ rmsEnergy=rmsEnergy*.992f+sv*sv*.008f;
+ sv=std::sqrt(rmsEnergy);
+} else if(mode==2) {
+ transientFast+=.12f*(sv-transientFast);
+ transientSlow+=.008f*(sv-transientSlow);
+ sv=juce::jmax(0.f,(transientFast-transientSlow)*3.f);
+}
+detector=std::max(sv,detector*.995f);if(detector<threshold*.65f)gateArmed=true;bool audio=gateArmed&&detector>=threshold;if(audio)gateArmed=false;bool fire=(trig==0?audio:trig==1?note:(audio||note))&&holdoff<=0;if(fire){phase=0;holdoff=hold;triggerActivity.store(1.f);}if(holdoff>0)--holdoff;triggerActivity.store(triggerActivity.load()*.995f);float t=juce::jlimit(0.f,1.f,phase+offset);float e=phase>=1?1:envelope(t);if(attack>0)e=std::max(e,attack*(1.f-phase));float target=1.f-depth*(1.f-e);const float smoothingMs=target<gain?val("attackMs"):val("releaseMs");const float c=std::exp(-1.f/(std::max(.1f,smoothingMs)*.001f*sr));gain=c*gain+(1-c)*target;reduction=std::max(reduction,1.f-gain);phase=juce::jmin(1.f,phase+1.f/juce::jmax(1.f,len));for(int ch=0;ch<2;++ch){float dry=main.getSample(ch,i);const int readIndex=(delayWrite+192001-delaySamples)%192001;
+ float delayed=(delaySamples==0?dry:delay[(size_t)readIndex][(size_t)ch]);
+ if(delayTransitionSamples>0){
+  const int previousIndex=(delayWrite+192001-previousDelaySamples)%192001;
+  const float prior=(previousDelaySamples==0?dry:delay[(size_t)previousIndex][(size_t)ch]);
+  const float alpha=1.f-(float)delayTransitionSamples/(float)delayTransitionLength;
+  delayed=prior+(delayed-prior)*alpha;
+ }delay[delayWrite][ch]=dry;float wet=delayed*gain;float out=bypass?delayed:delayed+(wet-delayed)*mix;if(!bypass){auto& f=filters[ch];
+ float filtered=f.a.processSample(out);
+ if(model==1)filtered=f.c.processSample(filtered);
+ if(model==2){filtered=f.b.processSample(filtered);filtered=f.c.processSample(filtered);filtered=f.d.processSample(filtered);}
+ if(filterOn && envOn && std::abs(filterDepth)>0.0001f)
+ {
+     const float modulatedHz=juce::jlimit(20.f,(float)(sr*.45),blockCut*std::exp2(4.f*filterDepth*(1.f-e)));
+     const auto newType=model>=3&&model<=5?juce::dsp::StateVariableTPTFilterType::highpass:
+                         (model==6||model==7)?juce::dsp::StateVariableTPTFilterType::bandpass:
+                         juce::dsp::StateVariableTPTFilterType::lowpass;
+     const float resonance=juce::jlimit(.15f,8.f,1.f+val("resonance")*7.f);
+     for(auto* stage:{&f.animated,&f.animated2,&f.animated3,&f.animated4}){
+      stage->setCutoffFrequency(modulatedHz);
+      stage->setResonance(resonance);
+      stage->setType(newType);
+     }
+     filtered=model==10?f.processComb(out,juce::roundToInt((float)sr/modulatedHz),val("resonance")*.9f):f.animated.processSample(0,out);
+     if(model==7)filtered=out-filtered;
+     if(model==1||model==4)filtered=f.animated2.processSample(0,filtered);
+     if(model==2||model==5){
+      filtered=f.animated2.processSample(0,filtered);
+      filtered=f.animated3.processSample(0,filtered);
+      filtered=f.animated4.processSample(0,filtered);
+     }
  }
- if(sequenceOn)for(int k=0;k<sequenceSteps;++k){
-  di::ShapeSequencer::Shape shape{};for(int j=0;j<8;++j)shape[j]=getSequencePoint(k,j);sequencer.setShape(k,shape);
-  for(int lane=0;lane<2;++lane){di::ShapeSequencer::Shape mod{};for(int j=0;j<8;++j)mod[j]=getModulationPoint(lane,k,j);modulationSequencers[lane].setShape(k,mod);}
+ else if(model>=3){float h=f.b.processSample(out);if(model>=3&&model<=5){
+  filtered=h;
+  if(model>=4)filtered=f.c.processSample(filtered);
+  if(model==5){filtered=f.d.processSample(filtered);filtered=f.a.processSample(filtered);}
+ } else if(model==6||model==7){
+   f.animated.setCutoffFrequency(blockCut);
+   f.animated.setResonance(juce::jlimit(.2f,8.f,1.f+val("resonance")*7.f));
+   f.animated.setType(juce::dsp::StateVariableTPTFilterType::bandpass);
+   const float band=f.animated.processSample(0,out);
+   filtered=model==6?band:out-band;
+ } else if(model==8){ filtered=std::tanh(filtered*juce::Decibels::decibelsToGain(val("filterDrive"))); } else if(model==9){ filtered=std::tanh((filtered+h)*1.5f)-0.5f*h; } else if(model==10){ filtered=f.processComb(out,juce::roundToInt((float)sr/blockCut),val("resonance")*.9f); } else if(model==11){ filtered=std::tanh(filtered*3.f)+0.25f*h; } else if(model>=12){ filtered=std::tanh((filtered-h)*juce::Decibels::decibelsToGain(val("filterDrive"))); }}if(filterOn) {
+ if(model<8 && filterDrive>1.001f)
+  filtered=std::tanh(filtered*filterDrive)/std::tanh(filterDrive);
+ out+=(filtered-out)*filterMix;
+}
+ float cd=val("colorDrive");
+ if(colorOn&&colorMix>0.f){
+  float coloured=colour(out,color,cd);
+  const float tone=juce::jlimit(-1.f,1.f,val("colorTone"));
+  const float alpha=1.f-std::exp(-2.f*juce::MathConstants<float>::pi*1800.f/(float)sr);
+  colorToneLow[(size_t)ch]+=alpha*(coloured-colorToneLow[(size_t)ch]);
+  const float low=colorToneLow[(size_t)ch],high=coloured-low;
+  coloured=tone<0.f?coloured+tone*high:coloured+tone*low;
+  out+=(coloured-out)*colorMix;
  }
- double step=1.0/juce::jmax(1.0,envelopeLength*sr);int holdoff=(int)(bounded("retrigger",1.f,250.f,35.f)*.001*sr);float threshold=juce::Decibels::decibelsToGain(bounded("threshold",-60.f,0.f,-22.f));float coeff=std::exp(-1.f/(float)(bounded("smooth",.1f,20.f,2.f)*.001*sr));
- const double detectorRelease=di::peakReleaseCoefficient(sr);
- juce::MidiBuffer::Iterator it(midi);juce::MidiMessage msg;int midiPos=0;bool hasEvent=it.getNextEvent(msg,midiPos);float peak=0;
- for(int i=0;i<n;++i){bool midiNoteOn=false,audioPeak=false;
- fxBlend=fxTarget+(fxBlend-fxTarget)*fxSmoothing;
- saturatorBlend=saturatorTarget+(saturatorBlend-saturatorTarget)*fxSmoothing;
- if(!std::isfinite(smoothedFxDrive))smoothedFxDrive=drive;
- if(!std::isfinite(smoothedFxWet))smoothedFxWet=fxWet;
- smoothedFxDrive=drive+(smoothedFxDrive-drive)*fxParameterSmoothing;
- smoothedFxWet=fxWet+(smoothedFxWet-fxWet)*fxParameterSmoothing;
- smoothedFxType=(float)clipperMode+(smoothedFxType-(float)clipperMode)*fxSmoothing;
- while(hasEvent&&midiPos<=i){if(msg.isNoteOn()&&msg.getVelocity()>0)midiNoteOn=true;hasEvent=it.getNextEvent(msg,midiPos);}
- if(hasSide&&trig!=2&&side.getNumSamples()>=n){const float v=di::sidechainPeak(side.getSample(0,i),side.getNumChannels()>1?side.getSample(1,i):0.f,side.getNumChannels()>1);detector=di::followPeak(detector,(double)v,detectorRelease);if(detector<threshold*.65)armed=true;if(armed&&detector>=threshold)audioPeak=true;}
- const bool fire=di::shouldFireTrigger(midiNoteOn,audioPeak,armed,refractory,trig);
- // Consume a threshold crossing even during holdoff or a simultaneous MIDI note.
- // Otherwise a sustained kick can fire a delayed ghost trigger after holdoff.
- if(di::shouldConsumeAudioPeak(audioPeak,armed,trig))armed=false;
- if(refractory>0)--refractory;
- if(fire){
-  phase=0;
-  // In tempo-sync mode, incoming kicks/notes trigger the ducking envelope,
-  // not the song-position sequencer. Otherwise frequent notes pin it to step 1.
-  // Free-running (millisecond) mode retains explicit retrigger behaviour.
-  if(sequenceOn&&di::ShapeSequencer::shouldRestartOnTrigger(tempoSync)){
-   sequencer.trigger();
-   for(auto& lane:modulationSequencers)lane.trigger();
+ out*=outputGain;}if(!std::isfinite(out))out=0;main.setSample(ch,i,out);peak=std::max(peak,std::abs(out));if(ch==0)peakL=std::max(peakL,std::abs(out));else peakR=std::max(peakR,std::abs(out));}delayWrite=(delayWrite+1)%192001;if(delayTransitionSamples>0)--delayTransitionSamples;}meter.store(peak);gainReductionMeter.store(reduction);outputMeterL.store(peakL);outputMeterR.store(peakR);midi.clear();}
+void DISidechainProcessor::setCurrentProgram(int p){currentPreset=juce::jlimit(0,31,p);applyPreset(currentPreset);}const juce::String DISidechainProcessor::getProgramName(int p){static const char* n[]={"Clean Kick Duck","Tight Drum Duck","Deep Wobble","Talking Bass","Growl Filter","Metallic Sweep","Aggressive Formant","Liquid Movement","Elastic Bass","Vowel Bounce","Glassy Growl","Warm Harsh","Digital Motion","Rhythmic Resonance","Reese Movement","Jungle Duck","Neuro Sweep","Rolling Pulse","Reverse Swell","Filter Drop","Resonant Impact","Distorted Pulse","Stereo Motion","Sub Safe Duck","Fast Breakbeat","Half Time Growl","Razor Resonance","Dark Movement","Formant Pulse","Precision Pump","Gate Bass","Future Duck"};return p>=0&&p<32?n[p]:"Custom";}
+void DISidechainProcessor::applyPreset(int p){ auto set=[&](const char* id,float v){ if(auto* x=state.getParameter(id)) x->setValueNotifyingHost(x->convertTo0to1(v)); }; const int g=p/8; set("depth",0.35f+0.15f*(p%5)); set("mix",0.7f+0.05f*(p%5)); set("length",80.f+40.f*(p%10)); set("timeOffset",-1.f+0.5f*(p%5)); set("lookahead",5.f+5.f*(p%8)); set("attackProtection",(p%4)*0.25f); set("attackMs",.4f+(p%5)*.8f); set("releaseMs",5.f+(p%8)*6.f); set("cutoff",120.f+220.f*(p%12)); set("resonance",0.05f+0.07f*(p%8)); set("filterDrive",(p%6)*3.f); set("filterMod",-0.8f+0.2f*(p%9)); set("filterMix",0.55f+0.08f*(p%5)); set("colorDrive",(p%7)*3.f); set("colorMix",(p%4)*0.2f); set("output",-3.f+g); set("filterModel",(float)(p%13)); set("colorModel",(float)(p%6)); set("triggerMode",(float)(p%3)); set("division",(float)(p%7));
+ std::array<EnvelopeNode,maxEnvelopeNodes> points{};
+ const int shape=p%6;
+ int count=5;
+ if(shape==0){ // Classic precision duck: immediate attenuation, smooth return.
+  points[0]={0.f,0.f,0.f};points[1]={.12f,0.f,0.f};points[2]={.35f,.15f,.35f};
+  points[3]={.74f,.96f,-.2f};points[4]={1.f,1.f,0.f};
+ } else if(shape==1){ // Hard rhythmic gate.
+  points[0]={0.f,0.f,0.f};points[1]={.24f,0.f,0.f};points[2]={.28f,1.f,0.f};
+  points[3]={.79f,1.f,0.f};points[4]={1.f,1.f,0.f};
+ } else if(shape==2){ // Single-cycle dubstep wobble, without step sequencer.
+  count=7;
+  points[0]={0.f,1.f,0.f};points[1]={.14f,.04f,.4f};points[2]={.29f,.98f,-.3f};
+  points[3]={.46f,.08f,.3f};points[4]={.63f,.86f,-.3f};points[5]={.82f,.20f,.3f};
+  points[6]={1.f,1.f,0.f};
+ } else if(shape==3){ // Reverse swell.
+  points[0]={0.f,1.f,0.f};points[1]={.20f,.85f,0.f};points[2]={.50f,.24f,.35f};
+  points[3]={.78f,.03f,0.f};points[4]={1.f,1.f,0.f};
+ } else if(shape==4){ // Double pump.
+  count=7;
+  points[0]={0.f,0.f,0.f};points[1]={.18f,.06f,0.f};points[2]={.35f,1.f,0.f};
+  points[3]={.48f,.08f,0.f};points[4]={.64f,.09f,0.f};points[5]={.83f,.88f,0.f};
+  points[6]={1.f,1.f,0.f};
+ } else { // S-curve rise with protected attack.
+  points[0]={0.f,0.f,0.f};points[1]={.15f,.03f,-.5f};points[2]={.43f,.38f,-.2f};
+  points[3]={.80f,.95f,.5f};points[4]={1.f,1.f,0.f};
+ }
+ setEnvelopeNodes(points,count);
+ }
+void DISidechainProcessor::getStateInformation(juce::MemoryBlock& d)
+{
+ if(auto xml=state.copyState().createXml()){
+  std::array<EnvelopeNode,maxEnvelopeNodes> nodes{};
+  const int count=getEnvelopeNodes(nodes);
+  xml->setAttribute("currentPreset",currentPreset);
+  auto* envelopeXml=xml->createNewChildElement("PRECISION_ENVELOPE");
+  envelopeXml->setAttribute("count",count);
+  for(int i=0;i<count;++i){
+   auto* node=envelopeXml->createNewChildElement("NODE");
+   node->setAttribute("x",(double)nodes[(size_t)i].x);
+   node->setAttribute("y",(double)nodes[(size_t)i].y);
+   node->setAttribute("curve",(double)nodes[(size_t)i].curve);
   }
-  refractory=holdoff;
- }
- float env;float filterEnv=1.f,panEnv=0.5f;
- if(sequenceOn){env=sequencer.render(envelopeLength*sr);
-  filterEnv=modulationSequencers[0].render(envelopeLength*sr);
-  panEnv=modulationSequencers[1].render(envelopeLength*sr);
-  activeSequenceStep.store(sequencer.getCurrentStep(),std::memory_order_relaxed);}
- else {env=phase>=1?1:curve(phase);phase=juce::jmin(1.0,phase+step);}
- if(sequenceOn)env=juce::jlimit(0.f,1.f,env+shapeOffset);
- float target=1-depth*(1-env);smoothGain=coeff*smoothGain+(1-coeff)*target;
- // Independent, opt-in modulation lanes; neutral defaults preserve legacy patches.
- const float pan=juce::jlimit(-1.f,1.f,panMod*(2.f*panEnv-1.f));
- const float panLeft=pan>0.f?std::cos(pan*juce::MathConstants<float>::halfPi):1.f;
- const float panRight=pan<0.f?std::cos(-pan*juce::MathConstants<float>::halfPi):1.f;
- const float filterLaneGain=1.f-filterRange*(1.f-filterEnv);
- for(int ch=0;ch<2;++ch){float dry=main.getSample(ch,i);if(!std::isfinite(dry))dry=0.f;float wet=dry*smoothGain;
- if(mode!=0){auto& f=filters[ch];float low=f.low.processSample(0,dry),high=f.high.processSample(0,dry);float affected=mode==1?low:mode==2?high:dry-low-high;wet=dry+affected*(smoothGain-1);}
- float out=dry+(wet-dry)*mix;
- // Filter lane affects the selected frequency band, while Full mode remains full-band.
- if(filterRange>0.f&&mode!=0)out=dry+(out-dry)*filterLaneGain;
- if(panMod!=0.f)out*=ch==0?panLeft:panRight;
- // Run both branches continuously so automation/bypass does not reset FIR history.
- // Fixed 7-sample latency is reported to the host and shared by dry and wet.
- const float fxDry=fxDryDelay[ch].process(out);
- const float fxProcessed=oversampledFx[ch].process(out,smoothedFxDrive,smoothedFxType); // FX preserves original type and automation
- out=di::mixAlignedFx(fxDry,fxProcessed,smoothedFxWet*fxBlend);
- // Saturator is a separate, independently bypassable stage. Both oversampled
- // processors always run and both dry paths are latency-aligned to avoid clicks.
- const float satDry=saturatorDryDelay[ch].process(out);
- const float satProcessed=saturatorFx[ch].process(out,saturatorDrive,0.f);
- out=di::mixAlignedFx(satDry,satProcessed,smoothedFxWet*saturatorBlend);
- if(!std::isfinite(out))out=0.f;main.setSample(ch,i,out);peak=juce::jmax(peak,std::abs(out));}
- }
- meter.store(peak);midi.clear();
-}
-void DISidechainProcessor::getStateInformation(juce::MemoryBlock& dest){auto tree=state.copyState();for(int i=0;i<8;++i)tree.setProperty("point"+juce::String(i),points[i].load(),nullptr);for(int k=0;k<32;++k)for(int j=0;j<8;++j)tree.setProperty("seq_"+juce::String(k)+"_"+juce::String(j),getSequencePoint(k,j),nullptr);for(int lane=0;lane<2;++lane)for(int k=0;k<32;++k)for(int j=0;j<8;++j)tree.setProperty("mod_"+juce::String(lane)+"_"+juce::String(k)+"_"+juce::String(j),getModulationPoint(lane,k,j),nullptr);if(auto xml=tree.createXml())copyXmlToBinary(*xml,dest);}
-void DISidechainProcessor::setStateInformation(const void* data,int bytes){
- if(auto xml=getXmlFromBinary(data,bytes)){
-  auto tree=juce::ValueTree::fromXml(*xml);
-  if(!tree.isValid()||tree.getType()!=state.state.getType())return;
-  // Missing properties in older presets must restore defaults, not leak
-  // curve values from a previously loaded preset in this processor instance.
-  constexpr float volumeDefaults[8]={1.f,.92f,.08f,.02f,.32f,.75f,.95f,1.f};
-  const auto restored=[&](const juce::String& key,float fallback){
-   if(!tree.hasProperty(key))return fallback;
-   const float value=(float)tree.getProperty(key);
-   return std::isfinite(value)?juce::jlimit(0.f,1.f,value):fallback;
-  };
-  for(int j=0;j<8;++j)
-   points[j].store(restored("point"+juce::String(j),volumeDefaults[j]),std::memory_order_relaxed);
-  for(int k=0;k<32;++k)for(int j=0;j<8;++j)
-   setSequencePoint(k,j,restored("seq_"+juce::String(k)+"_"+juce::String(j),volumeDefaults[j]));
-  for(int lane=0;lane<2;++lane)for(int k=0;k<32;++k)for(int j=0;j<8;++j)
-   setModulationPoint(lane,k,j,restored("mod_"+juce::String(lane)+"_"+juce::String(k)+"_"+juce::String(j),lane==0?1.f:.5f));
-  state.replaceState(tree);
+  copyXmlToBinary(*xml,d);
  }
 }
-juce::AudioProcessorEditor* DISidechainProcessor::createEditor(){return new DISidechainEditor(*this);}
-juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter(){return new DISidechainProcessor();}
+void DISidechainProcessor::setStateInformation(const void* data,int size)
+{
+ if(auto xml=getXmlFromBinary(data,size)){
+  currentPreset=juce::jlimit(0,31,xml->getIntAttribute("currentPreset",0));
+  xml->removeAttribute("currentPreset");
+  if(auto* envelopeXml=xml->getChildByName("PRECISION_ENVELOPE")){
+   std::array<EnvelopeNode,maxEnvelopeNodes> nodes{};
+   int count=0;
+   for(auto* node=envelopeXml->getFirstChildElement();node!=nullptr&&count<maxEnvelopeNodes;node=node->getNextElement()){
+    if(node->hasTagName("NODE"))
+     nodes[(size_t)count++]={(float)node->getDoubleAttribute("x",0.0),
+                              (float)node->getDoubleAttribute("y",1.0),
+                              (float)node->getDoubleAttribute("curve",0.0)};
+   }
+   if(count>=2)setEnvelopeNodes(nodes,count);
+   xml->removeChildElement(envelopeXml,true);
+  }
+  state.replaceState(juce::ValueTree::fromXml(*xml));
+ }
+}
+juce::AudioProcessorEditor* DISidechainProcessor::createEditor(){return new DISidechainEditor(*this);}juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter(){return new DISidechainProcessor();}

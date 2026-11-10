@@ -1,0 +1,48 @@
+name: PRECISION SIDECHAIN Windows
+on:
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Configure
+        run: cmake -S DI-SIDECHAIN -B build -G "Visual Studio 17 2022" -A x64 -DBUILD_TESTING=ON
+      - name: Build plugin and all CTest targets
+        run: cmake --build build --config Release --parallel 2
+      - name: Run CTest
+        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Resolve built VST3
+        id: vst3
+        shell: pwsh
+        run: |
+          $vst = Get-ChildItem "build/PrecisionSidechain_artefacts/Release/VST3" -Directory -Filter "*.vst3" | Where-Object { $_.Name -eq 'PRECISION SIDECHAIN.vst3' } | Select-Object -First 1
+          if (-not $vst) { throw "PRECISION SIDECHAIN.vst3 not found in JUCE target artefacts directory" }
+          "path=$($vst.FullName)" >> $env:GITHUB_OUTPUT
+      - name: Validate with pluginval strictness 5
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_Windows.zip" -OutFile pluginval.zip
+          Expand-Archive pluginval.zip -DestinationPath pluginval -Force
+          $exe = Get-ChildItem pluginval -Recurse -File -Filter pluginval.exe | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $exe) { throw "pluginval.exe not found" }
+          $vst = "${{ steps.vst3.outputs.path }}"
+          $args = @('--strictness-level', '5', '--validate-in-process', '--timeout-ms', '120000', '--validate', ('"' + $vst + '"'))
+          $validation = Start-Process -FilePath $exe -ArgumentList $args -Wait -PassThru -NoNewWindow -RedirectStandardOutput pluginval-stdout.log -RedirectStandardError pluginval-stderr.log
+          if (Test-Path pluginval-stdout.log) { Get-Content pluginval-stdout.log }
+          if (Test-Path pluginval-stderr.log) { Get-Content pluginval-stderr.log }
+          if ($validation.ExitCode -ne 0) { throw "pluginval returned nonzero exit code $($validation.ExitCode)" }
+          Write-Host "pluginval exited successfully."
+      - name: Package VST3
+        shell: pwsh
+        run: |
+          $vst = "${{ steps.vst3.outputs.path }}"
+          Compress-Archive -Path $vst -DestinationPath "PRECISION-SIDECHAIN-1.0-Windows-x64.zip" -Force
+          if (-not (Test-Path "PRECISION-SIDECHAIN-1.0-Windows-x64.zip")) { throw "VST3 release archive missing" }
+      - name: Upload VST3 release archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: PRECISION-SIDECHAIN-1.0-Windows-x64
+          path: PRECISION-SIDECHAIN-1.0-Windows-x64.zip
+          if-no-files-found: error
