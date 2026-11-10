@@ -10,7 +10,7 @@ static float render(double tone,int mode,float cutoff,bool analog=false){
  di::EnvelopeFilter fx;fx.prepare(48000.);
  double energy=0.;int samples=0;
  for(int n=0;n<24000;++n){
-  const float sample=.33f*std::sin(6.28318530718*tone*n/48000.);
+  const float sample=static_cast<float>(.33*std::sin(6.28318530718*tone*n/48000.));
   const float output=fx.process(sample,cutoff,mode,.35f,analog);
   check(std::isfinite(output),"finite envelope filter signal");
   if(n>=8000){energy+=output*output;++samples;}
@@ -21,7 +21,7 @@ static float inputRms(double tone,bool hp,bool lp){
  di::InputCutFilter fx;fx.prepare(48000.);fx.set(220.f,1800.f);
  double power=0.;int count=0;
  for(int n=0;n<24000;++n){
-  const float in=.33f*std::sin(6.28318530718*tone*n/48000.);
+  const float in=static_cast<float>(.33*std::sin(6.28318530718*tone*n/48000.));
   const float out=fx.process(in,hp,lp);
   check(std::isfinite(out),"finite input signal");
   if(n>=8000){power+=out*out;++count;}
