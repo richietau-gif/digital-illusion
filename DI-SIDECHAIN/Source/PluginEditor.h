@@ -53,11 +53,15 @@ private:
  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> curveAmountAttachment;
  std::unique_ptr<juce::TextButton> prevPreset,nextPreset, aButton,bButton, copyAB,savePreset,undoButton,redoButton;
  std::unique_ptr<juce::TextButton> filterPower,filterEnvelopePower,colorPower,curveShapeButton;
+ std::unique_ptr<juce::TextButton> selectTool,bendTool,eraseTool,clearCurve;
  std::unique_ptr<juce::ToggleButton> sync,bypass;
  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> syncAttachment,bypassAttachment,filterAttachment,filterEnvelopeAttachment,colorAttachment;
  juce::ValueTree snapshots[2];
  CurveState snapshotCurves[2];
  std::unique_ptr<juce::FileChooser> presetFileChooser;
+ enum class EditTool { select, bend, erase };
+ EditTool editTool=EditTool::select;
+ void selectEditTool(EditTool);
  int activeSnapshot=0;
  CurveState curve;
  std::vector<CurveState> undoHistory,redoHistory;
