@@ -932,6 +932,9 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  const float grDb=duckGr>0.f?-20.f*std::log10(juce::jmax(.001f,1.f-duckGr)):0.f;
  text(g,"DUCK "+juce::String(grDb,1)+" dB",
       {1162,737,215,21},12,duckGr>.01f?lime:faint,true);
+ const float preFxInput=juce::jmax(0.f,proc.inputLevel.load(std::memory_order_relaxed));
+ text(g,preFxInput<.001f?"NO AUDIO INPUT":"INPUT SIGNAL OK",
+      {1358,737,148,21},11,preFxInput<.001f?orange:cyan,true);
  text(g,"DEPTH",{1170,766,110,20},13,white,true);
  text(g,"MIX",{1320,766,110,20},13,white,true);
  text(g,"OUT",{1459,752,57,21},13,white,true);
