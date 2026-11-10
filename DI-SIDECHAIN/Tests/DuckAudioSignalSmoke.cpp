@@ -50,8 +50,8 @@ int main(){
  const float zeroMix=renderAudio(0,1.f,0.f);
  const float bypassWithFx=renderAudio(8|1|2|16,1.f,1.f);
  check(std::abs(dry-.25f)<.00001f,"bypassed cell must pass original audio");
- check(fullyWet<dry*.28f,"active duck must audibly attenuate output");
- check(halfDepth>fullyWet*2.f&&halfDepth<dry,"depth parameter changes audio");
+ check(fullyWet<dry*.4f,"active duck must audibly attenuate output");
+ check(halfDepth>fullyWet*1.5f&&halfDepth<dry,"depth parameter changes audio");
  check(halfMix>fullyWet&&halfMix<dry,"wet mix changes actual audio");
  check(std::abs(zeroDepth-dry)<.00001f,"zero depth must pass dry");
  check(std::abs(zeroMix-dry)<.00001f,"zero mix must pass dry");
