@@ -312,6 +312,7 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  addAndMakeVisible(*filterModelBox);
  filterModelAttachment=std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
   p.state,"filterModel",*filterModelBox);
+ filterModelBox->onChange=[this]{updateContextualControls();repaint();};
  filterResonanceSlider=std::make_unique<juce::Slider>(
   juce::Slider::LinearHorizontal,juce::Slider::TextBoxRight);
  filterResonanceSlider->setTextBoxStyle(juce::Slider::TextBoxRight,false,58,20);
@@ -354,6 +355,7 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
   toggle.setColour(juce::TextButton::buttonOnColourId,juce::Colour(0xff28ced8));
   toggle.setColour(juce::TextButton::textColourOnId,juce::Colour(0xff07141e));
   addAndMakeVisible(toggle);
+  toggle.onClick=[this]{updateContextualControls();repaint();};
   inputCutButtonAttachments[(size_t)i]=std::make_unique<
    juce::AudioProcessorValueTreeState::ButtonAttachment>(p.state,inputIds[i],toggle);
   inputCutSliders[(size_t)i]=std::make_unique<juce::Slider>(
@@ -1080,6 +1082,7 @@ void DISidechainEditor::refreshCreativePage(){
   button.setColour(juce::TextButton::buttonColourId,juce::Colour(0xff152331));
   button.setColour(juce::TextButton::textColourOffId,laneColours[i]);
  }
+ updateContextualControls();
 }
 void DISidechainEditor::resized() {
  // All child component bounds use design pixels. The parent editor, graph
