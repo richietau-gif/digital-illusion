@@ -157,6 +157,25 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  button(filterEnvelopePower,"ENV ON",true);
  button(colorPower,"ON",true);
  button(curveShapeButton,"SHAPES");
+ button(selectTool,"EDIT",true);
+ button(bendTool,"BEND",true);
+ button(eraseTool,"ERASE",true);
+ button(clearCurve,"RESET");
+ selectTool->setTooltip("Add points and drag existing points");
+ bendTool->setTooltip("Drag an envelope point vertically to alter its segment curvature");
+ eraseTool->setTooltip("Click an internal point to remove it");
+ clearCurve->setTooltip("Reset the envelope to a simple duck shape");
+ selectTool->onClick=[this]{selectEditTool(EditTool::select);};
+ bendTool->onClick=[this]{selectEditTool(EditTool::bend);};
+ eraseTool->onClick=[this]{selectEditTool(EditTool::erase);};
+ clearCurve->onClick=[this]{
+  recordUndo();
+  curve.count=4;
+  curve.nodes[0]={0.f,0.f,0.f};curve.nodes[1]={.18f,.02f,0.f};
+  curve.nodes[2]={.63f,.86f,.1f};curve.nodes[3]={1.f,1.f,0.f};
+  pushNodes();
+ };
+ selectEditTool(EditTool::select);
  prevPreset->onClick=[this]{movePreset(-1);};
  nextPreset->onClick=[this]{movePreset(1);};
  aButton->onClick=[this]{setSnapshot(0);};
@@ -249,6 +268,10 @@ void DISidechainEditor::resized() {
  b(aButton.get(),700,19,32,31);b(bButton.get(),737,19,32,31);
  b(copyAB.get(),775,19,52,31);b(undoButton.get(),834,19,30,31);b(redoButton.get(),869,19,30,31);
  b(bypass.get(),914,22,75,27);b(combos[6].get(),1001,19,81,31);
+ b(selectTool.get(),140,96,54,30);
+ b(bendTool.get(),199,96,54,30);
+ b(eraseTool.get(),258,96,62,30);
+ b(clearCurve.get(),325,96,59,30);
  b(curveShapeButton.get(),43,99,77,29);b(combos[3].get(),725,91,122,32);
  b(curveAmountSlider.get(),858,93,135,29);
  b(combos[0].get(),33,406,118,27);b(combos[1].get(),157,406,85,27);
@@ -295,7 +318,7 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e) {
   const float d=std::sqrt(dx*dx+dy*dy);
   if(d<best){best=d;nearest=i;}
  }
- if(e.mods.isRightButtonDown()) {
+ if(e.mods.isRightButtonDown()||editTool==EditTool::erase) {
   if(nearest>0&&nearest<curve.count-1) {
    recordUndo();
    for(int i=nearest;i<curve.count-1;i++)curve.nodes[(size_t)i]=curve.nodes[(size_t)i+1];
@@ -304,7 +327,7 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e) {
   return;
  }
  recordUndo();
- if(nearest<0&&curve.count<maxNodes) {
+ if(nearest<0&&editTool==EditTool::select&&curve.count<maxNodes) {
   const auto bounds=scaled((int)gx0,(int)gy0,(int)(gx1-gx0),(int)(gy1-gy0));
   const float x=clamp((p.x-bounds.getX())/(float)bounds.getWidth());
   const float y=clamp(1.f-(p.y-bounds.getY())/(float)bounds.getHeight());
@@ -313,7 +336,7 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e) {
   for(int j=curve.count;j>insert;--j)curve.nodes[(size_t)j]=curve.nodes[(size_t)j-1];
   curve.nodes[(size_t)insert]={x,y,0.f};++curve.count;nearest=insert;pushNodes();
  }
- draggedNode=nearest;changeCurve=e.mods.isShiftDown();
+ draggedNode=nearest;changeCurve=e.mods.isShiftDown()||editTool==EditTool::bend;
  if(nearest>=0)dragStartCurve=curve.nodes[(size_t)nearest].curve;
 }
 void DISidechainEditor::mouseDrag(const juce::MouseEvent& e) {
@@ -333,6 +356,12 @@ void DISidechainEditor::mouseDrag(const juce::MouseEvent& e) {
  pushNodes();
 }
 void DISidechainEditor::mouseUp(const juce::MouseEvent&) {draggedNode=-1;changeCurve=false;}
+void DISidechainEditor::selectEditTool(EditTool tool){
+ editTool=tool;
+ selectTool->setToggleState(tool==EditTool::select,juce::dontSendNotification);
+ bendTool->setToggleState(tool==EditTool::bend,juce::dontSendNotification);
+ eraseTool->setToggleState(tool==EditTool::erase,juce::dontSendNotification);
+}
 void DISidechainEditor::movePreset(int delta) {
  proc.setCurrentProgram((proc.getCurrentProgram()+delta+proc.getNumPrograms())%proc.getNumPrograms());
  presetBrowser->setSelectedId(proc.getCurrentProgram()+1,juce::dontSendNotification);
