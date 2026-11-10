@@ -452,14 +452,19 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  g.setColour(cyan.withAlpha(.7f));g.drawLine(gx0,gy0,gx0,gy1,1.3f);
  label("OFFSET "+juce::String(juce::roundToInt(offset*100.f))+"%",840,82,110,11,orange,true);
  // ENV and OUT meter, sourced from actual plugin atomics.
- label("TRIG",1000,90,36,11,muted);label("OUT",1044,90,38,11,muted);
- const float meter=clamp(proc.meter.load()),trig=clamp(proc.triggerActivity.load());
- for(int ch=0;ch<2;ch++){
-  const float x=1003.f+ch*39.f;
-  g.setColour(juce::Colour(0xff142e36));g.fillRoundedRectangle(rect(x,131,17,165),4.f);
-  const float level=ch==0?trig:meter;
-  g.setColour(ch==0?juce::Colour(0xff94ee53):cyan);
-  g.fillRoundedRectangle(rect(x,296-165.f*level,17,165.f*level),3.f);
+ label("ENV",999,90,41,11,muted);label("OUT",1043,90,38,11,muted);
+ const float envLevel=clamp(proc.gainReductionMeter.load());
+ const float outputL=clamp(proc.outputMeterL.load()),outputR=clamp(proc.outputMeterR.load());
+ const float levels[]={envLevel,outputL,outputR};
+ for(int bar=0;bar<3;++bar){
+  const float x=bar==0?998.f:bar==1?1032.f:1055.f;
+  const float width=bar==0?19.f:15.f;
+  g.setColour(juce::Colour(0xff142e36));
+  g.fillRoundedRectangle(rect(x,131,width,165),3.f);
+  const float level=levels[bar];
+  g.setColour(bar==0?juce::Colour(0xff9cf44b):cyan);
+  if(level>0.001f)
+   g.fillRoundedRectangle(rect(x,296-165.f*level,width,165.f*level),2.f);
  }
  // Mid row: Trigger, Timing, Envelope, Mix.
  panelBox(14,365,240,178);panelBox(262,365,276,178);
