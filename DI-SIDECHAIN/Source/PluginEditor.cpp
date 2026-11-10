@@ -120,7 +120,16 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
   comboAttachments.emplace_back(std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(proc.state,choice.id,*c));
   combos.emplace_back(std::move(c));
  }
- presetBrowser=std::make_unique<juce::ComboBox>();
+ curveAmountSlider=std::make_unique<juce::Slider>();
+ curveAmountSlider->setSliderStyle(juce::Slider::LinearHorizontal);
+ curveAmountSlider->setTextBoxStyle(juce::Slider::TextBoxRight,false,50,19);
+ curveAmountSlider->setColour(juce::Slider::trackColourId,cyan);
+ curveAmountSlider->setColour(juce::Slider::thumbColourId,cyan);
+ curveAmountSlider->textFromValueFunction=[](double value){return juce::String(value*100.,0)+"%";};
+ curveAmountSlider->valueFromTextFunction=[](const juce::String& text){return text.getDoubleValue()/100.;};
+ addAndMakeVisible(*curveAmountSlider);
+ curveAmountAttachment=std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(proc.state,"curveAmount",*curveAmountSlider);
+  presetBrowser=std::make_unique<juce::ComboBox>();
  for(int i=0;i<proc.getNumPrograms();++i) presetBrowser->addItem(proc.getProgramName(i),i+1);
  presetBrowser->setSelectedId(proc.getCurrentProgram()+1,juce::dontSendNotification);
  presetBrowser->onChange=[this] {
@@ -216,7 +225,7 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
 }
 DISidechainEditor::~DISidechainEditor() {
  stopTimer();controlsReady=false;
- filterAttachment.reset();filterEnvelopeAttachment.reset();colorAttachment.reset();
+ filterAttachment.reset();filterEnvelopeAttachment.reset();colorAttachment.reset();curveAmountAttachment.reset();
  syncAttachment.reset();bypassAttachment.reset();sliderAttachments.clear();comboAttachments.clear();
  setLookAndFeel(nullptr);
 }
@@ -239,7 +248,8 @@ void DISidechainEditor::resized() {
  b(aButton.get(),700,19,32,31);b(bButton.get(),737,19,32,31);
  b(copyAB.get(),775,19,52,31);b(undoButton.get(),834,19,30,31);b(redoButton.get(),869,19,30,31);
  b(bypass.get(),914,22,75,27);b(combos[6].get(),1001,19,81,31);
- b(curveShapeButton.get(),43,93,77,30);b(combos[3].get(),725,91,122,32);
+ b(curveShapeButton.get(),43,99,77,29);b(combos[3].get(),725,91,122,32);
+ b(curveAmountSlider.get(),858,93,135,29);
  b(combos[0].get(),33,406,118,27);b(combos[1].get(),157,406,85,27);
  b(combos[2].get(),33,519,104,20);
  b(sync.get(),287,515,105,24);
@@ -366,7 +376,7 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  panelBox(13,73,1074,284);
  label("ENVELOPE EDITOR",30,77,285,12,cyan,true);
  label("LEFT: ADD / DRAG     RIGHT: DELETE     SHIFT + DRAG: CURVATURE",138,82,530,10,muted);
- label("GRID",687,92,40,10,muted);
+ label("GRID",687,92,40,10,muted);label("CURVE",856,78,80,10,muted);
  label("TRIGGER",80,307,70,10,muted);
  label("1/4",294,307,60,10,muted);
  label("1/2",528,307,60,10,muted);
