@@ -960,6 +960,8 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  }else if(selectedLane==1){
   text(g,"FILTER FX  /  CUTOFF SHAPE",{1143,553,340,15},11,cyan,true);
   text(g,"SWEEP DEPTH",{1143,599,340,15},11,cyan,true);
+  text(g,"MODEL",{32,484,165,15},10,cyan,true);
+  text(g,"RESONANCE",{32,603,176,15},10,cyan,true);
   text(g,"MINIMUM Hz",{1143,647,175,14},10,faint,true);
   text(g,"MAXIMUM Hz",{1328,647,175,14},10,faint,true);
  }else if(selectedLane==2){
@@ -1156,7 +1158,7 @@ void DISidechainEditor::resized() {
  for(int i=0;i<4;++i)if(filterButtons[i])
   filterButtons[i]->setBounds(1143+i*91,570,85,25);
  if(filterModelBox)filterModelBox->setBounds(32,502,177,28);
- if(filterResonanceSlider)filterResonanceSlider->setBounds(540,502,235,28);
+ if(filterResonanceSlider)filterResonanceSlider->setBounds(32,620,179,27);
  if(laneSliders[0])laneSliders[0]->setBounds(1143,614,359,26);
  for(int i=0;i<2;++i){
   if(filterSweepSliders[(size_t)i])
