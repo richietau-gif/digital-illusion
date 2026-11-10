@@ -33,6 +33,7 @@ private:
  };
  std::array<std::atomic<float>,maxEnvelopeNodes> envelopeXs{}, envelopeYs{}, envelopeCurves{};
  std::atomic<int> envelopeNodeCount{2};
+  std::array<float,2> colorToneLow{{0.f,0.f}};
   double sr=44100.; int maxBlock=0; int currentPreset=0; int delaySamples=0; int delayWrite=0; bool gateArmed=true; int holdoff=0; float detector=0.f,phase=1.f,gain=1.f;
  std::array<std::array<float,2>,192001> delay{}; std::array<Filter,2> filters;
  float envelope(float) const noexcept; float colour(float,int,float) const noexcept; void applyPreset(int);
