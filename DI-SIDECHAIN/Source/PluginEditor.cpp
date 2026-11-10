@@ -960,7 +960,8 @@ void DISidechainEditor::paint(juce::Graphics& g) {
   text(g,"PAN MODULATION AMOUNT",{1143,566,340,17},11,juce::Colour(0xffa57dff),true);
   text(g,"Positive = pan envelope, negative = inverted.",{1143,616,350,18},11,faint);
  }
- text(g,"BYP skips volume duck; effects stay available.",{1143,670,353,16},10,faint);
+ if(selectedLane!=1)
+  text(g,"BYP skips volume duck; effects stay available.",{1143,670,353,16},10,faint);
  // Input EQ is independent of rhythm modulation; this section has NO
  // FILTER-lane character, envelopes or crossover-duck controls.
  paintPanel(g,filterPanel,"INPUT FILTER  /  PRE-FX");
