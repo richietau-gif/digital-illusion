@@ -786,18 +786,21 @@ void DISidechainEditor::paint(juce::Graphics& g) {
      g.setColour(orange.withAlpha(.85f));
      g.drawLine(cell.getX()+3,cell.getBottom()-3,cell.getRight()-3,cell.getY()+3,1.5f);
     }
-    if(on&&!bypass){
+    // Each cell previews its OWN stored shape, including when disabled.
+    // Dim means OFF; a muted line means duck bypassed but shape retained.
+    {
      juce::Path miniature;
      const auto cellCurve=proc.getDynamicDuckCurve(track,step);
-    for(int node=0;node<8;++node){
+     for(int node=0;node<8;++node){
       const float v=cellCurve.evaluate(node/7.f);
       const float px=cell.getX()+5.f+(cell.getWidth()-10.f)*node/7.f;
       const float py=cell.getBottom()-2.f-v*(cell.getHeight()*.32f);
       if(node==0)miniature.startNewSubPath(px,py);
       else miniature.lineTo(px,py);
      }
-     g.setColour(juce::Colour(0xff06121b).withAlpha(.8f));
-     g.strokePath(miniature,juce::PathStrokeType(1.f));
+     g.setColour(on?(bypass?orange.withAlpha(.38f):juce::Colour(0xff06121b).withAlpha(.85f)):
+                  juce::Colour(0xff78bfa3).withAlpha(.38f));
+     g.strokePath(miniature,juce::PathStrokeType(1.1f));
     }
     if(track==selectedTrack&&step==selectedStep){
      g.setColour(orange);g.drawRoundedRectangle(cell,3.f,1.8f);
