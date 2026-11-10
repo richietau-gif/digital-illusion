@@ -87,7 +87,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& b,juce::MidiBu
  {
      const float modulatedHz=juce::jlimit(20.f,(float)(sr*.45),blockCut*std::exp2(4.f*filterDepth*(1.f-e)));
      const auto newType=model>=3&&model<=5?juce::dsp::StateVariableTPTFilterType::highpass:
-                         model==6?juce::dsp::StateVariableTPTFilterType::bandpass:
+                         (model==6||model==7)?juce::dsp::StateVariableTPTFilterType::bandpass:
                          juce::dsp::StateVariableTPTFilterType::lowpass;
      const float resonance=juce::jlimit(.15f,8.f,1.f+val("resonance")*7.f);
      for(auto* stage:{&f.animated,&f.animated2,&f.animated3,&f.animated4}){
@@ -95,7 +95,8 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& b,juce::MidiBu
       stage->setResonance(resonance);
       stage->setType(newType);
      }
-     filtered=f.animated.processSample(0,out);
+     filtered=model==10?f.processComb(out,juce::roundToInt((float)sr/modulatedHz),val("resonance")*.9f):f.animated.processSample(0,out);
+     if(model==7)filtered=out-filtered;
      if(model==1||model==4)filtered=f.animated2.processSample(0,filtered);
      if(model==2||model==5){
       filtered=f.animated2.processSample(0,filtered);
@@ -107,7 +108,17 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& b,juce::MidiBu
   filtered=h;
   if(model>=4)filtered=f.c.processSample(filtered);
   if(model==5){filtered=f.d.processSample(filtered);filtered=f.a.processSample(filtered);}
- } else if(model==6){ filtered=0.5f*(filtered+h); } else if(model==7){ filtered=filtered-h; } else if(model==8){ filtered=std::tanh(filtered*juce::Decibels::decibelsToGain(val("filterDrive"))); } else if(model==9){ filtered=std::tanh((filtered+h)*1.5f)-0.5f*h; } else if(model==10){ filtered=std::sin(filtered*juce::Decibels::decibelsToGain(val("filterDrive"))); } else if(model==11){ filtered=std::tanh(filtered*3.f)+0.25f*h; } else if(model>=12){ filtered=std::tanh((filtered-h)*juce::Decibels::decibelsToGain(val("filterDrive"))); }}if(filterOn)out=out+(filtered-out)*filterMix;
+ } else if(model==6||model==7){
+   f.animated.setCutoffFrequency(blockCut);
+   f.animated.setResonance(juce::jlimit(.2f,8.f,1.f+val("resonance")*7.f));
+   f.animated.setType(juce::dsp::StateVariableTPTFilterType::bandpass);
+   const float band=f.animated.processSample(0,out);
+   filtered=model==6?band:out-band;
+ } else if(model==8){ filtered=std::tanh(filtered*juce::Decibels::decibelsToGain(val("filterDrive"))); } else if(model==9){ filtered=std::tanh((filtered+h)*1.5f)-0.5f*h; } else if(model==10){ filtered=f.processComb(out,juce::roundToInt((float)sr/blockCut),val("resonance")*.9f); } else if(model==11){ filtered=std::tanh(filtered*3.f)+0.25f*h; } else if(model>=12){ filtered=std::tanh((filtered-h)*juce::Decibels::decibelsToGain(val("filterDrive"))); }}if(filterOn) {
+ if(model<8 && filterDrive>1.001f)
+  filtered=std::tanh(filtered*filterDrive)/std::tanh(filterDrive);
+ out+=(filtered-out)*filterMix;
+}
  float cd=val("colorDrive");
  if(colorOn&&colorMix>0.f){
   float coloured=colour(out,color,cd);
