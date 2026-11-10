@@ -6,7 +6,6 @@
 #include "FixedDelay.h"
 #include "CreativeFx.h"
 #include "DuckVoiceEngine.h"
-#include "AnalogLadder.h"
 #include "EnvelopeFilter.h"
 class DISidechainProcessor : public juce::AudioProcessor {
 public:
@@ -79,9 +78,6 @@ public:
  float getSequencePoint(int step,int node) const noexcept;
 private:
  static juce::AudioProcessorValueTreeState::ParameterLayout makeParams();
- struct FilterChannel {juce::dsp::LinkwitzRileyFilter<float> low, high;
-  di::AnalogLadder ladderLow, ladderHigh;};
- std::array<FilterChannel,2> filters;
  std::array<di::EnvelopeFilter,2> envelopeFilters;
  std::array<di::InputCutFilter,2> inputFilters;
  std::array<di::OversampledFx2x,2> oversampledFx, saturatorFx;
