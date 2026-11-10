@@ -116,6 +116,7 @@ public:
   lastDecay=-1.f;
   lastDistDriveDb=-1.f;distGain=1.f;
   lastTone=-1.f;toneCoeff=.5f;
+  lastPreDelayMs=-1.f;preDelaySamples=0;
   dryReverbGain=1.f;
   distBlend=verbBlend=verbSend=0.f;
  }
@@ -161,9 +162,15 @@ public:
   // Do not reset the reverb on inactive steps: the tail must ring out.
   // Reverb processes continuously, but receives no new input on inactive steps.
   sendL*=verbSend;sendR*=verbSend;
-  const int delaySamples=static_cast<int>(std::round(
-   std::clamp(verbPreDelayMs,0.f,250.f)*.001*sampleRate));
-  predelay.process(sendL,sendR,delaySamples);
+  // Predelay time is an APVTS block parameter. Cache the tap count;
+  // avoid repeated float-to-int conversion on every audio sample.
+  const float preDelay=std::isfinite(verbPreDelayMs)?
+    std::clamp(verbPreDelayMs,0.f,250.f):0.f;
+  if(preDelay!=lastPreDelayMs){
+   lastPreDelayMs=preDelay;
+   preDelaySamples=static_cast<int>(std::round(preDelay*.001*sampleRate));
+  }
+  predelay.process(sendL,sendR,preDelaySamples);
   const int model=std::clamp(verbModel,0,4);
   constexpr float sizes[5]={.2f,.45f,.7f,.88f,.98f};
   constexpr float damp[5]={.75f,.60f,.45f,.27f,.12f};
@@ -206,6 +213,8 @@ private:
  float lastLength=-1.f,lastDecay=-1.f;
  float lastDistDriveDb=-1.f,distGain=1.f;
  float lastTone=-1.f,toneCoeff=.5f,dryReverbGain=1.f;
+ float lastPreDelayMs=-1.f;
+ int preDelaySamples=0;
  float distBlend=0.f,verbBlend=0.f,verbSend=0.f,fadeCoeff=.001f;
 };
 } // namespace di
