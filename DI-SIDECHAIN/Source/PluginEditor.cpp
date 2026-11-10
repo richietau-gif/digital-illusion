@@ -139,7 +139,10 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  };
  syncLengthSlider->valueFromTextFunction=[](const juce::String& text){
   const juce::StringArray labels{"1/16","1/8T","1/8","1/4T","1/4","1/2","1 Bar"};
-  const int index=labels.indexOfIgnoreCase(text.trim());
+  int index=0;
+  for(int i=0;i<labels.size();++i) {
+   if(labels[i].equalsIgnoreCase(text.trim())){index=i;break;}
+  }
   return (double)juce::jmax(0,index);
  };
  addAndMakeVisible(*syncLengthSlider);
