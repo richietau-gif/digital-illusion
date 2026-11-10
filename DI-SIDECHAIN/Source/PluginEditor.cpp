@@ -70,10 +70,11 @@ void PrecisionLookAndFeel::drawRotarySlider(juce::Graphics& g,int x,int y,int wi
 }
 void PrecisionLookAndFeel::drawButtonBackground(juce::Graphics& g,juce::Button& button,const juce::Colour&,bool hovered,bool pressed) {
  const bool on=button.getToggleState();
+ const bool power=button.getButtonText()=="ON"||button.getButtonText()=="ENV ON";
  auto bounds=button.getLocalBounds().toFloat().reduced(1);
- g.setColour(on?juce::Colour(0xff11c9d5):juce::Colour(hovered?0xff294357:0xff192939));
+ g.setColour(on?(power?juce::Colour(0xff9ff52e):juce::Colour(0xff11c9d5)):juce::Colour(hovered?0xff294357:0xff192939));
  g.fillRoundedRectangle(bounds,6.f);
- g.setColour(on?cyan:juce::Colour(0xff355368));
+ g.setColour(on?(power?juce::Colour(0xffb4ff49):cyan):juce::Colour(0xff355368));
  g.drawRoundedRectangle(bounds,6.f,1.f);
  if(pressed){g.setColour(juce::Colours::white.withAlpha(.08f));g.fillRoundedRectangle(bounds,6.f);}
 }
