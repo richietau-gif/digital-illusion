@@ -39,6 +39,23 @@ juce::Rectangle<float> rect(float x,float y,float w,float h){return {x,y,w,h};}
 float clamp(float x){return juce::jlimit(0.f,1.f,x);}
 }
 
+// A real JUCE child component owns the envelope hit area. Its mouse events
+// are translated back to editor coordinates (including JUCE's 75% scale).
+// This avoids accidental interception by any future neighbouring GUI widgets.
+class EnvelopeMouseLayer final : public juce::Component {
+public:
+ explicit EnvelopeMouseLayer(DISidechainEditor& owner) : editor(owner) {
+  setName("Envelope point editor");
+  setInterceptsMouseClicks(true,false);
+  setMouseCursor(juce::MouseCursor::CrosshairCursor);
+ }
+ void mouseDown(const juce::MouseEvent& e) override { editor.mouseDown(e.getEventRelativeTo(&editor)); }
+ void mouseDrag(const juce::MouseEvent& e) override { editor.mouseDrag(e.getEventRelativeTo(&editor)); }
+ void mouseUp(const juce::MouseEvent& e) override { editor.mouseUp(e.getEventRelativeTo(&editor)); }
+private:
+ DISidechainEditor& editor;
+};
+
 PrecisionLookAndFeel::PrecisionLookAndFeel() {
  setColour(juce::ComboBox::backgroundColourId,juce::Colour(0xff111f2d));
  setColour(juce::ComboBox::outlineColourId,juce::Colour(0xff365064));
@@ -319,6 +336,8 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  snapshotCurves[0]=curve;snapshotCurves[1]=curve;
  aButton->setToggleState(true,juce::dontSendNotification);
  bButton->setToggleState(false,juce::dontSendNotification);
+ envelopeMouseLayer=std::make_unique<EnvelopeMouseLayer>(*this);
+ addAndMakeVisible(*envelopeMouseLayer);
  controlsReady=true;
  setResizable(true,true);
  setResizeLimits(550,370,1400,940);
@@ -327,6 +346,7 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
 }
 DISidechainEditor::~DISidechainEditor() {
  stopTimer();controlsReady=false;
+ envelopeMouseLayer.reset();
  filterAttachment.reset();filterEnvelopeAttachment.reset();colorAttachment.reset();curveAmountAttachment.reset();gridAttachment.reset();syncLengthAttachment.reset();attackProtectAttachment.reset();
  syncAttachment.reset();bypassAttachment.reset();sliderAttachments.clear();comboAttachments.clear();
  setLookAndFeel(nullptr);
@@ -345,6 +365,8 @@ juce::Rectangle<int> DISidechainEditor::scaled(int x,int y,int w,int h) const {
 void DISidechainEditor::resized() {
  if(!controlsReady||sliders.size()!=knobSpecs.size()||combos.size()!=7||!presetBrowser)return;
  const auto b=[this](juce::Component* component,int x,int y,int w,int h){component->setBounds(scaled(x,y,w,h));};
+ envelopeMouseLayer->setBounds(scaled((int)gx0,(int)gy0,(int)(gx1-gx0),(int)(gy1-gy0)));
+ envelopeMouseLayer->toFront(false);
  b(prevPreset.get(),327,19,30,31);b(presetBrowser.get(),365,18,225,33);
  b(nextPreset.get(),597,19,30,31);b(savePreset.get(),636,19,52,31);
  b(aButton.get(),700,19,32,31);b(bButton.get(),737,19,32,31);
@@ -545,18 +567,28 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  const float depth=clamp(get("depth",1.f));
  const float offset=juce::jlimit(-1.f,1.f,get("timeOffset",0.f));
  const float attack=clamp(get("attackProtection",0.f));
- juce::Path env;env.startNewSubPath(gx0,gy1);
+ // Editable SOURCE curve and processed output are intentionally separate.
+ // At -100% offset the processed signal can be flat even though the user
+ // should always be able to grab the SOURCE envelope's nodes.
+ juce::Path editable, result;
  for(int i=0;i<=320;i++){
   const float phase=(float)i/320.f;
-  const float shaped=proc.getEnvelopeAt(clamp(phase+offset));
-  const float protectedEnv=juce::jmax(shaped,attack*(1.f-phase));
-  const float value=1.f-depth*(1.f-protectedEnv);
-  const float x=gx0+(gx1-gx0)*phase,y=gy1-(gy1-gy0)*value;
-  if(i==0)env.startNewSubPath(x,y);else env.lineTo(x,y);
+  const float source=proc.getEnvelopeAt(phase);
+  const float processed=proc.getEnvelopeAt(clamp(phase+offset));
+  const float protectedEnv=juce::jmax(processed,attack*(1.f-phase));
+  const float finalGain=1.f-depth*(1.f-protectedEnv);
+  const float x=gx0+(gx1-gx0)*phase;
+  const float ey=gy1-(gy1-gy0)*source;
+  const float oy=gy1-(gy1-gy0)*finalGain;
+  if(i==0){editable.startNewSubPath(x,ey);result.startNewSubPath(x,oy);}
+  else {editable.lineTo(x,ey);result.lineTo(x,oy);}
  }
- g.setColour(orange.withAlpha(.13f));
- juce::Path fill=env;fill.lineTo(gx1,gy1);fill.lineTo(gx0,gy1);fill.closeSubPath();g.fillPath(fill);
- g.setColour(orange);g.strokePath(env,juce::PathStrokeType(3.3f));
+ g.setColour(orange.withAlpha(.14f));
+ juce::Path fill=editable;fill.lineTo(gx1,gy1);fill.lineTo(gx0,gy1);fill.closeSubPath();g.fillPath(fill);
+ g.setColour(cyan.withAlpha(.55f));
+ g.strokePath(result,juce::PathStrokeType(1.6f));
+ g.setColour(orange);
+ g.strokePath(editable,juce::PathStrokeType(3.3f));
  for(int i=0;i<curve.count;i++){
   const float x=gx0+(gx1-gx0)*curve.nodes[(size_t)i].x;
   const float y=gy1-(gy1-gy0)*curve.nodes[(size_t)i].y;
