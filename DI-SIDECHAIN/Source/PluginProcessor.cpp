@@ -90,8 +90,10 @@ DISidechainProcessor::DISidechainProcessor():AudioProcessor(BusesProperties().wi
   cell.store(0,std::memory_order_relaxed);
  // An empty grid appears broken on first insertion. Scene A starts as a
  // familiar four-on-the-floor duck, while scenes B-D remain blank.
- for(int step=0;step<gridSteps;step+=4)
+ for(int step=0;step<gridSteps;step+=4){
   sceneCells[0][0][(size_t)step].store(true,std::memory_order_relaxed);
+  sceneCellFx[0][0][(size_t)step].store(1<<5,std::memory_order_relaxed);
+ }
  state.state.setProperty("presetName","Classic Duck",nullptr);
  for(int t=0;t<6;++t){
   duckDepth[(size_t)t].store(1.f,std::memory_order_relaxed);
@@ -162,18 +164,18 @@ float DISidechainProcessor::getDuckCurvePoint(int t,int j) const noexcept {
  return t>=0&&t<6&&j>=0&&j<8?getDynamicDuckCurve(t,0).evaluate(j/7.f):1.f;
 }
 void DISidechainProcessor::setCellFxFlag(int track,int step,int flag,bool enabled) noexcept {
- if(track<0||track>=6||step<0||step>=gridSteps||flag<0||flag>4)return;
+ if(track<0||track>=6||step<0||step>=gridSteps||flag<0||flag>5)return;
  auto& bits=sceneCellFx[(size_t)getGridScene()][(size_t)track][(size_t)step];
  const int mask=1<<flag;
  if(enabled)bits.fetch_or(mask,std::memory_order_relaxed);
  else bits.fetch_and(~mask,std::memory_order_relaxed);
 }
 bool DISidechainProcessor::getCellFxFlag(int track,int step,int flag) const noexcept {
- return flag>=0&&flag<5&&(getCellFxMask(track,step)&(1<<flag))!=0;
+ return flag>=0&&flag<6&&(getCellFxMask(track,step)&(1<<flag))!=0;
 }
 int DISidechainProcessor::getCellFxMask(int track,int step) const noexcept {
  if(track<0||track>=6||step<0||step>=gridSteps)return 0;
- return sceneCellFx[(size_t)getGridScene()][(size_t)track][(size_t)step].load(std::memory_order_relaxed)&31;
+ return sceneCellFx[(size_t)getGridScene()][(size_t)track][(size_t)step].load(std::memory_order_relaxed)&63;
 }
 void DISidechainProcessor::setGridScene(int scene) noexcept {
  activeGridScene.store(juce::jlimit(0,gridScenes-1,scene),std::memory_order_release);
@@ -232,7 +234,7 @@ float DISidechainProcessor::getModulationPoint(int lane,int step,int node) const
   ?modulationPoints[lane][step][node].load(std::memory_order_relaxed):(lane==1?0.5f:1.f);
 }
 bool DISidechainProcessor::isBusesLayoutSupported(const BusesLayout& b) const {return b.getMainInputChannelSet()==juce::AudioChannelSet::stereo()&&b.getMainOutputChannelSet()==juce::AudioChannelSet::stereo()&&(b.inputBuses.size()<2||b.inputBuses[1].isDisabled()||b.inputBuses[1]==juce::AudioChannelSet::mono()||b.inputBuses[1]==juce::AudioChannelSet::stereo());}
-void DISidechainProcessor::prepareToPlay(double sampleRate,int maxBlock){sr=sampleRate;creativeFx.prepare(sampleRate);duckVoices.reset();setLatencySamples(2*di::OversampledFx2x::latencySamples+di::CreativeDistort2x::latencySamples);for(auto& fx:oversampledFx)fx.reset();for(auto& fx:saturatorFx)fx.reset();for(auto& delay:fxDryDelay)delay.reset();for(auto& delay:saturatorDryDelay)delay.reset();saturatorBlend=state.getRawParameterValue("saturatorEnabled")->load()>0.5f?1.f:0.f;phase=1;sequencer.reset();for(auto& lane:modulationSequencers)lane.reset();activeSequenceStep.store(0);detector=0;armed=true;refractory=0;smoothGain=1;expectedTransportSample=-1;wasTransportPlaying=false;fxBlend=state.getRawParameterValue("fxEnabled")->load()>0.5f?1.f:0.f;const auto safeInitial=[this](const char* id,float low,float high,float fallback){const float value=state.getRawParameterValue(id)->load();return std::isfinite(value)?juce::jlimit(low,high,value):fallback;};smoothedFxDrive=juce::Decibels::decibelsToGain(safeInitial("fxDrive",0.f,24.f,0.f));smoothedFxWet=safeInitial("fxMix",0.f,1.f,1.f);smoothedFxType=safeInitial("fxType",0.f,1.f,0.f);for(auto& filter:envelopeFilters)filter.prepare(sampleRate);for(auto& filter:inputFilters)filter.prepare(sampleRate);}
+void DISidechainProcessor::prepareToPlay(double sampleRate,int maxBlock){sr=sampleRate;creativeFx.prepare(sampleRate);duckVoices.reset();setLatencySamples(2*di::OversampledFx2x::latencySamples+di::CreativeDistort2x::latencySamples);for(auto& fx:oversampledFx)fx.reset();for(auto& fx:saturatorFx)fx.reset();for(auto& delay:fxDryDelay)delay.reset();for(auto& delay:saturatorDryDelay)delay.reset();saturatorBlend=state.getRawParameterValue("saturatorEnabled")->load()>0.5f?1.f:0.f;filterFxBlend=0.f;phase=1;sequencer.reset();for(auto& lane:modulationSequencers)lane.reset();activeSequenceStep.store(0);detector=0;armed=true;refractory=0;smoothGain=1;expectedTransportSample=-1;wasTransportPlaying=false;fxBlend=state.getRawParameterValue("fxEnabled")->load()>0.5f?1.f:0.f;const auto safeInitial=[this](const char* id,float low,float high,float fallback){const float value=state.getRawParameterValue(id)->load();return std::isfinite(value)?juce::jlimit(low,high,value):fallback;};smoothedFxDrive=juce::Decibels::decibelsToGain(safeInitial("fxDrive",0.f,24.f,0.f));smoothedFxWet=safeInitial("fxMix",0.f,1.f,1.f);smoothedFxType=safeInitial("fxType",0.f,1.f,0.f);for(auto& filter:envelopeFilters)filter.prepare(sampleRate);for(auto& filter:inputFilters)filter.prepare(sampleRate);}
 float DISidechainProcessor::curve(double t) const {if(!std::isfinite(t))t=0.;t=juce::jlimit(0.0,1.0,t);double x=t*7;int i=juce::jmin(6,(int)x);const auto safePoint=[this](int node){const float value=points[node].load(std::memory_order_relaxed);return std::isfinite(value)?juce::jlimit(0.f,1.f,value):1.f;};float a=safePoint(i),b=safePoint(i+1);float u=(float)(x-i);u=u*u*(3-2*u);return a+(b-a)*u;}
 void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::MidiBuffer& midi){
  juce::ScopedNoDenormals noDenormals;
@@ -454,10 +456,13 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  // Independent, opt-in modulation lanes; neutral defaults preserve legacy patches.
  const auto panGain=di::panModulation(panEnv,panMod);
  const float panLeft=panGain.left,panRight=panGain.right;
- // FILTER lane now sweeps audible cutoff logarithmically over its step
- // envelope, independent of volume duck depth. Zero amount is transparent.
+ // FLT is an independent per-cell FX switch. Smooth changes on step edges
+ // to avoid clicks; no allocations or filter-state resets in the audio loop.
+ const float filterTarget=cellRoute.filter?1.f:0.f;
+ filterFxBlend+=.0025f*(filterTarget-filterFxBlend);
+ const float effectiveFilterMix=filterRange*filterFxBlend;
  const float sweepHz=di::EnvelopeFilter::frequency(
-   filterEnv,filterRange,sweepMin,sweepMax,(float)sr);
+   filterEnv,effectiveFilterMix,sweepMin,sweepMax,(float)sr);
  for(int ch=0;ch<2;++ch){float dry=main.getSample(ch,i);if(!std::isfinite(dry))dry=0.f;
  // Keep the level meter pre-EQ; cleanup filters are explicitly at input.
  const float originalInput=dry;
@@ -468,9 +473,9 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  float out=di::applyDuckGain(dry,smoothGain,mix);
  // Per-step FILTER envelope performs genuine audio filtering. The
  // dedicated INPUT HP/LP above is unaffected by these rhythm curves.
- if(filterRange>0.0001f){
+ if(effectiveFilterMix>0.0001f){
   const float shaped=envelopeFilters[(size_t)ch].process(out,sweepHz,mode,resonance,analogFilter);
-  out=out+(shaped-out)*filterRange;
+  out=out+(shaped-out)*effectiveFilterMix;
  }else{
   // Process a neutral state continuously to keep activation click-free.
   envelopeFilters[(size_t)ch].process(out,sweepHz,mode,resonance,analogFilter);
@@ -567,7 +572,7 @@ void DISidechainProcessor::setStateInformation(const void* data,int bytes){
    }
    for(int t=0;t<6;++t)for(int k=0;k<gridSteps;++k){
     const auto key="cellFx_"+juce::String(scene)+"_"+juce::String(t)+"_"+juce::String(k);
-    sceneCellFx[(size_t)scene][(size_t)t][(size_t)k].store(juce::jlimit(0,31,(int)tree.getProperty(key,0)),std::memory_order_relaxed);
+    sceneCellFx[(size_t)scene][(size_t)t][(size_t)k].store(juce::jlimit(0,63,(int)tree.getProperty(key,0)),std::memory_order_relaxed);
    }
    for(int k=0;k<gridSteps;++k){
     const auto key="reverse_"+juce::String(scene)+"_"+juce::String(k);
