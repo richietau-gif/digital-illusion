@@ -644,42 +644,38 @@ void DISidechainEditor::paintFrequencyResponse(juce::Graphics& g,juce::Rectangle
  if(rect.isEmpty())return;
  g.setColour(juce::Colour(0xff091722));g.fillRoundedRectangle(rect.toFloat(),5.f);
  g.setColour(juce::Colour(0xff1c3c4b));
- for(int k=1;k<8;++k)g.drawVerticalLine(rect.getX()+rect.getWidth()*k/8,(float)rect.getY(),(float)rect.getBottom());
- for(int k=1;k<4;++k)g.drawHorizontalLine(rect.getY()+rect.getHeight()*k/4,(float)rect.getX(),(float)rect.getRight());
- const int mode=juce::jlimit(0,3,(int)proc.state.getRawParameterValue("mode")->load());
- const float cutoff=juce::jlimit(25.f,18000.f,proc.state.getRawParameterValue("low")->load());
- const float high=juce::jlimit(60.f,18000.f,proc.state.getRawParameterValue("high")->load());
- const bool ladder=proc.state.getRawParameterValue("filterModel")->load()>.5f;
- const float resonance=juce::jlimit(0.f,.95f,
-  proc.state.getRawParameterValue("ladderResonance")->load());
- const auto position=[](float hz){return juce::jlimit(0.f,1.f,(std::log(hz)-std::log(20.f))/(std::log(20000.f)-std::log(20.f)));};
- juce::Path curve;
+ for(int k=1;k<8;++k)g.drawVerticalLine(rect.getX()+rect.getWidth()*k/8,
+                                        (float)rect.getY(),(float)rect.getBottom());
+ for(int k=1;k<4;++k)g.drawHorizontalLine(rect.getY()+rect.getHeight()*k/4,
+                                          (float)rect.getX(),(float)rect.getRight());
+ const bool hp=proc.state.getRawParameterValue("inputHpEnabled")->load()>.5f;
+ const bool lp=proc.state.getRawParameterValue("inputLpEnabled")->load()>.5f;
+ const float hpCut=juce::jlimit(20.f,2000.f,
+                              proc.state.getRawParameterValue("inputHpHz")->load());
+ const float lpCut=juce::jlimit(500.f,18000.f,
+                              proc.state.getRawParameterValue("inputLpHz")->load());
+ juce::Path p;
  for(int i=0;i<=170;++i){
-  const float x=i/170.f;
-  const float f=20.f*std::pow(1000.f,x);
-  const auto sigmoid=[](float z){return 1.f/(1.f+std::exp(-z));};
-  const float lowpass=1.f-sigmoid((std::log(f)-std::log(cutoff))*9.f);
-  const float highpass=1.f-lowpass;
-  const float band=highpass*(1.f-sigmoid((std::log(f)-std::log(juce::jmax(cutoff+1.f,high)))*9.f));
-  float value=mode==0?1.f:mode==1?lowpass:mode==2?highpass:band;
-  if(mode!=0&&ladder){
-   const float logDistance=std::log(f/juce::jmax(25.f,cutoff));
-   value=juce::jlimit(0.f,1.f,value+resonance*.24f*
-    std::exp(-logDistance*logDistance/juce::jmax(.02f,.07f+.1f*resonance)));
-  }
-  const float px=rect.getX()+x*rect.getWidth();
-  const float py=rect.getBottom()-5.f-value*(rect.getHeight()-10.f);
-  if(i==0)curve.startNewSubPath(px,py);else curve.lineTo(px,py);
+  const float t=i/170.f;
+  const float hz=20.f*std::pow(1000.f,t);
+  const float low=1.f/(1.f+std::pow(hz/juce::jmax(20.f,lpCut),2.f));
+  const float high=1.f/(1.f+std::pow(hpCut/juce::jmax(20.f,hz),2.f));
+  const float response=(hp?high:1.f)*(lp?low:1.f);
+  const float x=rect.getX()+t*rect.getWidth();
+  const float y=rect.getBottom()-5.f-response*(rect.getHeight()-10.f);
+  if(i==0)p.startNewSubPath(x,y);else p.lineTo(x,y);
  }
- juce::Path fill(curve);fill.lineTo((float)rect.getRight(),(float)rect.getBottom());fill.lineTo((float)rect.getX(),(float)rect.getBottom());fill.closeSubPath();
- g.setColour(juce::Colour(0xff2ad3da).withAlpha(.13f));g.fillPath(fill);
- g.setColour(juce::Colour(0xff2ad3da).withAlpha(.16f));g.strokePath(curve,juce::PathStrokeType(5.f));
- g.setColour(juce::Colour(0xff2ad3da));g.strokePath(curve,juce::PathStrokeType(2.f));
- const float knobX=rect.getX()+position(cutoff)*rect.getWidth();
- if(mode!=0){g.setColour(juce::Colours::white);g.fillEllipse(knobX-3.f,rect.getY()+4.f,6.f,6.f);}
- const juce::StringArray ticks{"20","50","100","200","500","1k","2k","5k","10k","20k"};
- for(int i=0;i<ticks.size();++i)text(g,ticks[i],{rect.getX()+i*rect.getWidth()/10,rect.getBottom()+2,35,14},10,juce::Colour(0xff8bafc1));
+ g.setColour(juce::Colour(0xff2ad3da).withAlpha(.12f));
+ auto fill=p;fill.lineTo((float)rect.getRight(),(float)rect.getBottom());
+ fill.lineTo((float)rect.getX(),(float)rect.getBottom());fill.closeSubPath();
+ g.fillPath(fill);
+ g.setColour(juce::Colour(0xff2ad3da));g.strokePath(p,juce::PathStrokeType(2.f));
+ const juce::StringArray ticks{"20","100","500","1k","5k","20k"};
+ for(int i=0;i<ticks.size();++i)
+  text(g,ticks[i],{rect.getX()+i*(rect.getWidth()-30)/5,rect.getBottom()-14,36,13},
+       9,juce::Colour(0xff8bafc1));
 }
+
 void DISidechainEditor::paintShape(juce::Graphics& g,juce::Rectangle<int> r,int step,bool drawNodes) {
  if(r.isEmpty())return;
  g.setColour(juce::Colour(0xff111820));g.fillRoundedRectangle(r.toFloat(),5.f);
