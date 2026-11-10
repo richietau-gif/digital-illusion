@@ -27,9 +27,9 @@ private:
  struct Filter
  {
   juce::dsp::IIR::Filter<float> a,b,c,d;
-  juce::dsp::StateVariableTPTFilter<float> animated;
-  void prepare(const juce::dsp::ProcessSpec& s) {a.prepare(s);b.prepare(s);c.prepare(s);d.prepare(s);animated.prepare(s);}
-  void reset() {a.reset();b.reset();c.reset();d.reset();animated.reset();}
+  juce::dsp::StateVariableTPTFilter<float> animated,animated2,animated3,animated4;
+  void prepare(const juce::dsp::ProcessSpec& s) {a.prepare(s);b.prepare(s);c.prepare(s);d.prepare(s);animated.prepare(s);animated2.prepare(s);animated3.prepare(s);animated4.prepare(s);}
+  void reset() {a.reset();b.reset();c.reset();d.reset();animated.reset();animated2.reset();animated3.reset();animated4.reset();}
  };
  std::array<std::atomic<float>,maxEnvelopeNodes> envelopeXs{}, envelopeYs{}, envelopeCurves{};
  std::atomic<int> envelopeNodeCount{2};
