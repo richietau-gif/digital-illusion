@@ -1,9 +1,10 @@
 #pragma once
 #include <JuceHeader.h>
 #include <array>
-class DISidechainProcessor : public juce::AudioProcessor {
+class DISidechainProcessor : public juce::AudioProcessor, private juce::AsyncUpdater {
 public:
  DISidechainProcessor();
+ ~DISidechainProcessor() override { cancelPendingUpdate(); }
  void prepareToPlay(double,int) override; void releaseResources() override {}
  bool isBusesLayoutSupported(const BusesLayout&) const override;
  void processBlock(juce::AudioBuffer<float>&,juce::MidiBuffer&) override;
@@ -24,6 +25,11 @@ public:
  std::atomic<float> meter{0.f}, triggerActivity{0.f};
  static juce::AudioProcessorValueTreeState::ParameterLayout makeParams();
 private:
+ void handleAsyncUpdate() override;
+ std::atomic<int> pendingLatencySamples{0};
+ int previousDelaySamples=0;
+ int delayTransitionSamples=0;
+ static constexpr int delayTransitionLength=128;
  struct Filter
  {
   juce::dsp::IIR::Filter<float> a,b,c,d;
