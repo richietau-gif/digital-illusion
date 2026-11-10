@@ -180,6 +180,27 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  button(filterEnvelopePower,"ENV ON",true);
  button(colorPower,"ON",true);
  button(curveShapeButton,"SHAPES");
+ button(settingsButton,"SETUP");
+ button(powerButton,"ON",true);
+ powerButton->setTooltip("Enable/disable entire PRECISION SIDECHAIN processing (inverted Bypass)");
+ powerButton->setToggleState(true,juce::dontSendNotification);
+ settingsButton->onClick=[this]{
+  juce::PopupMenu menu;
+  menu.addItem(1,"UI 50%");menu.addItem(2,"UI 75%");menu.addItem(3,"UI 100%");
+  juce::Component::SafePointer<DISidechainEditor> safe(this);
+  menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(settingsButton.get()),[safe](int selection){
+   if(safe!=nullptr&&selection>=1&&selection<=3)
+    safe->combos[6]->setSelectedId(selection,juce::sendNotificationSync);
+  });
+ };
+ powerButton->onClick=[this]{
+  const bool isOn=powerButton->getToggleState();
+  if(auto* p=proc.state.getParameter("bypass")){
+   p->beginChangeGesture();
+   p->setValueNotifyingHost(p->convertTo0to1(isOn?0.f:1.f));
+   p->endChangeGesture();
+  }
+ };
  button(selectTool,"EDIT",true);
  button(bendTool,"BEND",true);
  button(eraseTool,"ERASE",true);
@@ -292,7 +313,8 @@ void DISidechainEditor::resized() {
  b(nextPreset.get(),597,19,30,31);b(savePreset.get(),636,19,52,31);
  b(aButton.get(),700,19,32,31);b(bButton.get(),737,19,32,31);
  b(copyAB.get(),775,19,52,31);b(undoButton.get(),834,19,30,31);b(redoButton.get(),869,19,30,31);
- b(bypass.get(),914,22,75,27);b(combos[6].get(),1001,19,81,31);
+ b(bypass.get(),909,22,72,27);b(settingsButton.get(),992,19,52,31);b(powerButton.get(),1049,19,36,31);
+ combos[6]->setVisible(false);
  b(selectTool.get(),140,96,54,30);
  b(bendTool.get(),199,96,54,30);
  b(eraseTool.get(),258,96,62,30);
@@ -317,6 +339,7 @@ void DISidechainEditor::resized() {
 void DISidechainEditor::timerCallback() {
  if(!controlsReady)return;
  const bool synced=proc.state.getRawParameterValue("sync")->load()>.5f;
+ powerButton->setToggleState(proc.state.getRawParameterValue("bypass")->load()<=.5f,juce::dontSendNotification);
  syncLengthSlider->setVisible(synced);
  for(size_t i=0;i<knobSpecs.size();++i)
   if(juce::String(knobSpecs[i].id)=="length")sliders[i]->setVisible(!synced);
