@@ -1,6 +1,7 @@
 #pragma once
 #include <algorithm>
 #include <cmath>
+#include "AnalogLadder.h"
 
 namespace di {
 // A realtime-safe, continuously modulated 2-pole filter with no allocations.
@@ -10,9 +11,12 @@ class EnvelopeFilter {
 public:
  void prepare(double sampleRate) noexcept {
   sr=std::clamp(std::isfinite(sampleRate)?(float)sampleRate:44100.f,8000.f,192000.f);
+  ladder.prepare(sr);
   reset();
  }
- void reset() noexcept { low1=low2=bandLow=0.f; lastCutoff=0.f; }
+ void reset() noexcept {
+  low1=low2=bandLow=0.f;lastCutoff=0.f;counter=0;ladder.reset();
+ }
  static float frequency(float normalized,float amount,float minHz,float maxHz,float sampleRate) noexcept {
   const float nyquist=std::clamp(sampleRate*.42f,50.f,18000.f);
   const float bottom=std::clamp(std::isfinite(minHz)?minHz:90.f,25.f,nyquist);
@@ -26,10 +30,13 @@ public:
   const float maxCut=sr*.42f;
   const float hz=std::clamp(std::isfinite(cutoff)?cutoff:1000.f,25.f,maxCut);
   // Recalculate only if the frequency really changes; all state is per channel.
-  if(std::abs(hz-lastCutoff)>.01f){
+  // Update the nonlinear ladder coefficient at audio-rate/16. This is a
+  // sub-millisecond control interval, avoiding expensive exp per sample.
+  if(counter++%16==0||lastCutoff==0.f){
    lastCutoff=hz;
    g=std::clamp(1.f-std::exp(-6.283185307179586f*hz/sr),.00005f,.97f);
    bandG=std::clamp(g*.24f,.00005f,.97f);
+   ladder.setCutoff(hz,resonance);
   }
   const float signal=analog?std::tanh(input*1.2f):input;
   low1+=g*(signal-low1);
@@ -38,15 +45,18 @@ public:
   // Conservative feedforward peak emphasizes transitions without feedback instability.
   const float boost=std::clamp(std::isfinite(resonance)?resonance:0.f,0.f,.95f)*.25f;
   const float lp=std::clamp(low2+boost*(low1-low2),-8.f,8.f);
-  const float hp=signal-low1;
-  const float bp=low1-bandLow;
-  float result=mode==1?hp:mode==2?bp:mode==3?signal-bp:lp;
-  if(analog)result=std::tanh(result);
+  const float analogLow=ladder.process(signal);
+  const float selectedLow=analog?analogLow:lp;
+  const float hp=signal-selectedLow;
+  const float bp=(analog?analogLow:low1)-bandLow;
+  float result=mode==1?hp:mode==2?bp:mode==3?signal-bp:selectedLow;
   return std::isfinite(result)?result:0.f;
  }
 private:
  float sr=44100.f,lastCutoff=0.f,g=.2f,bandG=.05f;
  float low1=0.f,low2=0.f,bandLow=0.f;
+ unsigned int counter=0;
+ AnalogLadder ladder;
 };
 
 // Static 12 dB/oct input clean-up HP and LP. Controls are *independent* of the
