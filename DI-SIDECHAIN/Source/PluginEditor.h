@@ -49,6 +49,8 @@ private:
  std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> sliderAttachments;
  std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>> comboAttachments;
  std::unique_ptr<juce::ComboBox> presetBrowser;
+ std::unique_ptr<juce::Slider> curveAmountSlider;
+ std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> curveAmountAttachment;
  std::unique_ptr<juce::TextButton> prevPreset,nextPreset, aButton,bButton, copyAB,savePreset,undoButton,redoButton;
  std::unique_ptr<juce::TextButton> filterPower,filterEnvelopePower,colorPower,curveShapeButton;
  std::unique_ptr<juce::ToggleButton> sync,bypass;
