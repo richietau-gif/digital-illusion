@@ -22,7 +22,7 @@ public:
  float getEnvelopeAt(float phase) const noexcept;
  std::atomic<unsigned> envelopeRevision{0};
  juce::AudioProcessorValueTreeState state;
- std::atomic<float> meter{0.f}, triggerActivity{0.f};
+ std::atomic<float> meter{0.f}, triggerActivity{0.f}, gainReductionMeter{0.f}, outputMeterL{0.f}, outputMeterR{0.f};
  static juce::AudioProcessorValueTreeState::ParameterLayout makeParams();
 private:
  void handleAsyncUpdate() override;
