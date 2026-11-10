@@ -12,6 +12,8 @@ public:
  void drawButtonBackground(juce::Graphics&,juce::Button&,const juce::Colour&,bool,bool) override;
 };
 
+class EnvelopeMouseLayer;
+
 class DISidechainEditor final : public juce::AudioProcessorEditor, private juce::Timer
 {
 public:
@@ -48,6 +50,7 @@ private:
  std::vector<std::unique_ptr<juce::ComboBox>> combos;
  std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>> sliderAttachments;
  std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>> comboAttachments;
+ std::unique_ptr<EnvelopeMouseLayer> envelopeMouseLayer;
  std::unique_ptr<juce::ComboBox> presetBrowser, gridPicker;
  std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> gridAttachment;
  std::unique_ptr<juce::Slider> curveAmountSlider, syncLengthSlider;
