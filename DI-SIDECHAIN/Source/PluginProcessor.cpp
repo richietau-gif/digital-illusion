@@ -14,6 +14,22 @@
 static juce::AudioProcessorValueTreeState::ParameterLayout layoutParams(){
  std::vector<std::unique_ptr<juce::RangedAudioParameter>> p;
  auto f=[&](const char* id,const char* name,float lo,float hi,float def){p.push_back(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{id,1},name,juce::NormalisableRange<float>(lo,hi),def));};
+ // Musical filter sweeps: FILTER lane envelope controls the actual cutoff.
+ {juce::NormalisableRange<float> range(25.f,15000.f);range.setSkewForCentre(180.f);
+  p.push_back(std::make_unique<juce::AudioParameterFloat>(
+   juce::ParameterID{"filterSweepMin",1},"Filter sweep minimum Hz",range,90.f));}
+ {juce::NormalisableRange<float> range(25.f,18000.f);range.setSkewForCentre(3000.f);
+  p.push_back(std::make_unique<juce::AudioParameterFloat>(
+   juce::ParameterID{"filterSweepMax",1},"Filter sweep maximum Hz",range,11000.f));}
+ // Input cleanup is a separate pre-FX HP/LP rack, not an envelope lane.
+ p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"inputHpEnabled",1},"Input high-pass",false));
+ p.push_back(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"inputLpEnabled",1},"Input low-pass",false));
+ {juce::NormalisableRange<float> range(20.f,2000.f);range.setSkewForCentre(110.f);
+  p.push_back(std::make_unique<juce::AudioParameterFloat>(
+   juce::ParameterID{"inputHpHz",1},"Input HP cutoff Hz",range,35.f));}
+ {juce::NormalisableRange<float> range(500.f,18000.f);range.setSkewForCentre(6000.f);
+  p.push_back(std::make_unique<juce::AudioParameterFloat>(
+   juce::ParameterID{"inputLpHz",1},"Input LP cutoff Hz",range,17000.f));}
  f("depth","Depth",0,1,1); f("mix","Mix",0,1,1);f("threshold","Trigger threshold dB",-60,0,-22);f("length","Envelope milliseconds",10,2000,250);f("smooth","Smoothing milliseconds",0.1,20,2);
  {juce::NormalisableRange<float> range(25.f,15000.f);
   range.setSkewForCentre(430.f);
@@ -216,7 +232,9 @@ float DISidechainProcessor::getModulationPoint(int lane,int step,int node) const
   ?modulationPoints[lane][step][node].load(std::memory_order_relaxed):(lane==1?0.5f:1.f);
 }
 bool DISidechainProcessor::isBusesLayoutSupported(const BusesLayout& b) const {return b.getMainInputChannelSet()==juce::AudioChannelSet::stereo()&&b.getMainOutputChannelSet()==juce::AudioChannelSet::stereo()&&(b.inputBuses.size()<2||b.inputBuses[1].isDisabled()||b.inputBuses[1]==juce::AudioChannelSet::mono()||b.inputBuses[1]==juce::AudioChannelSet::stereo());}
-void DISidechainProcessor::prepareToPlay(double sampleRate,int maxBlock){sr=sampleRate;creativeFx.prepare(sampleRate);duckVoices.reset();setLatencySamples(2*di::OversampledFx2x::latencySamples+di::CreativeDistort2x::latencySamples);for(auto& fx:oversampledFx)fx.reset();for(auto& fx:saturatorFx)fx.reset();for(auto& delay:fxDryDelay)delay.reset();for(auto& delay:saturatorDryDelay)delay.reset();saturatorBlend=state.getRawParameterValue("saturatorEnabled")->load()>0.5f?1.f:0.f;phase=1;sequencer.reset();for(auto& lane:modulationSequencers)lane.reset();activeSequenceStep.store(0);detector=0;armed=true;refractory=0;smoothGain=1;expectedTransportSample=-1;wasTransportPlaying=false;fxBlend=state.getRawParameterValue("fxEnabled")->load()>0.5f?1.f:0.f;const auto safeInitial=[this](const char* id,float low,float high,float fallback){const float value=state.getRawParameterValue(id)->load();return std::isfinite(value)?juce::jlimit(low,high,value):fallback;};smoothedFxDrive=juce::Decibels::decibelsToGain(safeInitial("fxDrive",0.f,24.f,0.f));smoothedFxWet=safeInitial("fxMix",0.f,1.f,1.f);smoothedFxType=safeInitial("fxType",0.f,1.f,0.f);juce::dsp::ProcessSpec spec{sampleRate,(juce::uint32)juce::jmax(1,maxBlock),1};for(auto& c:filters){c.low.prepare(spec);c.high.prepare(spec);c.low.setType(juce::dsp::LinkwitzRileyFilterType::lowpass);c.high.setType(juce::dsp::LinkwitzRileyFilterType::highpass);c.low.reset();c.high.reset();c.ladderLow.prepare(sampleRate);c.ladderHigh.prepare(sampleRate);}}
+void DISidechainProcessor::prepareToPlay(double sampleRate,int maxBlock){sr=sampleRate;creativeFx.prepare(sampleRate);duckVoices.reset();setLatencySamples(2*di::OversampledFx2x::latencySamples+di::CreativeDistort2x::latencySamples);for(auto& fx:oversampledFx)fx.reset();for(auto& fx:saturatorFx)fx.reset();for(auto& delay:fxDryDelay)delay.reset();for(auto& delay:saturatorDryDelay)delay.reset();saturatorBlend=state.getRawParameterValue("saturatorEnabled")->load()>0.5f?1.f:0.f;phase=1;sequencer.reset();for(auto& lane:modulationSequencers)lane.reset();activeSequenceStep.store(0);detector=0;armed=true;refractory=0;smoothGain=1;expectedTransportSample=-1;wasTransportPlaying=false;fxBlend=state.getRawParameterValue("fxEnabled")->load()>0.5f?1.f:0.f;const auto safeInitial=[this](const char* id,float low,float high,float fallback){const float value=state.getRawParameterValue(id)->load();return std::isfinite(value)?juce::jlimit(low,high,value):fallback;};smoothedFxDrive=juce::Decibels::decibelsToGain(safeInitial("fxDrive",0.f,24.f,0.f));smoothedFxWet=safeInitial("fxMix",0.f,1.f,1.f);smoothedFxType=safeInitial("fxType",0.f,1.f,0.f);juce::dsp::ProcessSpec spec{sampleRate,(juce::uint32)juce::jmax(1,maxBlock),1};for(auto& f:envelopeFilters)f.prepare(sampleRate);
+for(auto& f:inputFilters)f.prepare(sampleRate);
+for(auto& c:filters){c.low.prepare(spec);c.high.prepare(spec);c.low.setType(juce::dsp::LinkwitzRileyFilterType::lowpass);c.high.setType(juce::dsp::LinkwitzRileyFilterType::highpass);c.low.reset();c.high.reset();c.ladderLow.prepare(sampleRate);c.ladderHigh.prepare(sampleRate);}}
 float DISidechainProcessor::curve(double t) const {if(!std::isfinite(t))t=0.;t=juce::jlimit(0.0,1.0,t);double x=t*7;int i=juce::jmin(6,(int)x);const auto safePoint=[this](int node){const float value=points[node].load(std::memory_order_relaxed);return std::isfinite(value)?juce::jlimit(0.f,1.f,value):1.f;};float a=safePoint(i),b=safePoint(i+1);float u=(float)(x-i);u=u*u*(3-2*u);return a+(b-a)*u;}
 void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::MidiBuffer& midi){
  juce::ScopedNoDenormals noDenormals;
@@ -247,6 +265,13 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  const float lo=cutoffs.low;
  const float hi=cutoffs.high;
  const float filterRange=juce::jlimit(0.f,1.f,filterMod);
+ const float sweepMin=bounded("filterSweepMin",25.f,15000.f,90.f);
+ const float sweepMax=bounded("filterSweepMax",25.f,18000.f,11000.f);
+ const bool inputHpEnabled=bounded("inputHpEnabled",0.f,1.f,0.f)>.5f;
+ const bool inputLpEnabled=bounded("inputLpEnabled",0.f,1.f,0.f)>.5f;
+ const float inputHpHz=bounded("inputHpHz",20.f,2000.f,35.f);
+ const float inputLpHz=bounded("inputLpHz",500.f,18000.f,17000.f);
+ for(auto& f:inputFilters)f.set(inputHpHz,inputLpHz);
  const bool fxEnabled=get("fxEnabled")>0.5f;
  const bool saturatorEnabled=get("saturatorEnabled")>0.5f;
  // DI SEQFX has one mode: the six-track creative sequencer.
@@ -437,9 +462,15 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  // Independent, opt-in modulation lanes; neutral defaults preserve legacy patches.
  const auto panGain=di::panModulation(panEnv,panMod);
  const float panLeft=panGain.left,panRight=panGain.right;
- const float filterLaneGain=di::filterModulationBlend(filterEnv,filterRange);
+ // FILTER lane now sweeps audible cutoff logarithmically over its step
+ // envelope, independent of volume duck depth. Zero amount is transparent.
+ const float sweepHz=di::EnvelopeFilter::frequency(
+   filterEnv,filterRange,sweepMin,sweepMax,(float)sr);
  for(int ch=0;ch<2;++ch){float dry=main.getSample(ch,i);if(!std::isfinite(dry))dry=0.f;
- maximumInputLevel=juce::jmax(maximumInputLevel,std::abs(dry));
+ // Keep the level meter pre-EQ; cleanup filters are explicitly at input.
+ const float originalInput=dry;
+ dry=inputFilters[(size_t)ch].process(dry,inputHpEnabled,inputLpEnabled);
+ maximumInputLevel=juce::jmax(maximumInputLevel,std::abs(originalInput));
  float wet=dry*smoothGain;
  if(mode!=0){
   auto& f=filters[ch];
@@ -455,8 +486,15 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
   wet=dry+affected*(smoothGain-1);
  }
  float out=mode==0?di::applyDuckGain(dry,smoothGain,mix):dry+(wet-dry)*mix;
- // Filter lane affects the selected frequency band, while Full mode remains full-band.
- if(filterRange>0.f&&mode!=0)out=dry+(out-dry)*filterLaneGain;
+ // Per-step FILTER envelope performs genuine audio filtering. The
+ // dedicated INPUT HP/LP above is unaffected by these rhythm curves.
+ if(filterRange>0.0001f){
+  const float shaped=envelopeFilters[(size_t)ch].process(out,sweepHz,mode,resonance,analogFilter);
+  out=out+(shaped-out)*filterRange;
+ }else{
+  // Process a neutral state continuously to keep activation click-free.
+  envelopeFilters[(size_t)ch].process(out,sweepHz,mode,resonance,analogFilter);
+ }
  if(panMod!=0.f)out*=ch==0?panLeft:panRight;
  // Run both branches continuously so automation/bypass does not reset FIR history.
  // Fixed 7-sample latency is reported to the host and shared by dry and wet.
