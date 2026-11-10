@@ -54,3 +54,24 @@ Outstanding work: interactive envelope node editing, comprehensive genuine filte
 - Real-time and host PDC validation of live lookahead changes and ±100% negative offset behavior. The current time offset must not be represented as fully sample-accurate negative lookahead without further tests.
 - Robust host-persistent A/B snapshots, complete user-preset import/browser and full parameter-automation testing.
 - Improve special filter algorithms (ladder, formant, morph) and oversampling/anti-aliasing; add actual DSP integration tests for the filter-envelope toggle and cutoff-rate automation.
+
+## Approved render compliance audit — follow-up (2026-11-10)
+
+The approved 1536x1024 render is the **binding visual reference**; see `GUI_REFERENCE_CONTRACT.md`. The latest GUI follows a logical 1100x740 canvas at 75% default, and adds EDIT/BEND/ERASE/RESET, Setup, Master Power, A/B, presets, trigger routing, attack/release, filter/color panels, real GRID snapping, actual gain reduction + stereo output metering, and filter envelope modulation toggle.
+
+An automated *source inspection*, not a compiler or visual screenshot comparison, found:
+- 33 registered APVTS parameters, all referenced by GUI controls or their state presentation.
+- All declared editor methods implemented in the .cpp.
+- Balanced C++ braces in editor and processor, no invalid `elseif` conditional.
+- Windows CI remains `workflow_dispatch` only; `main` unchanged.
+
+DSP corrections included:
+- Peak/RMS/Transient detector implementations; strict INT/EXT source routing; no missed MIDI trigger if Note On and Note Off share a sample.
+- Attack/Release split in gain smoothing.
+- Filter ENV ON/OFF switches *modulation*, not the overall filter; LP/HP 12/24/48, BP/Notch and comb feedback have dedicated DSP paths.
+- Lookahead parameter changes update the delay tap and schedule PDC updates on the message thread; tap changes crossfade over 128 samples.
+- Separate gain reduction and L/R output meter state.
+
+**Still not validated:** Windows JUCE compilation/pluginval/actual screenshot for these commits. Editable envelope correctness under automation and negative offset/sample alignment, A/B snapshot persistence across closing/host save, user preset import, exact nonlinear filter response visualization, full creative-filter DSP quality and GUI text legibility at 50/75/100%. These are release blockers, not accepted completed tests.
+
+Do not run Actions or merge into main without explicit user approval.
