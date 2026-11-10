@@ -440,13 +440,21 @@ void DISidechainEditor::redo() {
  if(redoHistory.empty())return;
  undoHistory.push_back(curve);curve=redoHistory.back();redoHistory.pop_back();pushNodes();
 }
-float DISidechainEditor::graphX(float x) const {return (float)scaled((int)(gx0+x*(gx1-gx0)),0,1,1).getX();}
-float DISidechainEditor::graphY(float y) const {return (float)scaled(0,(int)(gy1-y*(gy1-gy0)),1,1).getY();}
-bool DISidechainEditor::graphContains(juce::Point<int> p) const {return scaled((int)gx0,(int)gy0,(int)(gx1-gx0),(int)(gy1-gy0)).expanded(9).contains(p);}
+float DISidechainEditor::graphX(float x) const {
+ const auto area=scaled((int)gx0,(int)gy0,(int)(gx1-gx0),(int)(gy1-gy0));
+ return (float)area.getX()+juce::jlimit(0.f,1.f,x)*(float)area.getWidth();
+}
+float DISidechainEditor::graphY(float y) const {
+ const auto area=scaled((int)gx0,(int)gy0,(int)(gx1-gx0),(int)(gy1-gy0));
+ return (float)area.getBottom()-juce::jlimit(0.f,1.f,y)*(float)area.getHeight();
+}
+bool DISidechainEditor::graphContains(juce::Point<int> p) const {
+ return scaled((int)gx0,(int)gy0,(int)(gx1-gx0),(int)(gy1-gy0)).expanded(8).contains(p);
+}
 void DISidechainEditor::mouseDown(const juce::MouseEvent& e) {
  if(!graphContains(e.getPosition()))return;
  const auto p=e.getPosition();
- int nearest=-1;float best=15.f;
+ int nearest=-1;float best=juce::jlimit(9.f,18.f,14.f*juce::jmin(getWidth()/W,getHeight()/H));
  for(int i=0;i<curve.count;++i) {
   const float dx=(float)p.x-graphX(curve.nodes[(size_t)i].x);
   const float dy=(float)p.y-graphY(curve.nodes[(size_t)i].y);
@@ -461,7 +469,6 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e) {
   }
   return;
  }
- recordUndo();
  if(nearest<0&&editTool==EditTool::select&&curve.count<maxNodes) {
   const auto bounds=scaled((int)gx0,(int)gy0,(int)(gx1-gx0),(int)(gy1-gy0));
   float x=clamp((p.x-bounds.getX())/(float)bounds.getWidth());
@@ -471,16 +478,30 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e) {
    x=std::round(x*(float)divisions)/(float)divisions;
   }
   const float y=clamp(1.f-(p.y-bounds.getY())/(float)bounds.getHeight());
-  if(x<=.005f||x>=.995f)return;
+  if(x<=.015f||x>=.985f)return;
   for(int i=0;i<curve.count;++i)
-   if(std::abs(curve.nodes[(size_t)i].x-x)<.008f)return;
+   if(std::abs(curve.nodes[(size_t)i].x-x)<.015f)return;
+  recordUndo();
   int insert=1;
   while(insert<curve.count&&curve.nodes[(size_t)insert].x<x)++insert;
   for(int j=curve.count;j>insert;--j)curve.nodes[(size_t)j]=curve.nodes[(size_t)j-1];
   curve.nodes[(size_t)insert]={x,y,0.f};++curve.count;nearest=insert;pushNodes();
  }
- draggedNode=nearest;changeCurve=e.mods.isShiftDown()||editTool==EditTool::bend;
- if(nearest>=0)dragStartCurve=curve.nodes[(size_t)nearest].curve;
+ draggedNode=nearest;
+ changeCurve=e.mods.isShiftDown()||editTool==EditTool::bend;
+ dragGrabOffset={0.f,0.f};
+ if(nearest>=0) {
+  if(nearest>=0 && curve.nodes[(size_t)nearest].x>=0.f) {
+   // Record a snapshot only when a user starts manipulating an existing node.
+   // A newly inserted node is already captured before insertion.
+   const bool inserted=(undoHistory.size()>0
+       && undoHistory.back().count==curve.count-1);
+   if(!inserted)recordUndo();
+  }
+  dragStartCurve=curve.nodes[(size_t)nearest].curve;
+  dragGrabOffset={(float)p.x-graphX(curve.nodes[(size_t)nearest].x),
+                  (float)p.y-graphY(curve.nodes[(size_t)nearest].y)};
+ }
 }
 void DISidechainEditor::mouseDrag(const juce::MouseEvent& e) {
  if(draggedNode<0)return;
@@ -489,7 +510,7 @@ void DISidechainEditor::mouseDrag(const juce::MouseEvent& e) {
   node.curve=juce::jlimit(-1.f,1.f,dragStartCurve-e.getDistanceFromDragStartY()*.008f);
  } else {
   const auto bounds=scaled((int)gx0,(int)gy0,(int)(gx1-gx0),(int)(gy1-gy0));
-  float x=clamp((e.x-bounds.getX())/(float)bounds.getWidth());
+  float x=clamp(((float)e.x-dragGrabOffset.x-(float)bounds.getX())/(float)bounds.getWidth());
   const int grid=(int)proc.state.getRawParameterValue("editGrid")->load();
   if(grid>0&&!e.mods.isAltDown()){
    const int divisions=4<<(grid-1);
@@ -497,13 +518,17 @@ void DISidechainEditor::mouseDrag(const juce::MouseEvent& e) {
   }
   if(draggedNode==0)x=0.f;
   else if(draggedNode==curve.count-1)x=1.f;
-  else x=juce::jlimit(curve.nodes[(size_t)draggedNode-1].x+.01f,curve.nodes[(size_t)draggedNode+1].x-.01f,x);
+  else {
+   const float left=curve.nodes[(size_t)draggedNode-1].x+.015f;
+   const float right=curve.nodes[(size_t)draggedNode+1].x-.015f;
+   x=left<=right?juce::jlimit(left,right,x):node.x;
+  }
   node.x=x;
-  node.y=clamp(1.f-(e.y-bounds.getY())/(float)bounds.getHeight());
+  node.y=clamp(1.f-((float)e.y-dragGrabOffset.y-(float)bounds.getY())/(float)bounds.getHeight());
  }
  pushNodes();
 }
-void DISidechainEditor::mouseUp(const juce::MouseEvent&) {draggedNode=-1;changeCurve=false;}
+void DISidechainEditor::mouseUp(const juce::MouseEvent&) {draggedNode=-1;changeCurve=false;dragGrabOffset={0.f,0.f};}
 void DISidechainEditor::selectEditTool(EditTool tool){
  editTool=tool;
  selectTool->setToggleState(tool==EditTool::select,juce::dontSendNotification);
