@@ -307,6 +307,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  const float saturatorTarget=saturatorEnabled?1.f:0.f;
  const float fxSmoothing=std::exp(-1.f/(float)(0.01*sr));
  const float fxParameterSmoothing=std::exp(-1.f/(float)(0.005*sr));
+ const float filterFxSmoothing=1.f-std::exp(-1.f/(float)(0.004*sr));
 
  double bpm=120;
  double hostPpq=0.;bool hasPlayingPpq=false;
@@ -459,7 +460,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  // FLT is an independent per-cell FX switch. Smooth changes on step edges
  // to avoid clicks; no allocations or filter-state resets in the audio loop.
  const float filterTarget=cellRoute.filter?1.f:0.f;
- filterFxBlend+=.0025f*(filterTarget-filterFxBlend);
+ filterFxBlend+=filterFxSmoothing*(filterTarget-filterFxBlend);
  const float effectiveFilterMix=filterRange*filterFxBlend;
  const float sweepHz=di::EnvelopeFilter::frequency(
    filterEnv,effectiveFilterMix,sweepMin,sweepMax,(float)sr);
