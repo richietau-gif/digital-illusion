@@ -26,6 +26,12 @@ private:
  std::array<std::unique_ptr<juce::TextButton>,4> filterButtons;
  std::unique_ptr<juce::ComboBox> filterModelBox;
  std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> filterModelAttachment;
+ std::array<std::unique_ptr<juce::Slider>,2> filterSweepSliders;
+ std::array<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>,2> filterSweepAttachments;
+ std::array<std::unique_ptr<juce::TextButton>,2> inputCutButtons;
+ std::array<std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>,2> inputCutButtonAttachments;
+ std::array<std::unique_ptr<juce::Slider>,2> inputCutSliders;
+ std::array<std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>,2> inputCutSliderAttachments;
  std::unique_ptr<juce::Slider> filterResonanceSlider;
  std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> filterResonanceAttachment;
  void refreshFilterButtons();
