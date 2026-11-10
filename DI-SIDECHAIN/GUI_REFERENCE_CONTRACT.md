@@ -18,7 +18,7 @@ Reference: approved user-supplied 1536 × 1024 mockup in the current project con
 |---|---|---|
 | Header title & logo | vector rendering | PRECISION SIDECHAIN / DIGITAL ILLUSION, no obsolete DI SIDECHAIN in user-facing UI |
 | Factory preset browser, prev/next | `presetBrowser`, `prevPreset`, `nextPreset` -> 32 complete factory programs | Selecting programs changes DSP and curve; browser follows host program |
-| Save | `savePreset` -> binary plugin state export | Export works, async file picker; load/import remains to be done |
+| Save | `savePreset` -> binary plugin state export | Export and import via async file pickers; import lives in Setup with a 4 MiB file-size limit. Windows QA remains pending |
 | A/B + Copy A->B | `aButton`, `bButton`, `copyAB` | Editor-session snapshots currently, host-persistence still needed |
 | Undo/Redo | `undoButton`, `redoButton` | Curve edits; command-key shortcuts to be added/verified |
 | Setup + Power + Bypass | `settingsButton`, `powerButton`, `bypass` | Setup changes UI scale; Power is inverse of Bypass |
@@ -46,7 +46,7 @@ Reference: approved user-supplied 1536 × 1024 mockup in the current project con
 
 1. **No Windows build for the latest reference-GUI changes.** Actual JUCE drawing, font fallbacks, compilation, pluginval editor lifecycle, resize, close/reopen and DAW automation must be tested.
 2. A/B state currently lives in the editor; persist with host project, ensure copying full envelope and parameters and robust serialization.
-3. Factory and user preset import/export and preset state editing need deeper testing; only file export is currently implemented.
+3. Factory and user preset import/export and preset state editing need deeper testing; import is now implemented in Setup but Windows/host validation remains pending.
 4. Filter response display is approximate, particularly driven, comb, formant and analog-style modes; do not imply exact scientific visualization.
 5. True negative pre-trigger offset for unpredictable MIDI/audio triggers is physically impossible without adequate lookahead; verify configured bounds, plugin-delay compensation, bypass and automation. Latency changes can be host-dependent.
 6. Confirm stable filter DSP for 44.1/48/96/192 kHz, high resonance, click-free mode changes, denormals and oversampling.
