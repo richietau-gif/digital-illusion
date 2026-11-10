@@ -34,3 +34,22 @@ Known functional limitations:
 - Checked source-level connections and confirmed Windows CI remains manual-only. **No Windows build, pluginval or Ableton QA has yet been run for these new commits.**
 
 Outstanding work: interactive envelope node editing, comprehensive genuine filter algorithms, precise negative-offset DSP/host latency verification, user preset files, A/B snapshots, and actual GUI screenshots/QA at 50%/75%/100%.
+
+## Reference design implementation (2026-11-10; requires a new Windows build)
+
+- Implemented an original JUCE vector GUI following the approved PRECISION SIDECHAIN mockup, with a 75% (825x555) default, 50%/75%/100% scale selector, navy panels, orange editable envelope, cyan filter-response preview, lime filter/color switches and responsive layout.
+- The envelope offers left-click add, left-drag reposition, right-click delete and Shift-drag curvature. Up to 12 nodes drive real audio envelope interpolation; node coordinates/tension are included in project state. Editor Undo/Redo buttons are implemented, but undo history is editor-local.
+- The header has factory-program navigation, A/B comparison and copy A->B; A/B snapshots are currently editor-session-local and require host-persistent snapshot QA.
+- Added separate automatable parameters: `filterEnabled`, `filterEnvelopeEnabled` (modulation gate), `colorEnabled`, `colorTone`, `detectorSource`, and `curveAmount`. FILTER ENV OFF preserves the filter but removes envelope modulation of cutoff.
+- Added LP/HP 12/24/48 cascades, a true bandpass/notch DSP path and a bounded comb-feedback filter. Other creative models remain approximations and need further fidelity testing.
+- Added spectrally meaningful COLOR tone control; the SAVE button exports the plugin state to a file. Import/browser support is still outstanding.
+- Updated presets to provide several distinct envelope shapes (precision duck, gate, one-cycle wobble, reverse, double pump, S-rise).
+- Filter display is an approximate frequency response preview, **not** a measured response curve; visualizer should be upgraded to match each exact filter algorithm.
+- Updated source-level sanity checks found and fixed an invalid `elseif` token in the filter branch. No JUCE compilation, CTest, pluginval or Ableton screenshot/host validation has run since this larger refactor; **do not treat this branch as a validated RC**.
+
+## Remaining critical work
+
+- First Windows build on the new commits and pluginval strictness-5 validation, then inspect 50/75/100% JUCE screenshots and test real Ableton interaction.
+- Real-time and host PDC validation of live lookahead changes and ±100% negative offset behavior. The current time offset must not be represented as fully sample-accurate negative lookahead without further tests.
+- Robust host-persistent A/B snapshots, complete user-preset import/browser and full parameter-automation testing.
+- Improve special filter algorithms (ladder, formant, morph) and oversampling/anti-aliasing; add actual DSP integration tests for the filter-envelope toggle and cutoff-rate automation.
