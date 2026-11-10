@@ -177,7 +177,7 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  syncLengthAttachment=std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(proc.state,"division",*syncLengthSlider);
   curveAmountSlider=std::make_unique<juce::Slider>();
  curveAmountSlider->setSliderStyle(juce::Slider::LinearHorizontal);
- curveAmountSlider->setTextBoxStyle(juce::Slider::TextBoxRight,false,50,19);
+ curveAmountSlider->setTextBoxStyle(juce::Slider::NoTextBox,false,0,0);
  curveAmountSlider->setColour(juce::Slider::trackColourId,cyan);
  curveAmountSlider->setColour(juce::Slider::thumbColourId,cyan);
  curveAmountSlider->textFromValueFunction=[](double value){return juce::String(value*100.,0)+"%";};
@@ -454,6 +454,7 @@ bool DISidechainEditor::graphContains(juce::Point<int> p) const {
 void DISidechainEditor::mouseDown(const juce::MouseEvent& e) {
  if(!graphContains(e.getPosition()))return;
  const auto p=e.getPosition();
+ bool insertedOnMouseDown=false;
  int nearest=-1;float best=juce::jlimit(9.f,18.f,14.f*juce::jmin(getWidth()/W,getHeight()/H));
  for(int i=0;i<curve.count;++i) {
   const float dx=(float)p.x-graphX(curve.nodes[(size_t)i].x);
@@ -485,19 +486,15 @@ void DISidechainEditor::mouseDown(const juce::MouseEvent& e) {
   int insert=1;
   while(insert<curve.count&&curve.nodes[(size_t)insert].x<x)++insert;
   for(int j=curve.count;j>insert;--j)curve.nodes[(size_t)j]=curve.nodes[(size_t)j-1];
-  curve.nodes[(size_t)insert]={x,y,0.f};++curve.count;nearest=insert;pushNodes();
+  curve.nodes[(size_t)insert]={x,y,0.f};++curve.count;nearest=insert;
+  insertedOnMouseDown=true;
+  pushNodes();
  }
  draggedNode=nearest;
  changeCurve=e.mods.isShiftDown()||editTool==EditTool::bend;
  dragGrabOffset={0.f,0.f};
  if(nearest>=0) {
-  if(nearest>=0 && curve.nodes[(size_t)nearest].x>=0.f) {
-   // Record a snapshot only when a user starts manipulating an existing node.
-   // A newly inserted node is already captured before insertion.
-   const bool inserted=(undoHistory.size()>0
-       && undoHistory.back().count==curve.count-1);
-   if(!inserted)recordUndo();
-  }
+  if(!insertedOnMouseDown)recordUndo();
   dragStartCurve=curve.nodes[(size_t)nearest].curve;
   dragGrabOffset={(float)p.x-graphX(curve.nodes[(size_t)nearest].x),
                   (float)p.y-graphY(curve.nodes[(size_t)nearest].y)};
@@ -578,8 +575,8 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  label("D I G I T A L   I L L U S I O N",75,37,250,9,muted);
  panelBox(13,73,1074,284);
  label("ENVELOPE EDITOR",30,77,285,12,cyan,true);
- label("LEFT: ADD / DRAG     RIGHT: DELETE     SHIFT + DRAG: CURVATURE",138,82,530,10,muted);
- label("GRID",687,92,40,10,muted);label("CURVE",856,78,80,10,muted);
+ label("LEFT CLICK: ADD / DRAG    RIGHT: DELETE    SHIFT+DRAG: BEND",322,82,390,10,muted);
+ label("GRID",687,92,40,10,muted);label("CURVE "+juce::String(juce::roundToInt(get("curveAmount",.5f)*100.f))+"%",851,78,125,11,muted);
  label("TRIGGER",80,307,70,10,muted);
  label("1/4",294,307,60,10,muted);
  label("1/2",528,307,60,10,muted);
