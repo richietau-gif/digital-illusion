@@ -91,6 +91,7 @@ private:
  juce::int64 expectedTransportSample=-1;
  bool wasTransportPlaying=false;
  float saturatorBlend=0.f;
+ float filterFxBlend=0.f;
  float curve(double) const;
  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DISidechainProcessor)
 };
