@@ -210,6 +210,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  auto* sideBus=getBus(true,1);bool hasSide=sideBus&&sideBus->isEnabled();
  // Keep sidechain as a non-owning view; never allocate or copy a buffer on the audio thread.
  juce::AudioBuffer<float> side; if(hasSide){auto view=getBusBuffer(buffer,true,1);side.setDataToReferTo(view.getArrayOfWritePointers(),view.getNumChannels(),view.getNumSamples());}
+ const bool sideReady=hasSide&&side.getNumChannels()>0&&side.getNumSamples()>=n;
  auto get=[&](const char* id){return state.getRawParameterValue(id)->load();};
  // Validate host automation before integer casts, filter coefficients and smoothers.
  auto bounded=[&](const char* id,float low,float high,float fallback){
@@ -361,11 +362,11 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
   // Prefer the external sidechain bus, but the detector also works on the
   // main audio input if no sidechain is routed in Ableton. Audio triggering
   // must not silently stop working merely because the bus is unconnected.
-  const bool sideReady=hasSide&&side.getNumChannels()>0&&side.getNumSamples()>=n;
-  const float v=sideReady
-    ?di::sidechainPeak(side.getSample(0,i),
-      side.getNumChannels()>1?side.getSample(1,i):0.f,side.getNumChannels()>1)
-    :di::sidechainPeak(main.getSample(0,i),main.getSample(1,i),true);
+  const float v=di::selectedTriggerPeak(
+    main.getSample(0,i),main.getSample(1,i),
+    sideReady?side.getSample(0,i):0.f,
+    sideReady&&side.getNumChannels()>1?side.getSample(1,i):0.f,
+    sideReady,sideReady&&side.getNumChannels()>1);
   detector=di::followPeak(detector,(double)v,detectorRelease);
   if(detector<threshold*.65f)armed=true;
   if(armed&&detector>=threshold)audioPeak=true;
