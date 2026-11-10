@@ -50,7 +50,7 @@ private:
  std::vector<std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>> comboAttachments;
  std::unique_ptr<juce::ComboBox> presetBrowser;
  std::unique_ptr<juce::TextButton> prevPreset,nextPreset, aButton,bButton, copyAB,savePreset,undoButton,redoButton;
- std::unique_ptr<juce::TextButton> filterPower,filterEnvelopePower,colorPower;
+ std::unique_ptr<juce::TextButton> filterPower,filterEnvelopePower,colorPower,curveShapeButton;
  std::unique_ptr<juce::ToggleButton> sync,bypass;
  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> syncAttachment,bypassAttachment,filterAttachment,filterEnvelopeAttachment,colorAttachment;
  juce::ValueTree snapshots[2];
