@@ -1,6 +1,7 @@
 #include "PluginProcessor.h"
 #include "CellFxRouting.h"
 #include "DuckGain.h"
+#include "SoundModulation.h"
 #include "PluginEditor.h"
 #include "FxWaveshaper.h"
 #include "FxWetMix.h"
@@ -402,10 +403,9 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  smoothGain=coeff*smoothGain+(1.f-coeff)*target;
  minimumDuckGain=juce::jmin(minimumDuckGain,smoothGain);
  // Independent, opt-in modulation lanes; neutral defaults preserve legacy patches.
- const float pan=juce::jlimit(-1.f,1.f,panMod*(2.f*panEnv-1.f));
- const float panLeft=pan>0.f?std::cos(pan*juce::MathConstants<float>::halfPi):1.f;
- const float panRight=pan<0.f?std::cos(-pan*juce::MathConstants<float>::halfPi):1.f;
- const float filterLaneGain=1.f-filterRange*(1.f-filterEnv);
+ const auto panGain=di::panModulation(panEnv,panMod);
+ const float panLeft=panGain.left,panRight=panGain.right;
+ const float filterLaneGain=di::filterModulationBlend(filterEnv,filterRange);
  for(int ch=0;ch<2;++ch){float dry=main.getSample(ch,i);if(!std::isfinite(dry))dry=0.f;float wet=dry*smoothGain;
  if(mode!=0){
   auto& f=filters[ch];
