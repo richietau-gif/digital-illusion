@@ -631,9 +631,28 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  label("◷  TIMING",278,372,250,13,cyan,true);
  label("∿  ENVELOPE",558,372,244,13,cyan,true);
  label("◉  MIX",830,372,245,13,cyan,true);
+ const auto valueText=[&](const Knob& spec)->juce::String {
+  const float value=get(spec.id,0.f);
+  if(spec.percent)return juce::String(juce::roundToInt(value*100.f))+"%";
+  if(juce::String(spec.id)=="cutoff" && value>=1000.f)
+   return juce::String(value/1000.f,2)+" kHz";
+  return juce::String(value,spec.digits)+juce::String(spec.suffix);
+ };
+ const auto valueBadge=[&](juce::String value,float x,float y,float w) {
+  g.setColour(juce::Colour(0xff0b1725));
+  g.fillRoundedRectangle(rect(x,y,w,18),4.f);
+  g.setColour(juce::Colour(0xffd5e8f1));
+  g.setFont(juce::FontOptions(12.f));
+  g.drawText(value,rect(x,y,w,18),juce::Justification::centred);
+ };
  for(int i=0;i<10;i++){
   const auto& spec=knobSpecs[(size_t)i];
-  label(spec.label,spec.x,spec.y-18,spec.w,11,pale);
+  label(spec.label,spec.x+4,spec.y-21,spec.w,12,pale);
+  if(juce::String(spec.id)=="length" && get("sync",1.f)>.5f){
+   const juce::StringArray rates{"1/16","1/8T","1/8","1/4T","1/4","1/2","1 Bar"};
+   const int division=juce::jlimit(0,6,(int)get("division",2.f));
+   valueBadge(rates[division],spec.x,spec.y+68,spec.w);
+  } else valueBadge(valueText(spec),spec.x,spec.y+68,spec.w);
  }
  label("SOURCE",158,389,80,9,muted);
  label("DETECTOR",34,502,106,9,muted);
@@ -645,8 +664,14 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  label("COLOR",668,559,63,13,cyan,true);
  for(int i=10;i<18;i++){
   const auto& spec=knobSpecs[(size_t)i];
-  label(spec.label,spec.x,spec.y-18,spec.w,11,pale);
+  if(i==13||i==14)continue;
+  label(spec.label,spec.x+5,spec.y-20,spec.w,12,pale);
+  valueBadge(valueText(spec),spec.x+2,spec.y+72,spec.w-4);
  }
+ label("ENV",368,658,55,11,muted,true);
+ label("MIX",368,689,55,11,muted,true);
+ label(valueText(knobSpecs[13]),580,660,55,10,pale);
+ label(valueText(knobSpecs[14]),580,692,55,10,pale);
  // Approximate visual frequency response. Real audio uses the selected DSP model.
  const float cutoff=juce::jlimit(20.f,20000.f,get("cutoff",800.f));
  const int model=(int)get("filterModel",0.f);
