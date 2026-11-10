@@ -42,6 +42,7 @@ Outstanding work: interactive envelope node editing, comprehensive genuine filte
 - The header has factory-program navigation, A/B comparison and copy A->B; A/B snapshots are currently editor-session-local and require host-persistent snapshot QA.
 - Added separate automatable parameters: `filterEnabled`, `filterEnvelopeEnabled` (modulation gate), `colorEnabled`, `colorTone`, `detectorSource`, and `curveAmount`. FILTER ENV OFF preserves the filter but removes envelope modulation of cutoff.
 - Added LP/HP 12/24/48 cascades, a true bandpass/notch DSP path and a bounded comb-feedback filter. Other creative models remain approximations and need further fidelity testing.
+- Added an automatable CURVE tension parameter and header slider; improved 32 programs with six distinct single-cycle envelope types. Filter drive now affects standard filter models. The filter envelope still needs on-host automation and DSP tests.
 - Added spectrally meaningful COLOR tone control; the SAVE button exports the plugin state to a file. Import/browser support is still outstanding.
 - Updated presets to provide several distinct envelope shapes (precision duck, gate, one-cycle wobble, reverse, double pump, S-rise).
 - Filter display is an approximate frequency response preview, **not** a measured response curve; visualizer should be upgraded to match each exact filter algorithm.
