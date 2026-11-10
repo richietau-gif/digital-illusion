@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "CellFxRouting.h"
+#include "DuckGain.h"
 #include "PluginEditor.h"
 #include "FxWaveshaper.h"
 #include "FxWetMix.h"
@@ -332,6 +333,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  double step=1.0/juce::jmax(1.0,envelopeLength*sr);int holdoff=(int)(bounded("retrigger",1.f,250.f,35.f)*.001*sr);float threshold=juce::Decibels::decibelsToGain(bounded("threshold",-60.f,0.f,-22.f));float coeff=std::exp(-1.f/(float)(bounded("smooth",.1f,20.f,2.f)*.001*sr));
  const double detectorRelease=di::peakReleaseCoefficient(sr);
  juce::MidiBuffer::Iterator it(midi);juce::MidiMessage msg;int midiPos=0;bool hasEvent=it.getNextEvent(msg,midiPos);float peak=0;
+ float minimumDuckGain=1.f;
  for(int i=0;i<n;++i){bool midiNoteOn=false,audioPeak=false;
  fxBlend=fxTarget+(fxBlend-fxTarget)*fxSmoothing;
  saturatorBlend=saturatorTarget+(saturatorBlend-saturatorTarget)*fxSmoothing;
@@ -396,7 +398,9 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
                          sequencer.getStepGeneration());
  }
  if(sequenceOn)env=juce::jlimit(0.f,1.f,env+shapeOffset);
- float target=1-depth*(1-env);smoothGain=coeff*smoothGain+(1-coeff)*target;
+ const float target=di::duckGainTarget(env,depth);
+ smoothGain=coeff*smoothGain+(1.f-coeff)*target;
+ minimumDuckGain=juce::jmin(minimumDuckGain,smoothGain);
  // Independent, opt-in modulation lanes; neutral defaults preserve legacy patches.
  const float pan=juce::jlimit(-1.f,1.f,panMod*(2.f*panEnv-1.f));
  const float panLeft=pan>0.f?std::cos(pan*juce::MathConstants<float>::halfPi):1.f;
@@ -416,7 +420,7 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
   }
   wet=dry+affected*(smoothGain-1);
  }
- float out=dry+(wet-dry)*mix;
+ float out=mode==0?di::applyDuckGain(dry,smoothGain,mix):dry+(wet-dry)*mix;
  // Filter lane affects the selected frequency band, while Full mode remains full-band.
  if(filterRange>0.f&&mode!=0)out=dry+(out-dry)*filterLaneGain;
  if(panMod!=0.f)out*=ch==0?panLeft:panRight;
@@ -447,6 +451,11 @@ void DISidechainProcessor::processBlock(juce::AudioBuffer<float>& buffer,juce::M
  main.setSample(0,i,left);main.setSample(1,i,right);
  peak=juce::jmax(peak,juce::jmax(std::abs(left),std::abs(right)));
  }
+ // A short release hold makes periodic gain reduction readable at 24 Hz
+ // without doing atomic writes inside the sample loop.
+ const float reduction=1.f-juce::jlimit(0.f,1.f,minimumDuckGain);
+ const float previous=duckReduction.load(std::memory_order_relaxed);
+ duckReduction.store(juce::jmax(reduction,previous*.86f),std::memory_order_relaxed);
  meter.store(peak);midi.clear();
 }
 void DISidechainProcessor::getStateInformation(juce::MemoryBlock& dest){auto tree=state.copyState();for(int i=0;i<8;++i)tree.setProperty("point"+juce::String(i),points[i].load(),nullptr);for(int k=0;k<32;++k)for(int j=0;j<8;++j)tree.setProperty("seq_"+juce::String(k)+"_"+juce::String(j),getSequencePoint(k,j),nullptr);for(int lane=0;lane<2;++lane)for(int k=0;k<32;++k)for(int j=0;j<8;++j)tree.setProperty("mod_"+juce::String(lane)+"_"+juce::String(k)+"_"+juce::String(j),getModulationPoint(lane,k,j),nullptr);tree.setProperty("gridScene",getGridScene(),nullptr);
