@@ -6,12 +6,12 @@
 namespace {
 constexpr float W = 1100.f, H = 740.f;
 constexpr float gx0=78.f, gx1=956.f, gy0=135.f, gy1=293.f;
-constexpr auto cyan=juce::Colour(0xff05d9e5);
-constexpr auto orange=juce::Colour(0xffff9019);
-constexpr auto ink=juce::Colour(0xff09121c);
-constexpr auto panel=juce::Colour(0xff111c28);
-constexpr auto pale=juce::Colour(0xffe1eef3);
-constexpr auto muted=juce::Colour(0xff8ca5b7);
+const auto cyan=juce::Colour(0xff05d9e5);
+const auto orange=juce::Colour(0xffff9019);
+const auto ink=juce::Colour(0xff09121c);
+const auto panel=juce::Colour(0xff111c28);
+const auto pale=juce::Colour(0xffe1eef3);
+const auto muted=juce::Colour(0xff8ca5b7);
 struct Knob {
  const char* id; const char* label; int x,y,w,h; const char* suffix; int digits; bool percent;
 };
