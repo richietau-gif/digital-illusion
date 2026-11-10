@@ -14,6 +14,12 @@ public:
  int getNumPrograms() override { return 32; } int getCurrentProgram() override { return currentPreset; }
  void setCurrentProgram(int) override; const juce::String getProgramName(int) override; void changeProgramName(int,const juce::String&) override {}
  void getStateInformation(juce::MemoryBlock&) override; void setStateInformation(const void*,int) override;
+ struct EnvelopeNode { float x = 0.f, y = 1.f, curve = 0.f; };
+ static constexpr int maxEnvelopeNodes = 12;
+ int getEnvelopeNodes(std::array<EnvelopeNode,maxEnvelopeNodes>& target) const noexcept;
+ void setEnvelopeNodes(const std::array<EnvelopeNode,maxEnvelopeNodes>& source, int count) noexcept;
+ float getEnvelopeAt(float phase) const noexcept;
+ std::atomic<unsigned> envelopeRevision{0};
  juce::AudioProcessorValueTreeState state;
  std::atomic<float> meter{0.f}, triggerActivity{0.f};
  static juce::AudioProcessorValueTreeState::ParameterLayout makeParams();
@@ -25,7 +31,9 @@ private:
   void prepare(const juce::dsp::ProcessSpec& s) {a.prepare(s);b.prepare(s);c.prepare(s);d.prepare(s);animated.prepare(s);}
   void reset() {a.reset();b.reset();c.reset();d.reset();animated.reset();}
  };
- double sr=44100.; int maxBlock=0; int currentPreset=0; int delaySamples=0; int delayWrite=0; bool gateArmed=true; int holdoff=0; float detector=0.f,phase=1.f,gain=1.f;
+ std::array<std::atomic<float>,maxEnvelopeNodes> envelopeXs{}, envelopeYs{}, envelopeCurves{};
+ std::atomic<int> envelopeNodeCount{2};
+  double sr=44100.; int maxBlock=0; int currentPreset=0; int delaySamples=0; int delayWrite=0; bool gateArmed=true; int holdoff=0; float detector=0.f,phase=1.f,gain=1.f;
  std::array<std::array<float,2>,192001> delay{}; std::array<Filter,2> filters;
  float envelope(float) const noexcept; float colour(float,int,float) const noexcept; void applyPreset(int);
  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DISidechainProcessor)
