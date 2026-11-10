@@ -54,11 +54,14 @@ private:
  std::unique_ptr<juce::ToggleButton> sync,bypass;
  std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> syncAttachment,bypassAttachment,filterAttachment,filterEnvelopeAttachment,colorAttachment;
  juce::ValueTree snapshots[2];
+ CurveState snapshotCurves[2];
+ std::unique_ptr<juce::FileChooser> presetFileChooser;
  int activeSnapshot=0;
  CurveState curve;
  std::vector<CurveState> undoHistory,redoHistory;
  unsigned knownRevision=0;
  int draggedNode=-1;
+ float dragStartCurve=0.f;
  bool changeCurve=false, controlsReady=false;
  JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DISidechainEditor)
 };
