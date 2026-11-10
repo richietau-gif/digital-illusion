@@ -132,7 +132,10 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  for(int i=0;i<2;++i){
   laneSliders[i]=std::make_unique<juce::Slider>(juce::Slider::LinearHorizontal,juce::Slider::TextBoxRight);
   laneSliders[i]->setTextBoxStyle(juce::Slider::TextBoxRight,false,63,20);
-  laneSliders[i]->textFromValueFunction=[](double v){return juce::String(v,2);};
+  laneSliders[i]->textFromValueFunction=[](double v){
+   return juce::String(juce::roundToInt(v*100.))+"%";
+  };
+  laneSliders[i]->valueFromTextFunction=[](const juce::String& t){return t.getDoubleValue()/100.;};
   laneSliders[i]->setColour(juce::Slider::trackColourId,i==0?juce::Colour(0xff44bbff):juce::Colour(0xffc55bff));
   laneSliders[i]->setColour(juce::Slider::thumbColourId,i==0?juce::Colour(0xff44bbff):juce::Colour(0xffc55bff));
   laneSliders[i]->setColour(juce::Slider::textBoxTextColourId,juce::Colours::white);
@@ -899,8 +902,16 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  text(g,"TRACK "+juce::String(selectedTrack+1)+"  /  STEP "+juce::String(selectedStep+1),
       {1143,485,357,20},13,white,true);
  text(g,"CELL EFFECT ROUTING",{1143,505,333,16},11,faint);
- text(g,"DUCK DEPTH",{1143,566,280,17},11,lime,true);
- text(g,"ENVELOPE LENGTH (STEPS)",{1143,616,349,17},11,orange,true);
+ if(selectedLane==0){
+  text(g,"DUCK DEPTH",{1143,566,280,17},11,lime,true);
+  text(g,"ENVELOPE LENGTH (STEPS)",{1143,616,349,17},11,orange,true);
+ }else if(selectedLane==1){
+  text(g,"FILTER MODULATION AMOUNT",{1143,566,340,17},11,cyan,true);
+  text(g,"Requires LOW, HIGH or BAND filter mode.",{1143,616,350,18},11,faint);
+ }else if(selectedLane==2){
+  text(g,"PAN MODULATION AMOUNT",{1143,566,340,17},11,juce::Colour(0xffa57dff),true);
+  text(g,"Positive = pan envelope, negative = inverted.",{1143,616,350,18},11,faint);
+ }
  text(g,"BYP skips volume duck; effects stay available.",{1143,670,353,16},10,faint);
  // Always visible frequency controls and output meters.
  paintPanel(g,filterPanel,"DUCK / FILTER ENGINE");
@@ -980,7 +991,12 @@ void DISidechainEditor::refreshCreativePage(){
               snapButton.get(),shapePresetButton.get(),sequencePrev.get(),sequenceNext.get()})
   if(b)b->setVisible(!fxPage&&!delayPage);
  if(shapeOffset)shapeOffset->setVisible(!active);
- for(auto& slider:laneSliders)if(slider)slider->setVisible(!active);
+ // FILTER and PAN amount were previously hidden whenever GRID was on;
+ // consequently the user could edit the envelope but hear no change.
+ if(laneSliders[0])laneSliders[0]->setVisible(active&&selectedLane==1);
+ if(laneSliders[1])laneSliders[1]->setVisible(active&&selectedLane==2);
+ if(duckDepthSlider)duckDepthSlider->setVisible(duckPage&&selectedLane==0);
+ if(duckLengthSlider)duckLengthSlider->setVisible(duckPage&&selectedLane==0);
  const juce::Colour laneColours[]={juce::Colour(0xffa4ed38),juce::Colour(0xff2ad3da),
   juce::Colour(0xffa57dff),juce::Colour(0xff5b9eff),juce::Colour(0xffffa454),
   juce::Colour(0xffed6acd)};
@@ -1061,8 +1077,8 @@ void DISidechainEditor::resized() {
  if(snapButton)snapButton->setBounds(630,499,85,32);
  if(shapePresetButton)shapePresetButton->setBounds(727,499,151,32);
  if(shapeOffset){shapeOffset->setBounds(1320,543,184,31);shapeOffset->setEnabled(selectedLane==0);}
- if(laneSliders[0])laneSliders[0]->setBounds(1320,593,184,31);
- if(laneSliders[1])laneSliders[1]->setBounds(1320,640,184,31);
+ if(laneSliders[0])laneSliders[0]->setBounds(1144,584,358,31);
+ if(laneSliders[1])laneSliders[1]->setBounds(1144,584,358,31);
  for(int i=0;i<6;++i)if(laneTabs[i]){
   laneTabs[i]->setBounds(908,498+i*31,200,27);
   laneTabs[i]->setToggleState(i==selectedLane,juce::dontSendNotification);
