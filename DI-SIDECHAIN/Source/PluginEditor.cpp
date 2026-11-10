@@ -119,6 +119,17 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
   } else s->setTextValueSuffix(spec.suffix);
   addAndMakeVisible(*s);
   sliderAttachments.emplace_back(std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(proc.state,spec.id,*s));
+  // JUCE SliderAttachment installs its own parameter text conversion.
+  // Reapply compact formatting afterwards to avoid 0.28600000-style values.
+  if(spec.percent){
+   s->textFromValueFunction=[](double v){return juce::String(v*100.0,0)+"%";};
+   s->valueFromTextFunction=[](const juce::String& t){return t.getDoubleValue()/100.0;};
+  } else {
+   const juce::String suffix(spec.suffix);
+   const int digits=spec.digits;
+   s->textFromValueFunction=[suffix,digits](double v){return juce::String(v,digits)+suffix;};
+   s->valueFromTextFunction=[](const juce::String& t){return t.getDoubleValue();};
+  }
   sliders.emplace_back(std::move(s));
  }
  struct Choice{const char* id;juce::StringArray names;};
@@ -597,7 +608,7 @@ void DISidechainEditor::paint(juce::Graphics& g) {
   g.setColour(orange);g.fillEllipse(x-4,y-4,8,8);
  }
  g.setColour(cyan.withAlpha(.7f));g.drawLine(gx0,gy0,gx0,gy1,1.3f);
- label("OFFSET "+juce::String(juce::roundToInt(offset*100.f))+"%",840,82,110,11,orange,true);
+ label("OFFSET "+juce::String(juce::roundToInt(offset*100.f))+"%",575,97,112,10,orange,true);
  // ENV and OUT meter, sourced from actual plugin atomics.
  label("ENV",999,90,41,11,muted);label("OUT",1043,90,38,11,muted);
  const float envLevel=clamp(proc.gainReductionMeter.load());
@@ -626,7 +637,7 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  }
  label("SOURCE",158,389,80,9,muted);
  label("DETECTOR",34,502,106,9,muted);
- label("GRID",682,378,72,10,muted);
+ 
  // Bottom row: large filter and COLOR.
  panelBox(14,551,628,177);panelBox(651,551,435,177);
  label("FILTER",30,559,81,13,cyan,true);
