@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <cmath>
 #include <iostream>
+#include <memory>
 
 static void require(bool ok, const char* check, int line){
  if(!ok){std::cerr<<"Check failed at line "<<line<<": "<<check<<"\\n";std::exit(1);}
@@ -30,7 +31,11 @@ void assertFinite(const juce::AudioBuffer<float>& buffer){
 
 int main(){
  juce::ScopedJuceInitialiser_GUI gui;
- DISidechainProcessor plugin;
+ // The processor contains a large lookahead ring. Construct it on the heap,
+ // as JUCE does for real VST3 instances: Windows test executables have a
+ // relatively small default thread stack.
+ auto processor=std::make_unique<DISidechainProcessor>();
+ auto& plugin=*processor;
  CHECK(plugin.getNumPrograms()==32);
  for(double rate:{44100.,48000.,96000.}){
   plugin.prepareToPlay(rate,128);
