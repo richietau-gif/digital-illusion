@@ -68,6 +68,33 @@ PrecisionLookAndFeel::PrecisionLookAndFeel() {
  setColour(juce::TextButton::textColourOnId,juce::Colours::black);
  setColour(juce::ToggleButton::textColourId,pale);
 }
+void PrecisionLookAndFeel::drawLinearSlider(juce::Graphics& g,int x,int y,int width,int height,
+ float sliderPos,float minSliderPos,float maxSliderPos,juce::Slider::SliderStyle style,juce::Slider& slider) {
+ if(slider.getName()!="timeOffset"){
+  juce::LookAndFeel_V4::drawLinearSlider(g,x,y,width,height,sliderPos,minSliderPos,maxSliderPos,style,slider);
+  return;
+ }
+ juce::ignoreUnused(minSliderPos,maxSliderPos,style);
+ const float ymid=(float)y+(float)height*.5f;
+ const float start=(float)x+9.f, end=(float)(x+width)-9.f;
+ const float centre=(start+end)*.5f;
+ const float thumb=juce::jlimit(start,end,sliderPos);
+ g.setColour(juce::Colour(0xff21394a));
+ g.fillRoundedRectangle(start,ymid-3.f,end-start,6.f,3.f);
+ const float left=juce::jmin(centre,thumb);
+ const float right=juce::jmax(centre,thumb);
+ if(right-left>0.5f){
+  g.setColour(orange);
+  g.fillRoundedRectangle(left,ymid-3.f,right-left,6.f,3.f);
+ }
+ g.setColour(juce::Colour(0xffdcecf5));
+ g.drawLine(centre,ymid-9.f,centre,ymid+9.f,1.3f);
+ g.setColour(orange);
+ g.fillEllipse(thumb-8.f,ymid-8.f,16.f,16.f);
+ g.setColour(pale);
+ g.fillEllipse(thumb-3.f,ymid-3.f,6.f,6.f);
+}
+
 void PrecisionLookAndFeel::drawRotarySlider(juce::Graphics& g,int x,int y,int width,int height,float pos,float a,float b,juce::Slider& slider) {
  const float diameter=(float)juce::jmin(width,height);
  const float radius=diameter*.34f,cx=x+width*.5f,cy=y+height*.43f;
@@ -101,8 +128,13 @@ DISidechainEditor::DISidechainEditor(DISidechainProcessor& p):AudioProcessorEdit
  for(const auto& spec:knobSpecs){
   auto s=std::make_unique<juce::Slider>();
   s->setName(spec.id);
-  s->setSliderStyle((juce::String(spec.id)=="filterMod"||juce::String(spec.id)=="filterMix")
+  s->setSliderStyle((juce::String(spec.id)=="timeOffset"||juce::String(spec.id)=="filterMod"||juce::String(spec.id)=="filterMix")
                     ?juce::Slider::LinearHorizontal:juce::Slider::RotaryHorizontalVerticalDrag);
+  if(juce::String(spec.id)=="timeOffset"){
+   s->setDoubleClickReturnValue(true,0.0);
+   s->setPopupDisplayEnabled(true,true,this);
+   s->setTooltip("TIME OFFSET: -100% later / 0% aligned / +100% earlier. Double-click to reset.");
+  }
   s->setTextBoxStyle(juce::Slider::NoTextBox,false,0,0);
   s->setColour(juce::Slider::textBoxTextColourId,pale);
   s->setColour(juce::Slider::textBoxBackgroundColourId,ink);
@@ -405,7 +437,9 @@ void DISidechainEditor::resized() {
  b(colorPower.get(),734,564,52,27);b(combos[5].get(),795,563,255,29);
  for(size_t i=0;i<sliders.size();++i) {
   const auto& k=knobSpecs[i];
-  b(sliders[i].get(),k.x,k.y,k.w,k.h);
+  if(juce::String(k.id)=="timeOffset")
+    b(sliders[i].get(),136,320,831,26);
+   else b(sliders[i].get(),k.x,k.y,k.w,k.h);
   if(juce::String(k.id)=="length")sliders[i]->setVisible(proc.state.getRawParameterValue("sync")->load()<=.5f);
  }
 }
@@ -641,7 +675,12 @@ void DISidechainEditor::paint(juce::Graphics& g) {
   g.setColour(orange);g.fillEllipse(x-4,y-4,8,8);
  }
  g.setColour(cyan.withAlpha(.7f));g.drawLine(gx0,gy0,gx0,gy1,1.3f);
- label("OFFSET "+juce::String(juce::roundToInt(offset*100.f))+"%",575,97,112,10,orange,true);
+ label("OFFSET",25,323,105,12,orange,true);
+  label("-100%",87,324,65,11,muted);
+  label("0",544,349,32,10,muted);
+  label("+100%",967,324,85,11,muted);
+  label(juce::String(offset>=0.f?"+":"")+juce::String(juce::roundToInt(offset*100.f))+"%",
+        499,321,100,12,orange,true);
  // ENV and OUT meter, sourced from actual plugin atomics.
  label("ENV",999,90,41,11,muted);label("OUT",1043,90,38,11,muted);
  const float envLevel=clamp(proc.gainReductionMeter.load());
@@ -680,6 +719,7 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  };
  for(int i=0;i<10;i++){
   const auto& spec=knobSpecs[(size_t)i];
+  if(juce::String(spec.id)=="timeOffset")continue;
   label(spec.label,spec.x+4,spec.y-21,spec.w,12,pale);
   if(juce::String(spec.id)=="length" && get("sync",1.f)>.5f){
    const juce::StringArray rates{"1/16","1/8T","1/8","1/4T","1/4","1/2","1 Bar"};
