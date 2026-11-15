@@ -1,14 +1,14 @@
 #include "../Source/PluginProcessor.h"
 #include <JuceHeader.h>
 #include <array>
-#include <cassert>
+#include <cstdlib>
 #include <cmath>
 #include <iostream>
 
 namespace {
 void param(DISidechainProcessor& plugin,const char* id,float value){
  auto* p=plugin.state.getParameter(id);
- assert(p!=nullptr);
+ CHECK(p!=nullptr);
  p->setValueNotifyingHost(p->convertTo0to1(value));
 }
 void fill(juce::AudioBuffer<float>& buffer){
@@ -19,14 +19,18 @@ void fill(juce::AudioBuffer<float>& buffer){
 void assertFinite(const juce::AudioBuffer<float>& buffer){
  for(int ch=0;ch<buffer.getNumChannels();++ch)
   for(int i=0;i<buffer.getNumSamples();++i)
-   assert(std::isfinite(buffer.getSample(ch,i)));
+   CHECK(std::isfinite(buffer.getSample(ch,i)));
 }
 }
 
+static void require(bool ok, const char* check, int line){
+ if(!ok){std::cerr<<"Check failed at line "<<line<<": "<<check<<"\\n";std::exit(1);}
+}
+#define CHECK(expr) require(static_cast<bool>(expr),#expr,__LINE__)
 int main(){
  juce::ScopedJuceInitialiser_GUI gui;
  DISidechainProcessor plugin;
- assert(plugin.getNumPrograms()==32);
+ CHECK(plugin.getNumPrograms()==32);
  for(double rate:{44100.,48000.,96000.}){
   plugin.prepareToPlay(rate,128);
   juce::AudioBuffer<float> buffer(2,128);
@@ -41,7 +45,7 @@ int main(){
   plugin.processBlock(buffer,midi);
   for(int ch=0;ch<2;++ch)
    for(int i=0;i<128;++i)
-    assert(std::abs(buffer.getSample(ch,i)-original.getSample(ch,i))<1e-6f);
+    CHECK(std::abs(buffer.getSample(ch,i)-original.getSample(ch,i))<1e-6f);
   // Dry/wet at 0% with zero lookahead and no colour/filter must remain dry.
   param(plugin,"bypass",0.f);
   param(plugin,"filterEnabled",0.f);
@@ -52,7 +56,7 @@ int main(){
   plugin.processBlock(buffer,midi);
   for(int ch=0;ch<2;++ch)
    for(int i=0;i<128;++i)
-    assert(std::abs(buffer.getSample(ch,i)-original.getSample(ch,i))<1e-5f);
+    CHECK(std::abs(buffer.getSample(ch,i)-original.getSample(ch,i))<1e-5f);
   // Enumerate all named filter and colour models with envelope modulation on/off.
   for(int filter=0;filter<13;++filter){
    param(plugin,"filterModel",(float)filter);
@@ -82,7 +86,7 @@ int main(){
   midi.addEvent(juce::MidiMessage::noteOn(1,60,(juce::uint8)100),0);
   fill(buffer);
   plugin.processBlock(buffer,midi);
-  assert(plugin.triggerActivity.load()>0.f);
+  CHECK(plugin.triggerActivity.load()>0.f);
   assertFinite(buffer);
   // Verify the entire program bank can process, serialize and restore safely.
   for(int program=0;program<32;++program){
@@ -93,12 +97,12 @@ int main(){
   }
   juce::MemoryBlock saved;
   plugin.getStateInformation(saved);
-  assert(saved.getSize()>0);
+  CHECK(saved.getSize()>0);
   std::array<DISidechainProcessor::EnvelopeNode,DISidechainProcessor::maxEnvelopeNodes> nodes{};
   auto count=plugin.getEnvelopeNodes(nodes);
-  assert(count>=2);
+  CHECK(count>=2);
   plugin.setStateInformation(saved.getData(),(int)saved.getSize());
-  assert(plugin.getEnvelopeNodes(nodes)==count);
+  CHECK(plugin.getEnvelopeNodes(nodes)==count);
   plugin.releaseResources();
  }
  std::cout<<"JUCE DSP integration: bypass, dry/wet, 13 filters, 6 colours, envelope gate, MIDI, presets, state and sample rates passed\\n";
