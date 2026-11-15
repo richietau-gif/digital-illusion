@@ -71,19 +71,18 @@ int main(){
   param(plugin,"resonance",.1f);
   param(plugin,"colorEnabled",0.f);
   param(plugin,"output",0.f);
-  auto capture=[&](float enableEnvelope) {
+  auto capture=[&](float enableEnvelope,juce::AudioBuffer<float>& result) {
    param(plugin,"filterEnvelopeEnabled",enableEnvelope);
    plugin.prepareToPlay(rate,128);
    fill(buffer);
    juce::MidiBuffer trigger;
    trigger.addEvent(juce::MidiMessage::noteOn(1,60,(juce::uint8)110),0);
    plugin.processBlock(buffer,trigger);
-   juce::AudioBuffer<float> result;
    result.makeCopyOf(buffer);
-   return result;
   };
-  const auto staticFilter=capture(0.f);
-  const auto modulatedFilter=capture(1.f);
+  juce::AudioBuffer<float> staticFilter,modulatedFilter;
+  capture(0.f,staticFilter);
+  capture(1.f,modulatedFilter);
   double responseDifference=0.;
   for(int i=0;i<128;++i)
    responseDifference+=std::abs(staticFilter.getSample(0,i)-modulatedFilter.getSample(0,i));
