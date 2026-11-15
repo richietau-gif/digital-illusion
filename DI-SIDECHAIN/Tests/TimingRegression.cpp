@@ -34,6 +34,11 @@ int main(){
  CHECK(near(precision_timing::endPhase(-1.f),2.f));
  CHECK(near(precision_timing::endPhase(-.3f),1.3f));
  CHECK(!precision_timing::active(.5f,-1.f,false)); // No trigger -> no duck.
+ CHECK(!precision_timing::hasReachedEnvelopeStart(.2f,-.5f)); // Initial audio passes.
+ CHECK(!precision_timing::hasReachedEnvelopeStart(.49f,-.5f));
+ CHECK(precision_timing::hasReachedEnvelopeStart(.5f,-.5f)); // Delayed duck starts.
+ CHECK(precision_timing::hasReachedEnvelopeStart(0.f,0.f)); // Immediate duck at zero.
+ CHECK(precision_timing::hasReachedEnvelopeStart(0.f,.25f));
  CHECK(precision_timing::active(1.25f,-.5f,true)); // Delayed curve must finish.
  CHECK(!precision_timing::active(1.5f,-.5f,true));
  CHECK(!precision_timing::active(1.f,0.f,true));
