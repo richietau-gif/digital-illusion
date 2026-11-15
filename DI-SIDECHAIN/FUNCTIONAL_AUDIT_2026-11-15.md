@@ -74,3 +74,14 @@ https://downloads.cableguys.com/Nicky-Romero-Kickstart-2-Manual.pdf
 
 ## Release gate
 Workflow must remain `workflow_dispatch` only. PR #17 must not merge to `main` without explicit approval. The source is under active development; a passing CTest is not proof of perceptual sound quality or crash-free Ableton operation.
+
+## Windows validation run #43706029081 — 2026-11-15
+
+- Windows 2022 Visual Studio Release build: **passed** (including JUCE VST3 and DSP integration executable).
+- CTest 1/3 `precision_sidechain_smoke`: **passed**.
+- CTest 2/3 `precision_timing_regression`: **passed**.
+- CTest 3/3 `precision_dsp_integration`: **failed with an immediate segmentation fault (0.01 s)**; no individual integration assertions were observed.
+- Pluginval strictness 5, ZIP packaging and artifact upload: **skipped**, because CTest failed. No artifact was produced for this run.
+- Likely root cause: integration test instantiated a processor on the Windows thread stack, where its 192001-frame × stereo float lookahead ring requires over **1.5 MB** alone. The test has now been changed to heap construction via `std::make_unique<DISidechainProcessor>()`, matching JUCE's real VST3 allocation pattern.
+- **The fix is unverified.** A subsequent, separately approved Windows validation is required to confirm the integration suite and pluginval.
+- No merge to main; GitHub Actions restored to manual-only trigger.
