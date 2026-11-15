@@ -16,7 +16,7 @@ struct Timeline {
 
 int main(){
  constexpr float eps=0.00001f;
- const auto near=[](float a,float b){return std::abs(a-b)<eps;};
+ const auto near=[=](float a,float b){return std::abs(a-b)<eps;};
  Timeline t{960,4800};
  for(float p: {-1.f,-.5f,0.f,.5f,1.f}){
   assert(std::abs(t.offsetSamples(p)-static_cast<int>(p*4800))<=1);
