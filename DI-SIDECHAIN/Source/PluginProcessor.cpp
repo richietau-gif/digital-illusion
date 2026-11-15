@@ -134,7 +134,8 @@ detector=std::max(sv,detector*.995f);if(detector<threshold*.65f)gateArmed=true;b
  // Do not cut off a delayed curve abruptly at phase == 1.
  const float t=precision_timing::shiftedPhase(phase,offset);
  envelopeRunning=precision_timing::active(phase,offset,envelopeRunning);
- float e=envelopeRunning?envelope(t):1.f;if(attack>0)e=std::max(e,attack*(1.f-phase));float target=1.f-depth*(1.f-e);const float smoothingMs=target<gain?val("attackMs"):val("releaseMs");const float c=std::exp(-1.f/(std::max(.1f,smoothingMs)*.001f*sr));gain=c*gain+(1-c)*target;reduction=std::max(reduction,1.f-gain);if(envelopeRunning)phase=juce::jmin(2.f,phase+1.f/juce::jmax(1.f,len));for(int ch=0;ch<2;++ch){float dry=main.getSample(ch,i);const int readIndex=(delayWrite+192001-delaySamples)%192001;
+ float e=envelopeRunning && precision_timing::hasReachedEnvelopeStart(phase,offset)
+  ?envelope(t):1.f;if(attack>0)e=std::max(e,attack*(1.f-phase));float target=1.f-depth*(1.f-e);const float smoothingMs=target<gain?val("attackMs"):val("releaseMs");const float c=std::exp(-1.f/(std::max(.1f,smoothingMs)*.001f*sr));gain=c*gain+(1-c)*target;reduction=std::max(reduction,1.f-gain);if(envelopeRunning)phase=juce::jmin(2.f,phase+1.f/juce::jmax(1.f,len));for(int ch=0;ch<2;++ch){float dry=main.getSample(ch,i);const int readIndex=(delayWrite+192001-delaySamples)%192001;
  float delayed=(delaySamples==0?dry:delay[(size_t)readIndex][(size_t)ch]);
  if(delayTransitionSamples>0){
   const int previousIndex=(delayWrite+192001-previousDelaySamples)%192001;
