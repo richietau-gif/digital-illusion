@@ -18,4 +18,20 @@ if(BUILD_TESTING)
  add_executable(precision_timing_regression Tests/TimingRegression.cpp)
  target_compile_features(precision_timing_regression PRIVATE cxx_std_17)
  add_test(NAME precision_timing_regression COMMAND precision_timing_regression)
+
+ # Genuine DSP tests link the actual processor and editor sources rather than
+ # re-implementing a simplified imitation of the algorithm.
+ juce_add_console_app(precision_dsp_integration PRODUCT_NAME "PRECISION DSP Integration Tests")
+ juce_generate_juce_header(precision_dsp_integration)
+ target_sources(precision_dsp_integration PRIVATE
+  Tests/PrecisionDSPIntegration.cpp
+  Source/PluginProcessor.cpp
+  Source/PluginEditor.cpp)
+ target_compile_features(precision_dsp_integration PRIVATE cxx_std_17)
+ target_compile_definitions(precision_dsp_integration PRIVATE
+  JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_VST3_CAN_REPLACE_VST2=0)
+ target_link_libraries(precision_dsp_integration PRIVATE
+  juce::juce_audio_utils juce::juce_dsp
+  juce::juce_audio_processors juce::juce_gui_extra)
+ add_test(NAME precision_dsp_integration COMMAND precision_dsp_integration)
 endif()
