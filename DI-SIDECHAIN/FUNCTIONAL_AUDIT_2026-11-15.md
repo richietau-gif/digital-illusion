@@ -39,7 +39,7 @@ Reference: user's approved PRECISION SIDECHAIN render and latest Global VST Host
 ## Corrections in this pass
 - Replaced Timing Offset rotary with a long symmetrically filled horizontal slider under the complete graph and centre-zero labels; existing parameter ID and DAW automation preserved.
 - Factory default offset changed to 0%; specifically designed shifted factory sounds may use nonzero values.
-- Fixed end-of-curve truncation for negative offsets and ensured no ducking occurs while the processor has not received a trigger.
+- Fixed end-of-curve truncation for negative offsets, ensured no ducking without a trigger, **and preserved the untouched signal before a negatively shifted envelope actually starts**. The cyan timing preview uses this same gate.
 - Centralized offset lifecycle, clamping, and dry/wet alignment in production `PrecisionTiming.h`; enlarged the timing regression to exercise the **same production helpers**, including negative offsets and no-trigger behaviour.
 - Added a JUCE-backed CTest target compiling the real processor/editor source, exercising stereo buffers, 44.1/48/96 kHz, bypass transparency, dry/wet identity, all 13 filter selection paths, all six Color models, MIDI triggering, state roundtrips, 32 programs, and distinct audible output with Filter ENV/Color switches.
 - Replaced `assert` with release-safe CHECK macros so tests actually execute under Windows Release CI.
@@ -65,6 +65,12 @@ https://downloads.cableguys.com/Nicky-Romero-Kickstart-2-Manual.pdf
 4. **P1:** Add envelope source and trigger oscilloscope, detector-side filter with audition and adjustable hysteresis, useful for kick/snare isolation.
 5. **P1:** Persist A/B and full user-preset library; implement genuine ladder/formant models and add oversampling.
 6. **P2:** Non-standard meter/time signatures, velocity-sensitive triggering, curve drawing tools, metering calibration and automation stress testing.
+
+## Available validation
+
+- The JUCE-independent production timing helper and its regression assertions were **compiled and executed locally with g++ C++17, -O2 -Wall -Wextra -Werror** on Linux (passed). This confirms only pure timing maths, not VST3 compatibility.
+- The new JUCE integration target, Windows Release, pluginval, GUI, Ableton crash safety and all on-audio tests **have not been executed** since the latest modifications.
+- The plugin includes 33 APVTS parameters; all are referenced in current editor code, although this does not establish auditory correctness or feature completeness.
 
 ## Release gate
 Workflow must remain `workflow_dispatch` only. PR #17 must not merge to `main` without explicit approval. The source is under active development; a passing CTest is not proof of perceptual sound quality or crash-free Ableton operation.
