@@ -5,6 +5,11 @@
 #include <cmath>
 #include <iostream>
 
+static void require(bool ok, const char* check, int line){
+ if(!ok){std::cerr<<"Check failed at line "<<line<<": "<<check<<"\\n";std::exit(1);}
+}
+#define CHECK(expr) require(static_cast<bool>(expr),#expr,__LINE__)
+
 namespace {
 void param(DISidechainProcessor& plugin,const char* id,float value){
  auto* p=plugin.state.getParameter(id);
@@ -23,10 +28,6 @@ void assertFinite(const juce::AudioBuffer<float>& buffer){
 }
 }
 
-static void require(bool ok, const char* check, int line){
- if(!ok){std::cerr<<"Check failed at line "<<line<<": "<<check<<"\\n";std::exit(1);}
-}
-#define CHECK(expr) require(static_cast<bool>(expr),#expr,__LINE__)
 int main(){
  juce::ScopedJuceInitialiser_GUI gui;
  DISidechainProcessor plugin;
