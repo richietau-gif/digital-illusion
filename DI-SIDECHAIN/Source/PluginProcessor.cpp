@@ -188,7 +188,8 @@ detector=std::max(sv,detector*.995f);if(detector<threshold*.65f)gateArmed=true;b
   const float alpha=1.f-std::exp(-2.f*juce::MathConstants<float>::pi*1800.f/(float)sr);
   colorToneLow[(size_t)ch]+=alpha*(coloured-colorToneLow[(size_t)ch]);
   const float low=colorToneLow[(size_t)ch],high=coloured-low;
-  coloured=tone<0.f?coloured+tone*high:coloured+tone*low;
+  // Bipolar tilt: negative damps high content (warm), positive lifts highs.
+  coloured+=tone*high;
   out+=(coloured-out)*colorMix;
  }
  out*=outputGain;}if(!std::isfinite(out))out=0;main.setSample(ch,i,out);peak=std::max(peak,std::abs(out));if(ch==0)peakL=std::max(peakL,std::abs(out));else peakR=std::max(peakR,std::abs(out));}delayWrite=(delayWrite+1)%192001;if(delayTransitionSamples>0)--delayTransitionSamples;}meter.store(peak);gainReductionMeter.store(reduction);outputMeterL.store(peakL);outputMeterR.store(peakR);midi.clear();}
