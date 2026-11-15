@@ -1,4 +1,5 @@
 #include "PluginEditor.h"
+#include "PrecisionTiming.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -652,7 +653,8 @@ void DISidechainEditor::paint(juce::Graphics& g) {
  for(int i=0;i<=320;i++){
   const float phase=(float)i/320.f;
   const float source=proc.getEnvelopeAt(phase);
-  const float processed=proc.getEnvelopeAt(clamp(phase+offset));
+  const float processed=precision_timing::hasReachedEnvelopeStart(phase,offset)
+   ?proc.getEnvelopeAt(clamp(phase+offset)):1.f;
   const float protectedEnv=juce::jmax(processed,attack*(1.f-phase));
   const float finalGain=1.f-depth*(1.f-protectedEnv);
   const float x=gx0+(gx1-gx0)*phase;
