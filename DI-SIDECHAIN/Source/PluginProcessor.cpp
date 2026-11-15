@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "PrecisionTiming.h"
 #include <cmath>
 #include <algorithm>
 namespace { juce::StringArray filterNames(){ return {"LP12","LP24","LP48","HP12","HP24","HP48","Band Pass","Notch","Analog Ladder","SVF Morph","Comb","Formant/Vowel","Aggressive Bass"}; } }
@@ -131,10 +132,8 @@ if(mode==1) {
 }
 detector=std::max(sv,detector*.995f);if(detector<threshold*.65f)gateArmed=true;bool audio=gateArmed&&detector>=threshold;if(audio)gateArmed=false;bool fire=(trig==0?audio:trig==1?note:(audio||note))&&holdoff<=0;if(fire){phase=0;envelopeRunning=true;holdoff=hold;triggerActivity.store(1.f);}if(holdoff>0)--holdoff;triggerActivity.store(triggerActivity.load()*.995f);// A delayed (-) envelope needs time beyond the unshifted envelope length.
  // Do not cut off a delayed curve abruptly at phase == 1.
- const float shiftedPhase=phase+offset;
- const float endPhase=1.f+juce::jmax(0.f,-offset);
- const float t=juce::jlimit(0.f,1.f,shiftedPhase);
- if(phase>=endPhase)envelopeRunning=false;
+ const float t=precision_timing::shiftedPhase(phase,offset);
+ envelopeRunning=precision_timing::active(phase,offset,envelopeRunning);
  float e=envelopeRunning?envelope(t):1.f;if(attack>0)e=std::max(e,attack*(1.f-phase));float target=1.f-depth*(1.f-e);const float smoothingMs=target<gain?val("attackMs"):val("releaseMs");const float c=std::exp(-1.f/(std::max(.1f,smoothingMs)*.001f*sr));gain=c*gain+(1-c)*target;reduction=std::max(reduction,1.f-gain);if(envelopeRunning)phase=juce::jmin(2.f,phase+1.f/juce::jmax(1.f,len));for(int ch=0;ch<2;++ch){float dry=main.getSample(ch,i);const int readIndex=(delayWrite+192001-delaySamples)%192001;
  float delayed=(delaySamples==0?dry:delay[(size_t)readIndex][(size_t)ch]);
  if(delayTransitionSamples>0){
@@ -142,7 +141,7 @@ detector=std::max(sv,detector*.995f);if(detector<threshold*.65f)gateArmed=true;b
   const float prior=(previousDelaySamples==0?dry:delay[(size_t)previousIndex][(size_t)ch]);
   const float alpha=1.f-(float)delayTransitionSamples/(float)delayTransitionLength;
   delayed=prior+(delayed-prior)*alpha;
- }delay[delayWrite][ch]=dry;float wet=delayed*gain;float out=bypass?delayed:delayed+(wet-delayed)*mix;if(!bypass){auto& f=filters[ch];
+ }delay[delayWrite][ch]=dry;float out=bypass?delayed:precision_timing::mixDelayed(delayed,gain,mix);if(!bypass){auto& f=filters[ch];
  float filtered=f.a.processSample(out);
  if(model==1)filtered=f.c.processSample(filtered);
  if(model==2){filtered=f.b.processSample(filtered);filtered=f.c.processSample(filtered);filtered=f.d.processSample(filtered);}
