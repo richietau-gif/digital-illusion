@@ -58,6 +58,53 @@ int main(){
   for(int ch=0;ch<2;++ch)
    for(int i=0;i<128;++i)
     CHECK(std::abs(buffer.getSample(ch,i)-original.getSample(ch,i))<1e-5f);
+  // Audible A/B regression: FILTER ENV must change cutoff response,
+  // while FILTER ON remains active with modulation disabled.
+  param(plugin,"triggerMode",1.f);
+  param(plugin,"bypass",0.f);
+  param(plugin,"depth",0.f);
+  param(plugin,"filterEnabled",1.f);
+  param(plugin,"filterModel",0.f);
+  param(plugin,"filterMod",1.f);
+  param(plugin,"filterMix",1.f);
+  param(plugin,"cutoff",400.f);
+  param(plugin,"resonance",.1f);
+  param(plugin,"colorEnabled",0.f);
+  param(plugin,"output",0.f);
+  auto capture=[&](float enableEnvelope) {
+   param(plugin,"filterEnvelopeEnabled",enableEnvelope);
+   plugin.prepareToPlay(rate,128);
+   fill(buffer);
+   juce::MidiBuffer trigger;
+   trigger.addEvent(juce::MidiMessage::noteOn(1,60,(juce::uint8)110),0);
+   plugin.processBlock(buffer,trigger);
+   juce::AudioBuffer<float> result;
+   result.makeCopyOf(buffer);
+   return result;
+  };
+  const auto staticFilter=capture(0.f);
+  const auto modulatedFilter=capture(1.f);
+  double responseDifference=0.;
+  for(int i=0;i<128;++i)
+   responseDifference+=std::abs(staticFilter.getSample(0,i)-modulatedFilter.getSample(0,i));
+  CHECK(responseDifference>.001);
+
+  // Audible A/B regression: COLOR ON/OFF must affect output samples.
+  param(plugin,"filterEnabled",0.f);
+  param(plugin,"mix",0.f);
+  param(plugin,"colorModel",4.f);
+  param(plugin,"colorMix",1.f);
+  param(plugin,"colorDrive",12.f);
+  param(plugin,"colorEnabled",0.f);
+  fill(buffer);midi.clear();plugin.processBlock(buffer,midi);
+  juce::AudioBuffer<float> colorOff; colorOff.makeCopyOf(buffer);
+  param(plugin,"colorEnabled",1.f);
+  fill(buffer);plugin.processBlock(buffer,midi);
+  double colorDifference=0.;
+  for(int i=0;i<128;++i)
+   colorDifference+=std::abs(buffer.getSample(0,i)-colorOff.getSample(0,i));
+  CHECK(colorDifference>.001);
+
   // Enumerate all named filter and colour models with envelope modulation on/off.
   for(int filter=0;filter<13;++filter){
    param(plugin,"filterModel",(float)filter);
