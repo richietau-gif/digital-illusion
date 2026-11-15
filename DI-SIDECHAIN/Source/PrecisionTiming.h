@@ -12,6 +12,9 @@ inline float finiteBipolar(float value) noexcept {
 inline float shiftedPhase(float phase,float offset) noexcept {
  return finiteUnit(phase+finiteBipolar(offset));
 }
+inline bool hasReachedEnvelopeStart(float phase,float offset) noexcept {
+ return std::isfinite(phase) && phase+finiteBipolar(offset)>=0.f;
+}
 inline float endPhase(float offset) noexcept {
  return 1.f+std::max(0.f,-finiteBipolar(offset));
 }
